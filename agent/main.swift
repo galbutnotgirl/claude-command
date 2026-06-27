@@ -145,13 +145,20 @@ func loadClips() -> [Clip] {
 
 let CLAUDE_BUNDLE = "com.anthropic.claudefordesktop"
 let pickerW: CGFloat = 640
-let pickerH: CGFloat = 440
+let pickerH: CGFloat = 420
 let listColW: CGFloat = 230
-let pickerRowH: CGFloat = 40
+let pickerRowH: CGFloat = 28
 
 final class PickerPanel: NSWindow {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { true }
+}
+
+// Block-based NSObject target so we can use #selector on closures.
+final class ActionBlock: NSObject {
+    let block: () -> Void
+    init(_ block: @escaping () -> Void) { self.block = block; super.init() }
+    @objc func run() { block() }
 }
 final class PickRow: NSView {
     var onPick: ((PasteTarget) -> Void)?
@@ -164,14 +171,17 @@ final class PickRow: NSView {
     }
 }
 
-final class ClipPicker {
+final class ClipPicker: NSObject, NSWindowDelegate {
     var win: PickerPanel!
     var fx: NSVisualEffectView!
     let listStack = NSStackView()
     var previewPane: NSView!
     var listWidthConstraint: NSLayoutConstraint?
+    var filterActionBlocks: [ActionBlock] = []   // kept alive while picker lives
     var all: [Clip] = [], shown: [Clip] = [], rows: [PickRow] = []
     var selected = 0, filterMode: FilterMode = .all, prevBundle = "", query = ""
+
+    func windowDidResignKey(_ notification: Notification) { hide() }
 
     func show(prev: String) {
         prevBundle = prev
@@ -199,6 +209,7 @@ final class ClipPicker {
         win.isOpaque = false; win.backgroundColor = .clear; win.hasShadow = true
         win.level = .floating; win.isMovableByWindowBackground = true
         win.collectionBehavior = [.canJoinAllSpaces, .transient]
+        win.delegate = self   // windowDidResignKey → hide()
 
         let container = NSView()
         container.wantsLayer = true
@@ -219,11 +230,11 @@ final class ClipPicker {
         ])
 
         listStack.orientation = .vertical; listStack.alignment = .leading
-        listStack.spacing = 2; listStack.translatesAutoresizingMaskIntoConstraints = false
+        listStack.spacing = 0; listStack.translatesAutoresizingMaskIntoConstraints = false
     }
 
     func refresh() {
-        shown = Array(filteredClips().prefix(14))
+        shown = Array(filteredClips().prefix(50))
         selected = min(selected, max(0, shown.count - 1))
         fx.subviews.forEach { $0.removeFromSuperview() }
         rows.removeAll()
@@ -364,58 +375,71 @@ final class ClipPicker {
     }
 
     func makeFilterBadge() -> NSView {
-        let stack = NSStackView(); stack.orientation = .horizontal; stack.spacing = 4
-        stack.addArrangedSubview(makePill("All", active: filterMode == .all))
-        stack.addArrangedSubview(makeIconPill("photo",    active: filterMode == .images))
-        stack.addArrangedSubview(makeIconPill("doc.text", active: filterMode == .text))
+        filterActionBlocks.removeAll()
+        // Order: [🖼 Images] [● All] [Aa Text] — All in center per user request.
+        let specs: [(sym: String?, label: String, mode: FilterMode)] = [
+            ("photo",    "Images", .images),
+            (nil,        "All",    .all),
+            ("doc.text", "Text",   .text),
+        ]
+        let stack = NSStackView(); stack.orientation = .horizontal; stack.spacing = 3
+        for spec in specs {
+            let active = filterMode == spec.mode
+            let btn = makeFilterPill(sym: spec.sym, label: spec.label, active: active, mode: spec.mode)
+            stack.addArrangedSubview(btn)
+        }
         return stack
     }
 
-    private func makePill(_ text: String, active: Bool) -> NSView {
+    private func makeFilterPill(sym: String?, label: String, active: Bool, mode: FilterMode) -> NSView {
         let v = NSView(); v.wantsLayer = true
         v.layer?.cornerRadius = 4; v.layer?.cornerCurve = .continuous
         v.layer?.backgroundColor = active
             ? NSColor.controlAccentColor.withAlphaComponent(0.2).cgColor
             : NSColor.labelColor.withAlphaComponent(0.06).cgColor
         v.translatesAutoresizingMaskIntoConstraints = false
-        let l = NSTextField(labelWithString: text)
-        l.font = .systemFont(ofSize: 10, weight: active ? .semibold : .regular)
-        l.textColor = active ? .controlAccentColor : .secondaryLabelColor
-        l.translatesAutoresizingMaskIntoConstraints = false
-        v.addSubview(l)
-        NSLayoutConstraint.activate([
-            l.centerXAnchor.constraint(equalTo: v.centerXAnchor),
-            l.centerYAnchor.constraint(equalTo: v.centerYAnchor),
-            v.widthAnchor.constraint(equalToConstant: 28), v.heightAnchor.constraint(equalToConstant: 20),
-        ])
-        return v
-    }
 
-    private func makeIconPill(_ sym: String, active: Bool) -> NSView {
-        let v = NSView(); v.wantsLayer = true
-        v.layer?.cornerRadius = 4; v.layer?.cornerCurve = .continuous
-        v.layer?.backgroundColor = active
-            ? NSColor.controlAccentColor.withAlphaComponent(0.2).cgColor
-            : NSColor.labelColor.withAlphaComponent(0.06).cgColor
-        v.translatesAutoresizingMaskIntoConstraints = false
-        let iv = NSImageView()
-        iv.image = NSImage(systemSymbolName: sym, accessibilityDescription: nil)
-        iv.contentTintColor = active ? .controlAccentColor : .secondaryLabelColor
-        iv.translatesAutoresizingMaskIntoConstraints = false
-        iv.widthAnchor.constraint(equalToConstant: 12).isActive = true
-        iv.heightAnchor.constraint(equalToConstant: 12).isActive = true
-        v.addSubview(iv)
+        // Content: optional icon + label
+        let content = NSStackView(); content.orientation = .horizontal; content.spacing = 3
+        content.translatesAutoresizingMaskIntoConstraints = false
+        if let sym = sym {
+            let iv = NSImageView()
+            iv.image = NSImage(systemSymbolName: sym, accessibilityDescription: nil)
+            iv.contentTintColor = active ? .controlAccentColor : .secondaryLabelColor
+            iv.translatesAutoresizingMaskIntoConstraints = false
+            iv.widthAnchor.constraint(equalToConstant: 10).isActive = true
+            iv.heightAnchor.constraint(equalToConstant: 10).isActive = true
+            content.addArrangedSubview(iv)
+        }
+        let lbl = NSTextField(labelWithString: label)
+        lbl.font = .systemFont(ofSize: 10, weight: active ? .semibold : .regular)
+        lbl.textColor = active ? .controlAccentColor : .secondaryLabelColor
+        content.addArrangedSubview(lbl)
+        v.addSubview(content)
         NSLayoutConstraint.activate([
-            iv.centerXAnchor.constraint(equalTo: v.centerXAnchor),
-            iv.centerYAnchor.constraint(equalTo: v.centerYAnchor),
-            v.widthAnchor.constraint(equalToConstant: 24), v.heightAnchor.constraint(equalToConstant: 20),
+            content.centerXAnchor.constraint(equalTo: v.centerXAnchor),
+            content.centerYAnchor.constraint(equalTo: v.centerYAnchor),
+            v.heightAnchor.constraint(equalToConstant: 20),
+            v.widthAnchor.constraint(greaterThanOrEqualToConstant: 40),
+            content.leadingAnchor.constraint(greaterThanOrEqualTo: v.leadingAnchor, constant: 6),
+            content.trailingAnchor.constraint(lessThanOrEqualTo: v.trailingAnchor, constant: -6),
         ])
+
+        // Click handler — cycle through modes; clicking active filter resets to .all
+        let target = mode  // capture
+        let block = ActionBlock { [weak self] in
+            guard let s = self else { return }
+            s.filterMode = (s.filterMode == target) ? .all : target
+            s.query = ""; s.selected = 0; s.refresh()
+        }
+        filterActionBlocks.append(block)   // retain until next refresh clears them
+        v.addGestureRecognizer(NSClickGestureRecognizer(target: block, action: #selector(ActionBlock.run)))
         return v
     }
 
     func makeHint() -> NSView {
         let v = NSView()
-        let t = NSTextField(labelWithString: "↑↓ · ← img · → txt · ↩ paste · ⌘↩ Claude · ⌘⇧↩ Claude new · esc")
+        let t = NSTextField(labelWithString: "↑↓ · 1-9 pick · ↩ paste · ⌘↩ Claude · ⌘⇧↩ new · esc")
         t.font = .systemFont(ofSize: 10); t.textColor = .quaternaryLabelColor
         t.translatesAutoresizingMaskIntoConstraints = false
         v.addSubview(t)
@@ -481,6 +505,17 @@ final class ClipPicker {
         ts.setContentHuggingPriority(.required, for: .horizontal)
         h.addArrangedSubview(ts)
 
+        // Index badge: 1-9 for items 0-8, 0 for item 9.
+        if i < 10 {
+            let idxLabel = i < 9 ? "\(i + 1)" : "0"
+            let badge = NSTextField(labelWithString: idxLabel)
+            badge.font = .monospacedDigitSystemFont(ofSize: 9, weight: .medium)
+            badge.textColor = .tertiaryLabelColor
+            badge.alphaValue = query.isEmpty ? 0.7 : 0.0
+            badge.setContentHuggingPriority(.required, for: .horizontal)
+            h.addArrangedSubview(badge)
+        }
+
         row.addSubview(h)
         NSLayoutConstraint.activate([
             h.leadingAnchor.constraint(equalTo: row.leadingAnchor),
@@ -517,6 +552,11 @@ final class ClipPicker {
             r.layer?.backgroundColor = (k == selected)
                 ? NSColor.controlAccentColor.withAlphaComponent(0.22).cgColor : NSColor.clear.cgColor
         }
+        // Scroll selected row into view.
+        if selected < rows.count {
+            let row = rows[selected]
+            row.scrollToVisible(row.bounds)
+        }
         updatePreview()
     }
 
@@ -545,7 +585,8 @@ final class ClipPicker {
 
         if c.type == "image", let img = NSImage(contentsOfFile: path) {
             let iv = NSImageView(); iv.image = img
-            iv.imageScaling = .scaleProportionallyUpOrDown
+            iv.imageScaling = .scaleProportionallyDown   // never upscale; avoids layout jump
+            iv.imageAlignment = .alignCenter
             iv.wantsLayer = true
             iv.layer?.cornerRadius = 6; iv.layer?.cornerCurve = .continuous; iv.layer?.masksToBounds = true
             iv.translatesAutoresizingMaskIntoConstraints = false
@@ -575,6 +616,19 @@ final class ClipPicker {
     func handle(_ ev: NSEvent) -> Bool {
         if !isVisible { return false }
         let cmd = ev.modifierFlags.contains(.command)
+        let shift = ev.modifierFlags.contains(.shift)
+
+        // Digit quick-pick: 1-9 selects items 0-8, 0 selects item 9.
+        // Only when no search query (digits in query = search chars, not picks).
+        if query.isEmpty && !cmd && !shift {
+            let digitIdx: [UInt16: Int] = [18:0,19:1,20:2,21:3,23:4,22:5,26:6,28:7,25:8,29:9]
+            if let idx = digitIdx[ev.keyCode], idx < shown.count {
+                selected = idx; highlight()
+                choose(shown[idx], target: .prev)
+                return true
+            }
+        }
+
         switch ev.keyCode {
         case 53:   // esc: clear search → reset filter → close
             if !query.isEmpty { query = ""; selected = 0; refresh() }
@@ -587,17 +641,16 @@ final class ClipPicker {
         case 126:  // ↑
             if !shown.isEmpty { selected = max(selected - 1, 0); highlight() }
             return true
-        case 123:  // ← → images only (toggle)
+        case 123:  // ← → images filter (toggle)
             filterMode = (filterMode == .images) ? .all : .images
             query = ""; selected = 0; refresh()
             return true
-        case 124:  // → → text only (toggle)
+        case 124:  // → → text filter (toggle)
             filterMode = (filterMode == .text) ? .all : .text
             query = ""; selected = 0; refresh()
             return true
         case 36, 76:   // ↩ / numpad ↩
             if selected < shown.count {
-                let shift = ev.modifierFlags.contains(.shift)
                 let target: PasteTarget = cmd && shift ? .claudeNew : cmd ? .claude : .prev
                 choose(shown[selected], target: target)
             }
