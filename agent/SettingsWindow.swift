@@ -185,6 +185,9 @@ struct CheckAction { let label: String; let run: () -> Void }
 
 struct SetupView: View {
     @ObservedObject var model: SettingsModel
+    // Live-poll so a grant flipped in System Settings turns the row green here
+    // without the user having to hit Re-check.
+    private let refreshTimer = Timer.publish(every: 2, on: .main, in: .common).autoconnect()
 
     var body: some View {
         ScrollView {
@@ -225,6 +228,8 @@ struct SetupView: View {
             }
             .padding(24)
         }
+        .onAppear { model.refresh() }
+        .onReceive(refreshTimer) { _ in model.refresh() }
     }
 
     private func action(for title: String) -> CheckAction? {
@@ -244,22 +249,38 @@ struct CheckRow: View {
     let action: CheckAction?
     var body: some View {
         HStack(spacing: 12) {
-            Image(systemName: icon).foregroundColor(color).frame(width: 18)
+            Image(systemName: leadingIcon)
+                .font(.system(size: 15))
+                .foregroundColor(.accentColor)
+                .frame(width: 24)
             VStack(alignment: .leading, spacing: 2) {
                 Text(check.title)
                 Text(check.detail).font(.caption).foregroundColor(.secondary).fixedSize(horizontal: false, vertical: true)
             }
             Spacer()
+            Image(systemName: statusIcon).foregroundColor(statusColor)
             if check.state != .ok, let a = action { Button(a.label) { a.run() } }
         }
         .padding(.vertical, 8).padding(.horizontal, 4)
     }
-    private var icon: String {
+    // Per-item icon so each permission/component is recognizable at a glance.
+    private var leadingIcon: String {
+        let t = check.title.lowercased()
+        if t.contains("accessibility")                       { return "accessibility" }
+        if t.contains("screen")                              { return "camera.on.rectangle" }
+        if t.contains("microphone") || t.contains("speech")  { return "mic.fill" }
+        if t.contains("agent")                               { return "bolt.horizontal.circle" }
+        if t.contains("hotkey")                              { return "keyboard" }
+        if t.contains("right-click") || t.contains("quick")  { return "filemenu.and.cursorarrow" }
+        if t.contains("clipboard")                           { return "doc.on.clipboard" }
+        return "circle"
+    }
+    private var statusIcon: String {
         switch check.state { case .ok: return "checkmark.circle.fill"
                              case .missing: return "xmark.circle.fill"
                              case .unknown: return "questionmark.circle" }
     }
-    private var color: Color {
+    private var statusColor: Color {
         switch check.state { case .ok: return .green; case .missing: return .red; case .unknown: return .secondary }
     }
 }

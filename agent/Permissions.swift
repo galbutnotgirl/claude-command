@@ -174,9 +174,9 @@ func permissionChecks() -> [StatusCheck] {
         StatusCheck(title: "Screen Recording",
                     detail: "Required for the screenshot actions (macOS screencapture).",
                     state: screenRecordingOK() ? .ok : .missing),
-        StatusCheck(title: "Microphone (optional)",
-                    detail: "Required for dictation. Speak → Claude Command transcribes live and inserts text.",
-                    state: micPermissionGranted() ? .ok : .unknown),
+        StatusCheck(title: "Microphone & Speech (optional)",
+                    detail: "For dictation only. Enabling it asks for two grants — Microphone and Speech Recognition — so macOS shows two prompts. Speak → Claude Command transcribes live and inserts text.",
+                    state: (micPermissionGranted() && speechPermissionGranted()) ? .ok : .unknown),
     ]
 }
 

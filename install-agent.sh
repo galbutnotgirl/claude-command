@@ -21,6 +21,11 @@ rm -rf "$INSTALL_APP"
 cp -aR "$SRC_APP" "$INSTALL_APP"
 print -- "[agent] installed -> ${INSTALL_APP}"
 
+# Refresh Launch Services so the app icon shows correctly in System Settings
+# (Privacy & Security panes) and Background Activity instead of a generic icon.
+LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/LaunchServices.framework/Versions/A/Support/lsregister"
+[ -x "$LSREGISTER" ] && "$LSREGISTER" -f "$INSTALL_APP" 2>/dev/null || true
+
 mkdir -p "${HOME}/Library/LaunchAgents" "${HOME}/.claude/logs" "${HOME}/.claude/state"
 
 cat > "$DEST" <<PLIST
