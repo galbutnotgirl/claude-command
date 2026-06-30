@@ -8,7 +8,7 @@ import Combine
 
 // Repo URL lives in Updater.swift (GITHUB_REPO_URL) as the single source of truth.
 
-enum SettingsTab: Equatable { case setup, shortcuts, history, troubleshooting, about }
+enum SettingsTab: Equatable { case setup, shortcuts, history, about }
 
 // Single shared model (the local key monitor in main.swift also talks to it
 // while recording a rebind).
@@ -63,10 +63,16 @@ final class SettingsModel: ObservableObject {
     func handleRecording(_ ev: NSEvent) -> Bool {
         guard let action = recordingAction else { return false }
         if ev.keyCode == 53 { cancelRecording(); return true }              // esc cancels
+        if ev.keyCode == 51 || ev.keyCode == 117 {                         // delete / fwd-delete = clear
+            recordingAction = nil
+            clearBinding(action)
+            reregisterHotkeys()
+            return true
+        }
         let key = UInt32(ev.keyCode)
         guard KEYCODE_NAMES[key] != nil else { return true }                // ignore keys we can't name
         recordingAction = nil
-        setBinding(action: action, keycode: key, mods: carbonMods(from: ev.modifierFlags))  // saves + re-registers
+        setBinding(action: action, keycode: key, mods: carbonMods(from: ev.modifierFlags))
         return true
     }
 }
@@ -102,27 +108,21 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
             .sink { [weak self] t in self?.sizeWindow(for: t) }
     }
 
-    // Grow the window to fit the tab's content, capped to the visible screen — so a
-    // big display shows everything without inner scrolling; a small one scrolls.
+    // Size once on first show — large enough for all tabs without resizing on switch.
+    // All tabs use ScrollView, so any overflow scrolls gracefully.
     private func sizeWindow(for tab: SettingsTab) {
-        guard let w = window else { return }
-        let ideal: CGFloat
-        switch tab {
-        case .setup:           ideal = 840
-        case .shortcuts:       ideal = 150 + CGFloat(max(1, settingsModel.bindings.count)) * 62
-        case .history:         ideal = 560
-        case .troubleshooting: ideal = 600
-        case .about:           ideal = 620
-        }
+        guard let w = window, !w.isVisible else { return }
         let cap = ((w.screen ?? NSScreen.main)?.visibleFrame.height ?? 900) - 40
-        let wasVisible = w.isVisible
-        w.setContentSize(NSSize(width: 720, height: max(540, min(ideal, cap))))
-        if !wasVisible { w.center() }
+        let shortcutsH = 200 + CGFloat(max(1, settingsModel.bindings.count)) * 62
+        let h = min(max(920, shortcutsH), cap)
+        w.setContentSize(NSSize(width: 720, height: h))
+        w.center()
     }
 
     func windowWillClose(_ notification: Notification) {
         if settingsModel.recordingAction != nil { settingsModel.cancelRecording() }
-        applyDockPolicy()                              // menu-bar-only again unless "Show in Dock" is on
+        // Defer: window is still isVisible=true during willClose; policy check needs it gone
+        DispatchQueue.main.async { applyDockPolicy() }
     }
 }
 
@@ -144,7 +144,6 @@ struct SettingsRootView: View {
             tabButton(.setup, "Set Up", "checklist")
             tabButton(.shortcuts, "Shortcuts", "keyboard")
             tabButton(.history, "Clipboard History", "clock.arrow.circlepath")
-            tabButton(.troubleshooting, "Troubleshooting", "wrench.and.screwdriver")
             tabButton(.about, "About", "info.circle")
             Spacer()
         }
@@ -168,11 +167,10 @@ struct SettingsRootView: View {
 
     @ViewBuilder private var content: some View {
         switch model.tab {
-        case .setup:            SetupView(model: model)
-        case .shortcuts:        ShortcutsView(model: model)
-        case .history:          HistoryView()
-        case .troubleshooting:  TroubleshootingView()
-        case .about:            AboutView(model: model)
+        case .setup:      SetupView(model: model)
+        case .shortcuts:  ShortcutsView(model: model)
+        case .history:    HistoryView()
+        case .about:      AboutView(model: model)
         }
     }
 }
@@ -211,10 +209,9 @@ struct SetupView: View {
                     }.padding(.vertical, 2)
                 }
 
-                Text("Automation: the first time you Go from a browser, macOS asks once to allow reading the tab URL — approve it.")
-                    .font(.caption).foregroundColor(.secondary)
-
                 Text("Just enabled a grant but the row's still red? macOS only applies it when the agent relaunches — click Restart agent, then Re-check.")
+                    .font(.caption).foregroundColor(.secondary)
+                Text("Grants reset when the app is rebuilt (new binary = new identity to macOS). Re-enable ClaudeCommand in each pane after every build.")
                     .font(.caption).foregroundColor(.secondary)
 
                 HStack(spacing: 10) {
@@ -222,6 +219,14 @@ struct SetupView: View {
                     Button("Restart agent") { restartApp() }
                     Spacer()
                 }
+
+                Divider()
+                Text("Common issues").font(.headline)
+
+                setupTipRow("Hotkeys need fn key",
+                    "If F6–F8 don't fire, go to System Settings > Keyboard and enable \"Use F1, F2… as standard function keys\".")
+                setupTipRow("Logs",
+                    "~/.claude/logs/command-agent.err (agent) · ~/.claude/logs/clipwatch.err (clipboard daemon)")
             }
             .padding(24)
         }
@@ -232,9 +237,9 @@ struct SetupView: View {
     private func action(for title: String) -> CheckAction? {
         switch title {
         case "Accessibility":
-            return CheckAction(label: "Request Access") { requestAccessibility() }   // alert only; user opens Settings from it
+            return CheckAction(label: "Open Settings") { openPrivacyPane("Privacy_Accessibility") }
         case "Screen Recording":
-            return CheckAction(label: "Request Access") { requestScreenRecording() }
+            return CheckAction(label: "Open Settings") { openPrivacyPane("Privacy_ScreenCapture") }
         default:
             return nil
         }
@@ -324,48 +329,68 @@ struct ShortcutsView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
                 Text("Shortcuts").font(.title2).bold()
-                Text("Global hotkeys — work from any app. Click Set, press a combo (e.g. ⌘F8). Esc cancels; Clear removes. Changes apply instantly.")
+                Text("Click a key field and press a combo to set it. Press Delete to clear. Esc cancels. Changes apply instantly.")
                     .foregroundColor(.secondary)
-
-                GroupBox(label: Text("Actions explained").bold()) {
-                    VStack(alignment: .leading, spacing: 10) {
-                        actionExplainRow("Add", "Pastes into the already-open Claude chat. Best mid-conversation when you want to inject more context without starting over.")
-                        Divider()
-                        actionExplainRow("Go", "Opens a new Claude session, auto-submits your selection, and returns focus. Zero-click — like a fast lookup.")
-                        Divider()
-                        actionExplainRow("Comment", "Opens a new Claude session pre-filled with your selection. Claude waits — you write a note, then send.")
-                    }
-                    .padding(8)
-                }
 
                 VStack(spacing: 0) {
                     ForEach(model.bindings) { b in
-                        HStack(spacing: 10) {
+                        HStack(spacing: 12) {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(b.name)
-                                Text(b.detail).font(.caption).foregroundColor(.secondary).fixedSize(horizontal: false, vertical: true)
+                                Text(b.detail).font(.caption).foregroundColor(.secondary)
+                                    .fixedSize(horizontal: false, vertical: true)
                             }
                             Spacer()
-                            Group {
-                                if model.recordingAction == b.action {
-                                    Text("Press keys…").foregroundColor(.accentColor)
-                                } else {
-                                    Text(b.human).font(.system(.body, design: .rounded)).bold()
-                                }
-                            }.frame(width: 110, alignment: .trailing)
-                            Button(model.recordingAction == b.action ? "…" : "Set") {
-                                if model.recordingAction == b.action { model.cancelRecording() }
-                                else { model.startRecording(b.action) }
-                            }.frame(width: 46)
-                            Button("Clear") { model.clearBinding(b.action) }.disabled(b.keycode == 0)
+                            KeyBindingField(action: b.action, binding: b, model: model)
                         }
-                        .padding(.vertical, 7)
+                        .padding(.vertical, 8)
                         Divider()
                     }
                 }
             }
             .padding(24)
         }
+    }
+}
+
+struct KeyBindingField: View {
+    let action: String
+    let binding: HotkeyBinding
+    @ObservedObject var model: SettingsModel
+
+    private var isRecording: Bool { model.recordingAction == action }
+
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 7)
+                .fill(isRecording
+                    ? Color.accentColor.opacity(0.12)
+                    : Color(nsColor: .controlBackgroundColor))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 7)
+                        .stroke(isRecording ? Color.accentColor : Color.gray.opacity(0.35), lineWidth: 1)
+                )
+            Text(isRecording ? "Press keys…" : (binding.keycode == 0 ? "—" : binding.human))
+                .font(.system(.body, design: .rounded).bold())
+                .foregroundColor(isRecording ? .accentColor : (binding.keycode == 0 ? .secondary : .primary))
+                .lineLimit(1)
+                .padding(.horizontal, 10)
+        }
+        .frame(width: 120, height: 30)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            if isRecording { model.cancelRecording() }
+            else { model.startRecording(action) }
+        }
+        .help(isRecording ? "Press a key combo · Delete to clear · Esc to cancel" : "Click to set shortcut")
+    }
+}
+
+private func setupTipRow(_ title: String, _ body: String) -> some View {
+    VStack(alignment: .leading, spacing: 3) {
+        Text(title).font(.subheadline).bold()
+        Text(body).font(.caption).foregroundColor(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
     }
 }
 
@@ -453,22 +478,22 @@ struct TroubleshootingView: View {
             ),
             DiagItem(
                 title: "Hotkeys configured",
-                ok: fileExists(home(".claude/state/command-hotkeys.json")),
-                fix: "Hotkey config missing. Run ./set-hotkeys.sh from the claude-command folder.",
+                ok: loadBindings().contains { $0.keycode > 0 },
+                fix: "No hotkeys bound. Open Shortcuts tab and assign at least one key.",
                 action: nil,
                 actionLabel: ""
             ),
             DiagItem(
                 title: "Quick Actions installed",
-                ok: fileExists(home("Library/Services/Claude - Go.workflow")),
+                ok: fileExists(home("Library/Services/Claude - Add.workflow")),
                 fix: "Right-click actions missing. Run ./install-quick-action.sh from the claude-command folder.",
                 action: nil,
                 actionLabel: ""
             ),
             DiagItem(
                 title: "Clipboard daemon",
-                ok: serviceLoaded(CLIPWATCH_LABEL),
-                fix: "Clipboard history daemon not running. Run ./install-agent.sh — it installs clipwatch alongside the main agent.",
+                ok: runShell("/usr/bin/pgrep", ["-f", "clipwatch.py"]).code == 0,
+                fix: "Clipboard history daemon not running. Run ./install-agent.sh to reinstall.",
                 action: nil,
                 actionLabel: ""
             ),
@@ -520,6 +545,7 @@ struct ClearOption: Identifiable {
 }
 
 struct HistoryView: View {
+    @State private var enabled = UserDefaults.standard.bool(forKey: "cliphistoryEnabled")
     @State private var retentionText = String(readRetentionDays())
     @State private var pendingClear: ClearOption? = nil
     @State private var status = ""
@@ -536,60 +562,78 @@ struct HistoryView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 Text("Clipboard History").font(.title2).bold()
-                Text("Every copy is saved to a searchable picker (default hotkey F6). History stays on this Mac, readable only by you, and is pruned automatically.")
-                    .foregroundColor(.secondary).fixedSize(horizontal: false, vertical: true)
 
                 GroupBox {
-                    HStack(spacing: 10) {
-                        Text("Keep history for")
-                        TextField("", text: $retentionText)
-                            .frame(width: 54)
-                            .multilineTextAlignment(.center)
-                            .textFieldStyle(.roundedBorder)
-                            .onSubmit { commitRetention() }
-                        Text("days")
-                        Spacer()
-                        Button("Apply") { commitRetention() }.controlSize(.small)
-                    }
-                    .padding(8)
-                }
-
-                GroupBox(label: Text("Appearance").bold()) {
-                    HStack(spacing: 10) {
-                        Text("Picker theme")
-                        Spacer()
-                        Picker("", selection: $theme) {
-                            Text("Auto").tag(PickerTheme.auto)
-                            Text("Light").tag(PickerTheme.light)
-                            Text("Dark").tag(PickerTheme.dark)
+                    HStack(spacing: 12) {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("Enable Clipboard History").font(.callout).bold()
+                            Text("Captures every copy to a searchable picker. History stays on this Mac, readable only by you.")
+                                .font(.caption).foregroundColor(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
                         }
-                        .pickerStyle(.segmented)
-                        .frame(width: 180)
-                        .onChange(of: theme) { _, v in setPickerTheme(v) }
+                        Spacer()
+                        Toggle("", isOn: $enabled)
+                            .labelsHidden()
+                            .onChange(of: enabled) { _, v in
+                                UserDefaults.standard.set(v, forKey: "cliphistoryEnabled")
+                                if v { startClipwatch() } else { stopClipwatch() }
+                            }
                     }
-                    .padding(8)
+                    .padding(10)
                 }
 
-                GroupBox(label: Text("Clear history").bold()) {
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text("Wipe recent clips — handy right after copying a password or token.")
-                            .font(.caption).foregroundColor(.secondary)
-                        HStack(spacing: 8) {
-                            ForEach(clears) { opt in
-                                Button(role: opt.seconds == 0 ? .destructive : nil) {
-                                    pendingClear = opt
-                                } label: {
-                                    Text(opt.label).frame(maxWidth: .infinity)
+                if enabled {
+                    GroupBox {
+                        HStack(spacing: 10) {
+                            Text("Keep history for")
+                            Stepper(value: Binding(
+                                get: { Int(retentionText) ?? readRetentionDays() },
+                                set: { retentionText = String($0); commitRetention() }
+                            ), in: 1...365) {
+                                Text("\(retentionText) days").frame(minWidth: 70, alignment: .leading)
+                            }
+                            Spacer()
+                        }
+                        .padding(8)
+                    }
+
+                    GroupBox(label: Text("Appearance").bold()) {
+                        HStack(spacing: 10) {
+                            Text("Picker theme")
+                            Spacer()
+                            Picker("", selection: $theme) {
+                                Text("Auto").tag(PickerTheme.auto)
+                                Text("Light").tag(PickerTheme.light)
+                                Text("Dark").tag(PickerTheme.dark)
+                            }
+                            .pickerStyle(.segmented)
+                            .frame(width: 180)
+                            .onChange(of: theme) { _, v in setPickerTheme(v) }
+                        }
+                        .padding(8)
+                    }
+
+                    GroupBox(label: Text("Clear history").bold()) {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("Wipe recent clips — handy right after copying a password or token.")
+                                .font(.caption).foregroundColor(.secondary)
+                            HStack(spacing: 8) {
+                                ForEach(clears) { opt in
+                                    Button(role: opt.seconds == 0 ? .destructive : nil) {
+                                        pendingClear = opt
+                                    } label: {
+                                        Text(opt.label).frame(maxWidth: .infinity)
+                                    }
+                                    .controlSize(.small)
                                 }
-                                .controlSize(.small)
                             }
                         }
+                        .padding(8)
                     }
-                    .padding(8)
-                }
 
-                if !status.isEmpty {
-                    Text(status).font(.caption).foregroundColor(.secondary)
+                    if !status.isEmpty {
+                        Text(status).font(.caption).foregroundColor(.secondary)
+                    }
                 }
                 Spacer()
             }
@@ -659,6 +703,7 @@ struct AboutView: View {
     @ObservedObject var model: SettingsModel
     @State private var launchAtLogin = launchAtLoginEnabled()
     @State private var showIcon = !UserDefaults.standard.bool(forKey: "hideMenuBarIcon")
+    @State private var showDock = showDockIcon()
 
     @State private var updateStatus = ""
     @State private var checking = false
@@ -721,11 +766,13 @@ struct AboutView: View {
 
                 Toggle("Launch at login", isOn: $launchAtLogin)
                     .onChange(of: launchAtLogin) { _, v in setLaunchAtLogin(v) }
-                Toggle("Show menu-bar icon", isOn: $showIcon)
+                Toggle("Show in Menu Bar", isOn: $showIcon)
                     .onChange(of: showIcon) { _, v in
                         UserDefaults.standard.set(!v, forKey: "hideMenuBarIcon")
                         if v { menuBar.showIcon() } else { menuBar.hideIcon() }
                     }
+                Toggle("Show Dock icon", isOn: $showDock)
+                    .onChange(of: showDock) { _, v in setShowDockIcon(v); applyDockPolicy() }
 
                 Divider()
 

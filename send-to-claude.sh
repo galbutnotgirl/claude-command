@@ -9,7 +9,6 @@
 #   comment   Open a NEW Claude Code session, pre-filled. Stays foreground so you
 #             add a note and send. No auto-submit.
 #   add       Paste the selection into the ALREADY-OPEN Claude Code chat.
-#   todo      Native popup → ~/.claude/hooks/intake.sh (your tracker). No chat.
 #
 # Selection: $@ args (testing) › stdin (Service) › auto-⌘C via the signed helper.
 #   - Fresh selection (clipboard changed on ⌘C) is always used.
@@ -268,25 +267,13 @@ case "$ACTION" in
     else
       PAYLOAD="${CONTEXT}${SEL}"
       if [ "$DRY_RUN" = "1" ]; then print -r -- "DRY_RUN would copy payload + paste into open Claude chat"; exit 0; fi
+      # Stamp clipboard attribution as our own app so clipwatch blocks this write from history.
+      # Without this, the 25ms-poll sees Claude frontmost after activate() and records wrong icon.
+      /usr/bin/python3 -c "import json,time; open('${HOME}/.claude/state/last_copy.json','w').write(json.dumps({'bundle':'com.claudecommand','ts':time.time()}))" 2>/dev/null || true
       printf '%s' "$PAYLOAD" | pbcopy
       helper_activate "$CLAUDE_BUNDLE"; wait_for_claude || true; sleep 0.3; helper_paste
     fi
     log "pasted into open Claude chat"
-    ;;
-
-  todo)
-    NOTE="$(osascript -e 'display dialog "Add to to-do:" default answer "" buttons {"Cancel","Add"} default button "Add" with title "Claude · To-Do"' 2>/dev/null)" || { log "todo cancelled"; exit 0; }
-    NOTE="${NOTE##*text returned:}"
-    CTX=""; [ -n "$APP_NAME" ] && CTX="[from ${APP_NAME}${URL:+ — $URL}]"
-    COMBINED="${NOTE}"; [ -n "$CTX" ] && COMBINED="${NOTE}"$'\n'"${CTX}"
-    [ -n "${SEL//[[:space:]]/}" ] && COMBINED="${COMBINED}"$'\n'"Selected: ${SEL}"
-    if [ "$DRY_RUN" = "1" ]; then print -r -- "DRY_RUN intake.sh: $COMBINED"; exit 0; fi
-    notify "Adding to to-do…"
-    nohup zsh -c "'${HOME}/.claude/hooks/intake.sh' \"\$(cat <<'EOF'
-${COMBINED}
-EOF
-)\" >> '$DO_LOG' 2>&1; osascript -e 'display notification \"Added to to-do.\" with title \"Claude · To-Do\"'" >/dev/null 2>&1 &
-    log "todo dispatched"
     ;;
 
   *) log "unknown ACTION=$ACTION"; notify "Unknown action: $ACTION"; exit 1 ;;

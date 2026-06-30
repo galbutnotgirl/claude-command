@@ -12,12 +12,11 @@ struct CommandAction {
 
 let COMMAND_ACTIONS: [CommandAction] = [
     CommandAction(id: "add",         name: "Add",                detail: "Paste the selection into the already-open Claude chat."),
+    CommandAction(id: "comment",     name: "New",                detail: "New session pre-filled; stays foreground so you add a note and send."),
     CommandAction(id: "go",          name: "Go",                 detail: "New Claude session, auto-submit, then return focus to where you were."),
-    CommandAction(id: "comment",     name: "Comment",            detail: "New session pre-filled; stays foreground so you add a note and send."),
-    CommandAction(id: "todo",        name: "To-Do",              detail: "Native popup → your tracker intake. No Claude chat."),
     CommandAction(id: "shotadd",     name: "Screenshot Add",     detail: "Capture → paste image into the already-open Claude chat."),
-    CommandAction(id: "shotgo",      name: "Screenshot Go",      detail: "Capture (drag area / press Space for a window) → new session, auto-submit."),
-    CommandAction(id: "shotcomment", name: "Screenshot Comment", detail: "Capture → new session; you add a note."),
+    CommandAction(id: "shotcomment", name: "Screenshot New",     detail: "Capture → new session; you add a note."),
+    CommandAction(id: "shotgo",      name: "Screenshot Go",      detail: "Capture → new session, auto-submit."),
     CommandAction(id: "cliphistory", name: "Clipboard History",  detail: "Floating picker of recent clips."),
 ]
 
@@ -77,16 +76,35 @@ struct HotkeyBinding: Identifiable {
     var detail: String { actionDetail(action) }
 }
 
+// Built-in defaults — active when command-hotkeys.json is absent.
+// keycodes: F6=97, F7=98, F8=100; mods: none=0, option=2048
+// User saves any binding → file is written → user values take over permanently.
+let DEFAULT_BINDINGS: [(action: String, keycode: UInt32, mods: UInt32)] = [
+    ("add",         100,  0),      // F8  — paste selection into open Claude
+    ("comment",     100,  2048),   // ⌥F8 — new session, you add note
+    ("go",          0,    0),      // unbound
+    ("shotadd",     98,   0),      // F7  — screenshot → open Claude
+    ("shotcomment", 98,   2048),   // ⌥F7 — screenshot → new session
+    ("shotgo",      0,    0),      // unbound
+    ("cliphistory", 97,   0),      // F6  — clipboard history picker
+]
+
 // One binding per catalog action, in catalog order; unbound actions get keycode 0.
 func loadBindings() -> [HotkeyBinding] {
     var byAction: [String: HotkeyBinding] = [:]
-    if let data = FileManager.default.contents(atPath: CFG),
+    let hasFile = FileManager.default.fileExists(atPath: CFG)
+    if hasFile, let data = FileManager.default.contents(atPath: CFG),
        let arr = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] {
         for d in arr {
             if let a = d["action"] as? String, let k = d["keycode"] as? Int, let m = d["mods"] as? Int {
                 let en = d["enabled"] as? Bool ?? true
                 byAction[a] = HotkeyBinding(action: a, keycode: UInt32(k), mods: UInt32(m), enabled: en)
             }
+        }
+    } else {
+        // No user file — seed from built-in defaults so Settings shows real bindings.
+        for def in DEFAULT_BINDINGS {
+            byAction[def.action] = HotkeyBinding(action: def.action, keycode: def.keycode, mods: def.mods, enabled: true)
         }
     }
     return COMMAND_ACTIONS.map { byAction[$0.id] ?? HotkeyBinding(action: $0.id, keycode: 0, mods: 0, enabled: true) }

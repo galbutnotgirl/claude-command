@@ -7,14 +7,27 @@ set -uo pipefail
 
 DIR="${0:A:h}"
 LABEL="com.claudecommand"
-APP="${DIR}/ClaudeCommand.app"
+SRC_APP="${DIR}/ClaudeCommand.app"
+# Install to ~/Applications so macOS Login Items shows the correct app icon.
+# Apps outside /Applications or ~/Applications get a generic executable icon.
+INSTALL_DIR="${HOME}/Applications"
+APP="${INSTALL_DIR}/ClaudeCommand.app"
 BIN="${APP}/Contents/MacOS/ClaudeCommand"
 PLIST="${HOME}/Library/LaunchAgents/${LABEL}.plist"
 OLD_CLIPWATCH="${HOME}/Library/LaunchAgents/com.claudecommand.clipwatch.plist"
 
-[ -x "$BIN" ] || { print -- "[agent] missing ClaudeCommand.app — run ./build-agent.sh first"; exit 1; }
+[ -x "${SRC_APP}/Contents/MacOS/ClaudeCommand" ] || { print -- "[agent] missing ClaudeCommand.app — run ./build-agent.sh first"; exit 1; }
 
-print -- "[agent] using app at ${APP}"
+# Detect fresh install (no prior plist) vs update. On fresh install we clear
+# onboardingCompleted so the setup flow runs, and warn that permissions need granting.
+FRESH_INSTALL=false
+[[ ! -f "$PLIST" ]] && FRESH_INSTALL=true
+
+# Copy built app to ~/Applications (creates it if missing).
+mkdir -p "$INSTALL_DIR"
+rm -rf "$APP"
+cp -R "$SRC_APP" "$APP"
+print -- "[agent] installed to ${APP}"
 
 # Register with Launch Services so the app icon shows in System Settings privacy panes.
 LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/LaunchServices.framework/Versions/A/Support/lsregister"
@@ -74,4 +87,16 @@ if [ -S "${HOME}/.claude/state/command-agent.sock" ]; then
     print -- "[agent] Login Item: System Settings → General → Login Items"
 else
     print -- "[agent] ⚠ socket not up yet — check ~/.claude/logs/command-agent.err"
+fi
+
+# Ensure clipboard history is enabled — register(defaults:) is in-memory only and
+# won't persist across launches if the key is absent from the plist.
+defaults write com.claudecommand cliphistoryEnabled -bool true
+
+# Fresh install: clear persisted onboarding flag so setup flow triggers on first launch.
+# On update-installs (plist already existed) this is skipped — preserves user state.
+if $FRESH_INSTALL; then
+    defaults delete com.claudecommand onboardingCompleted 2>/dev/null || true
+    print -- "[agent] fresh install — onboarding will run on first launch"
+    print -- "[agent] ⚠ re-grant Accessibility + Screen Recording in System Settings → Privacy"
 fi

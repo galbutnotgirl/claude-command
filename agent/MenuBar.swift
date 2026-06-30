@@ -113,13 +113,21 @@ final class MenuBarController: NSObject, NSMenuDelegate {
 
     private func buildMenu() -> NSMenu {
         let m = NSMenu()
+        m.showsStateColumn = false
         // Action items inserted at top by menuWillOpen.
         m.addItem(.separator())
-        // Title is "Open Settings" (not bare "Settings") so macOS doesn't
-        // auto-decorate the row with a gearshape icon. No image + no key
-        // equivalent → the label sits flush-left like the other rows.
-        add(m, "Open Settings", #selector(openSettings))
-        add(m, "Quit Claude Command", #selector(quit), key: "q")
+        // Empty title + attributedTitle breaks the string-based auto-gear check.
+        // Blank 1×1 NSImage (not nil) prevents macOS from filling the image slot.
+        let settingsItem = NSMenuItem(title: "", action: #selector(openSettings), keyEquivalent: "")
+        settingsItem.attributedTitle = NSAttributedString(
+            string: "Settings",
+            attributes: [.font: NSFont.menuFont(ofSize: 0)]
+        )
+        settingsItem.target = self
+        settingsItem.indentationLevel = 0
+        m.addItem(settingsItem)
+        let quitItem = add(m, "Quit ClaudeCommand", #selector(quit), key: "q")
+        quitItem.indentationLevel = 0
         return m
     }
 

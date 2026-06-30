@@ -11,7 +11,8 @@
 # Runs as a LaunchAgent (install-clipwatch.sh). Stores contents on disk for
 # history — but never from a blocked/secret source.
 
-import os, json, time, stat
+import os, sys, json, time, stat
+from collections import deque
 from AppKit import (NSPasteboard, NSWorkspace, NSBitmapImageRep,
                     NSBitmapImageFileTypePNG)
 
@@ -21,11 +22,12 @@ from AppKit import (NSPasteboard, NSWorkspace, NSBitmapImageRep,
 # new dirs 0700.
 os.umask(0o077)
 
-STATE_DIR = os.path.expanduser("~/.claude/state")
-META   = os.path.join(STATE_DIR, "clipboard.json")
-HIST   = os.path.join(STATE_DIR, "cliphistory")
-INDEX  = os.path.join(HIST, "index.json")
-CONFIG = os.path.join(STATE_DIR, "command-config.json")
+STATE_DIR   = os.path.expanduser("~/.claude/state")
+META        = os.path.join(STATE_DIR, "clipboard.json")
+HIST        = os.path.join(STATE_DIR, "cliphistory")
+INDEX       = os.path.join(HIST, "index.json")
+CONFIG      = os.path.join(STATE_DIR, "command-config.json")
+COPY_SOURCE = os.path.join(STATE_DIR, "last_copy.json")
 os.makedirs(HIST, mode=0o700, exist_ok=True)
 
 def _lock_down():
@@ -64,7 +66,12 @@ BLOCK_BUNDLES = {
     "com.apple.keychainaccess", "com.apple.SecurityAgent",
     "com.1password.1password", "com.agilebits.onepassword7",
     "com.apple.wallet", "com.apple.Passwords",
+    "com.claudecommand",   # our own paste ops — never record clipboard writes we made
 }
+
+# Screenshot apps dismiss before clipboard fires; we need recent frontmost history
+# to attribute screenshot items correctly.
+SCREENSHOT_BUNDLES = {"com.apple.screencaptureui", "com.apple.Screenshot"}
 CONCEAL_TYPES = {
     "org.nspasteboard.ConcealedType", "org.nspasteboard.TransientType",
     "com.agilebits.onepassword.metadata",
@@ -126,7 +133,7 @@ def save_image(pb, path):
             if png: png.writeToFile_atomically_(path, True); return True
     return False
 
-def add_history(epoch, pb):
+def add_history(epoch, pb, bundle):
     items = load_index()
     types = set(pb.types() or [])
     text = pb.stringForType_("public.utf8-plain-text") or pb.stringForType_("public.text")
@@ -138,42 +145,106 @@ def add_history(epoch, pb):
         with open(os.path.join(HIST, fid), "w") as f: f.write(text)
         items.insert(0, {"id": str(epoch), "type": "text", "file": fid,
                          "preview": text.strip().replace("\n", " ")[:PREVIEW_LEN],
-                         "full": text, "ts": epoch})
+                         "full": text, "ts": epoch, "bundle": bundle})
     elif is_img:
         fid = f"{epoch}.png"
         if save_image(pb, os.path.join(HIST, fid)):
             items.insert(0, {"id": str(epoch), "type": "image", "file": fid,
-                             "preview": "🖼 image", "ts": epoch})
+                             "preview": "image", "ts": epoch, "bundle": bundle})
         else:
             return
     else:
         return
     save_index(prune(items))
 
+ATTR_LOG = os.path.expanduser("~/.claude/logs/attribution.log")
+
+def alog(msg):
+    try:
+        line = f"{time.strftime('%H:%M:%S')} [clipwatch] {msg}\n"
+        with open(ATTR_LOG, "a") as f: f.write(line)
+    except Exception: pass
+
+def read_copy_source():
+    try:
+        with open(COPY_SOURCE) as f:
+            d = json.load(f)
+        ts = float(d.get("ts", 0))
+        b  = d.get("bundle", "")
+        age = time.time() - ts
+        if b and age < 1.0:
+            try: os.remove(COPY_SOURCE)
+            except Exception: pass
+            alog(f"read_copy_source → {b} (age={age:.3f}s) ✓")
+            return b
+        else:
+            alog(f"read_copy_source → EXPIRED/EMPTY (b={b!r} age={age:.1f}s)")
+    except FileNotFoundError:
+        alog("read_copy_source → no file")
+    except Exception as e:
+        alog(f"read_copy_source → error: {e}")
+    return None
+
 def main():
     pb = NSPasteboard.generalPasteboard()
     last = pb.changeCount()
     write_meta(int(time.time()), front_bundle(), False)
     last_prune = 0
+    # Keep last 10s of frontmost apps to reliably attribute screenshot items.
+    # Screencapture selection can take several seconds; 400 × 25ms = 10s window.
+    recent_front: deque = deque(maxlen=400)
     while True:
-        now = int(time.time())
-        cc = pb.changeCount()
-        if cc != last:
-            last = cc
-            bundle = front_bundle()
-            types = set(pb.types() or [])
-            concealed = bool(types & CONCEAL_TYPES)
-            blocked = concealed or (bundle in BLOCK_BUNDLES)
-            write_meta(now, bundle, blocked)
-            if not blocked:
-                try: add_history(now, pb)
+        try:
+            now = int(time.time())
+            current_front = front_bundle()
+            recent_front.append(current_front)
+            cc = pb.changeCount()
+            if cc != last:
+                last = cc
+                copy_src = read_copy_source()
+                bundle = copy_src if copy_src else current_front
+                source_method = "last_copy.json" if copy_src else "current_front"
+                types = set(pb.types() or [])
+                is_img = bool(types & {"public.png", "public.tiff"})
+                if is_img and not copy_src:
+                    # Screenshots: screencaptureui is frontmost during selection, then
+                    # dismissed. Find the app active just BEFORE screencaptureui entered
+                    # the window — that's the app the screenshot was taken "of".
+                    deque_list = list(recent_front)  # oldest→newest
+                    in_shot = False
+                    pre_shot = None
+                    for rb in reversed(deque_list):   # scan newest→oldest
+                        if rb in SCREENSHOT_BUNDLES:
+                            in_shot = True
+                        elif in_shot and rb:
+                            pre_shot = rb; break
+                    if pre_shot:
+                        bundle = pre_shot; source_method = "pre_screenshot_app"
+                    elif in_shot:
+                        bundle = "com.apple.screencaptureui"; source_method = "screenshot_history"
+                concealed = bool(types & CONCEAL_TYPES)
+                blocked = concealed or (bundle in BLOCK_BUNDLES)
+                alog(f"CHANGE → bundle={bundle} via={source_method} blocked={blocked} img={is_img} current_front={current_front}")
+                print(f"[clipwatch] change: bundle={bundle} via={source_method} blocked={blocked}", file=sys.stderr, flush=True)
+                write_meta(now, bundle, blocked)
+                if not blocked:
+                    try: add_history(now, pb, bundle)
+                    except Exception as e: alog(f"add_history error: {e}")
+            # Periodic prune so expired clips disappear without needing a new copy.
+            if now - last_prune >= 60:
+                last_prune = now
+                try: prune_now()
                 except Exception: pass
-        # Periodic prune so expired clips disappear without needing a new copy.
-        if now - last_prune >= 60:
-            last_prune = now
-            try: prune_now()
-            except Exception: pass
-        time.sleep(1)
+        except Exception as e:
+            alog(f"loop error (continuing): {e}")
+        time.sleep(0.025)
 
 if __name__ == "__main__":
-    main()
+    alog("startup")
+    try:
+        main()
+    except Exception as e:
+        alog(f"FATAL crash: {e}")
+        import traceback
+        alog(traceback.format_exc())
+        raise

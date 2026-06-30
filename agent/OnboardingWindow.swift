@@ -15,7 +15,12 @@ final class OnboardingWindowController: NSObject, NSWindowDelegate {
     var isVisible: Bool { window?.isVisible ?? false }
 
     func showIfNeeded() {
-        guard !axTrusted() || !screenRecordingOK() else { return }
+        guard !UserDefaults.standard.bool(forKey: "onboardingCompleted") else { return }
+        // Permissions already in place (prior install or update) — mark done, stay silent.
+        guard !axTrusted() || !screenRecordingOK() else {
+            UserDefaults.standard.set(true, forKey: "onboardingCompleted")
+            return
+        }
         show()
     }
 
@@ -159,6 +164,7 @@ struct OnboardingView: View {
         case .done:
             countdown -= 1
             if countdown <= 0 {
+                UserDefaults.standard.set(true, forKey: "onboardingCompleted")
                 onDismiss()
                 restartApp()
             }

@@ -29,10 +29,22 @@ let HOME = NSHomeDirectory()
 let SOCK = "\(HOME)/.claude/state/command-agent.sock"
 let CFG  = "\(HOME)/.claude/state/command-hotkeys.json"
 let CLIPS = "\(HOME)/.claude/state/cliphistory"
-let WORKER: String = {
-    let dir = (Bundle.main.bundlePath as NSString).deletingLastPathComponent   // …/CommandAgent.app -> tool dir
-    return (dir as NSString).appendingPathComponent("send-to-claude.sh")
-}()
+// bundledResource — finds a file in .app/Contents/Resources using the executable
+// path. Bundle.main.path(forResource:ofType:) can return nil when the process is
+// launched directly by launchd before AppKit fully initialises NSBundle.
+func bundledResource(_ name: String) -> String {
+    let exe = ProcessInfo.processInfo.arguments[0]
+    let contentsDir = ((exe as NSString).deletingLastPathComponent as NSString).deletingLastPathComponent
+    let resourcesDir = (contentsDir as NSString).appendingPathComponent("Resources")
+    let bundled = (resourcesDir as NSString).appendingPathComponent(name)
+    if FileManager.default.fileExists(atPath: bundled) { return bundled }
+    // Dev fallback: file in the project directory next to the .app
+    let appDir     = (contentsDir  as NSString).deletingLastPathComponent
+    let projectDir = (appDir       as NSString).deletingLastPathComponent
+    return (projectDir as NSString).appendingPathComponent(name)
+}
+
+let WORKER: String = bundledResource("send-to-claude.sh")
 
 // ---- keystroke synthesis (own process → one Accessibility grant) -----------
 let kC: CGKeyCode = 0x08, kV: CGKeyCode = 0x09, kRet: CGKeyCode = 0x24
@@ -54,7 +66,21 @@ func postKey(_ k: CGKeyCode, cmd: Bool) {
 func activate(_ bundle: String) {
     guard !bundle.isEmpty,
           let app = NSRunningApplication.runningApplications(withBundleIdentifier: bundle).first else { return }
-    app.activate(options: [.activateIgnoringOtherApps])
+    if #available(macOS 14.0, *) {
+        app.activate()
+    } else {
+        app.activate(options: [.activateIgnoringOtherApps])
+    }
+}
+
+// Poll until `bundle` is the frontmost app, then return. Caps at ~300ms.
+func waitForActive(_ bundle: String) {
+    guard !bundle.isEmpty else { return }
+    for _ in 0..<30 {
+        if NSRunningApplication.runningApplications(withBundleIdentifier: bundle)
+            .first?.isActive == true { return }
+        usleep(10_000)
+    }
 }
 
 // Post a user-facing banner (LSUIElement agent has no UI of its own otherwise).
@@ -80,6 +106,12 @@ func runWorker(_ action: String, source: String) {
         }
         return
     }
+    guard FileManager.default.fileExists(atPath: WORKER) else {
+        let msg = "[runWorker] WORKER not found at \(WORKER) — reinstall the app"
+        appendLog(msg)
+        notify("ClaudeCommand broken", "send-to-claude.sh missing. Run install-agent.sh.")
+        return
+    }
     let p = Process()
     p.executableURL = URL(fileURLWithPath: "/bin/zsh")
     p.arguments = [WORKER]
@@ -88,7 +120,30 @@ func runWorker(_ action: String, source: String) {
     env["SOURCE_BUNDLE"] = source
     env["AGENT_SOCK"] = SOCK
     p.environment = env
-    try? p.run()
+    let errPipe = Pipe()
+    p.standardError = errPipe
+    do {
+        try p.run()
+        DispatchQueue.global().async {
+            p.waitUntilExit()
+            if p.terminationStatus != 0 {
+                let out = String(data: errPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+                appendLog("[runWorker] action=\(action) exit=\(p.terminationStatus) stderr=\(out.prefix(400))")
+            }
+        }
+    } catch {
+        appendLog("[runWorker] launch failed: \(error)")
+    }
+}
+
+func appendLog(_ msg: String) {
+    for path in ["\(HOME)/.claude/logs/command-agent.err",
+                 "\(HOME)/.claude/logs/attribution.log"] {
+        let line = msg + "\n"
+        guard let data = line.data(using: .utf8) else { continue }
+        if let fh = FileHandle(forWritingAtPath: path) { fh.seekToEndOfFile(); fh.write(data); fh.closeFile() }
+        else { try? data.write(to: URL(fileURLWithPath: path)) }
+    }
 }
 
 // ---- clipboard history picker (built in) -----------------------------------
@@ -99,15 +154,27 @@ enum PasteTarget { case prev, claude, claudeNew }
 
 var iconCache: [String: NSImage] = [:]
 
+// True purple — not systemPurple which renders burgundy in some themes
+let purpleAccent = NSColor(red: 112/255, green: 40/255, blue: 215/255, alpha: 1.0)
+
 func pickerTheme() -> PickerTheme {
-    PickerTheme(rawValue: UserDefaults.standard.string(forKey: "pickerTheme") ?? "auto") ?? .auto
+    PickerTheme(rawValue: UserDefaults.standard.string(forKey: "pickerTheme") ?? "light") ?? .light
 }
 func setPickerTheme(_ t: PickerTheme) { UserDefaults.standard.set(t.rawValue, forKey: "pickerTheme") }
 
 func appIcon(bundle: String) -> NSImage? {
     guard !bundle.isEmpty else { return nil }
     if let cached = iconCache[bundle] { return cached }
-    guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundle) else { return nil }
+    // screencaptureui is a system framework process — redirect to Screenshot.app for icon
+    let lookupBundle = bundle == "com.apple.screencaptureui" ? "com.apple.Screenshot" : bundle
+    // Running app first — direct icon, works for apps in non-standard locations
+    if let app = NSRunningApplication.runningApplications(withBundleIdentifier: lookupBundle).first,
+       let icon = app.icon {
+        iconCache[bundle] = icon
+        return icon
+    }
+    // Installed app fallback
+    guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: lookupBundle) else { return nil }
     let img = NSWorkspace.shared.icon(forFile: url.path)
     iconCache[bundle] = img
     return img
@@ -144,14 +211,19 @@ func loadClips() -> [Clip] {
 }
 
 let CLAUDE_BUNDLE = "com.anthropic.claudefordesktop"
-let pickerW: CGFloat = 640
-let pickerH: CGFloat = 420
-let listColW: CGFloat = 230
-let pickerRowH: CGFloat = 28
+let pickerW: CGFloat = 768
+let pickerH: CGFloat = 565   // fixed height
+let listColW: CGFloat = 359
+let pickerRowH: CGFloat = 28  // compact rows
 
 final class PickerPanel: NSWindow {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { true }
+}
+
+// Flipped stack so NSScrollView shows content top-to-bottom (not bottom-to-top).
+final class FlippedStack: NSStackView {
+    override var isFlipped: Bool { true }
 }
 
 // Block-based NSObject target so we can use #selector on closures.
@@ -165,8 +237,8 @@ final class PickRow: NSView {
     override func layout() { super.layout(); layer?.cornerRadius = 6; layer?.cornerCurve = .continuous }
     @objc func clicked() {
         let mods = NSEvent.modifierFlags
-        let target: PasteTarget = mods.contains(.command) && mods.contains(.shift) ? .claudeNew
-                                 : mods.contains(.command) ? .claude : .prev
+        let target: PasteTarget = mods.contains(.command) ? .claudeNew
+                                 : mods.contains(.option) ? .claude : .prev
         onPick?(target)
     }
 }
@@ -174,14 +246,18 @@ final class PickRow: NSView {
 final class ClipPicker: NSObject, NSWindowDelegate {
     var win: PickerPanel!
     var fx: NSVisualEffectView!
-    let listStack = NSStackView()
+    let listStack = FlippedStack()
     var previewPane: NSView!
+    var prevImgV: NSImageView?     // persistent — content updated, not recreated
+    var prevTxtV: NSTextField?
+    var prevMetaV: NSTextField?
     var listWidthConstraint: NSLayoutConstraint?
     var filterActionBlocks: [ActionBlock] = []   // kept alive while picker lives
     var all: [Clip] = [], shown: [Clip] = [], rows: [PickRow] = []
     var selected = 0, filterMode: FilterMode = .all, prevBundle = "", query = ""
+    var isPicking = false  // suppresses NSApp.hide during choose() so activate() works in macOS 14+
 
-    func windowDidResignKey(_ notification: Notification) { hide() }
+    func windowDidResignKey(_ notification: Notification) { if !isPicking { hide() } }
 
     func show(prev: String) {
         prevBundle = prev
@@ -189,6 +265,8 @@ final class ClipPicker: NSObject, NSWindowDelegate {
         if win == nil { build() }
         applyTheme()
         refresh()
+        listStack.scroll(NSPoint(x: 0, y: 0))
+        win.setContentSize(NSSize(width: pickerW, height: pickerH)); win.center()
         NSApp.activate(ignoringOtherApps: true)
         win.makeKeyAndOrderFront(nil)
     }
@@ -271,8 +349,44 @@ final class ClipPicker: NSObject, NSWindowDelegate {
         listWidthConstraint = listStack.widthAnchor.constraint(equalToConstant: listColW)
         listWidthConstraint?.isActive = true
 
+        // Persistent preview pane — created once per refresh, subviews updated in updatePreview.
         previewPane = NSView(); previewPane.wantsLayer = true
         previewPane.translatesAutoresizingMaskIntoConstraints = false
+
+        let metaV = NSTextField(labelWithString: "")
+        metaV.font = .systemFont(ofSize: 10); metaV.textColor = .tertiaryLabelColor
+        metaV.translatesAutoresizingMaskIntoConstraints = false; metaV.lineBreakMode = .byTruncatingTail
+        previewPane.addSubview(metaV); prevMetaV = metaV
+
+        let imgV = NSImageView()
+        imgV.imageScaling = .scaleProportionallyDown; imgV.imageAlignment = .alignCenter
+        imgV.wantsLayer = true
+        imgV.layer?.cornerRadius = 6; imgV.layer?.cornerCurve = .continuous; imgV.layer?.masksToBounds = true
+        imgV.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        imgV.setContentCompressionResistancePriority(.defaultLow, for: .vertical)
+        imgV.translatesAutoresizingMaskIntoConstraints = false; imgV.isHidden = true
+        previewPane.addSubview(imgV); prevImgV = imgV
+
+        let txtV = NSTextField(wrappingLabelWithString: "")
+        txtV.font = .monospacedSystemFont(ofSize: 11, weight: .regular); txtV.textColor = .labelColor
+        txtV.translatesAutoresizingMaskIntoConstraints = false; txtV.isHidden = true
+        previewPane.addSubview(txtV); prevTxtV = txtV
+
+        NSLayoutConstraint.activate([
+            metaV.leadingAnchor.constraint(equalTo: previewPane.leadingAnchor, constant: 12),
+            metaV.trailingAnchor.constraint(equalTo: previewPane.trailingAnchor, constant: -12),
+            metaV.bottomAnchor.constraint(equalTo: previewPane.bottomAnchor, constant: -8),
+
+            imgV.leadingAnchor.constraint(equalTo: previewPane.leadingAnchor, constant: 10),
+            imgV.trailingAnchor.constraint(equalTo: previewPane.trailingAnchor, constant: -10),
+            imgV.topAnchor.constraint(equalTo: previewPane.topAnchor, constant: 10),
+            imgV.bottomAnchor.constraint(equalTo: metaV.topAnchor, constant: -6),
+
+            txtV.leadingAnchor.constraint(equalTo: previewPane.leadingAnchor, constant: 12),
+            txtV.trailingAnchor.constraint(equalTo: previewPane.trailingAnchor, constant: -12),
+            txtV.topAnchor.constraint(equalTo: previewPane.topAnchor, constant: 12),
+            txtV.bottomAnchor.constraint(lessThanOrEqualTo: metaV.topAnchor, constant: -6),
+        ])
 
         let hintView = makeHint()
         hintView.translatesAutoresizingMaskIntoConstraints = false
@@ -319,7 +433,6 @@ final class ClipPicker: NSObject, NSWindowDelegate {
             hintView.heightAnchor.constraint(equalToConstant: footH),
         ])
 
-        win.setContentSize(NSSize(width: pickerW, height: pickerH)); win.center()
         highlight(); updatePreview()
     }
 
@@ -332,28 +445,19 @@ final class ClipPicker: NSObject, NSWindowDelegate {
 
     func makeHeader() -> NSView {
         let v = NSView()
-        let iconName: String
-        switch filterMode {
-        case .images: iconName = "photo"
-        case .text:   iconName = "doc.text"
-        case .all:    iconName = "magnifyingglass"
-        }
+
         let searchIcon = NSImageView()
-        searchIcon.image = NSImage(systemSymbolName: iconName, accessibilityDescription: nil)
-        searchIcon.contentTintColor = .tertiaryLabelColor
+        let searchCfg = NSImage.SymbolConfiguration(pointSize: 13, weight: .medium)
+        searchIcon.image = NSImage(systemSymbolName: "magnifyingglass", accessibilityDescription: nil)?.withSymbolConfiguration(searchCfg)
+        searchIcon.contentTintColor = .secondaryLabelColor
         searchIcon.translatesAutoresizingMaskIntoConstraints = false
         searchIcon.widthAnchor.constraint(equalToConstant: 14).isActive = true
         searchIcon.heightAnchor.constraint(equalToConstant: 14).isActive = true
 
-        let placeholder: String
-        switch filterMode {
-        case .images: placeholder = "Images only — ↑↓ browse"
-        case .text:   placeholder = query.isEmpty ? "Text only — type to search" : query
-        case .all:    placeholder = query.isEmpty ? "Search clipboard…" : query
-        }
+        let placeholder = query.isEmpty ? "Search clipboard…" : query
         let lbl = NSTextField(labelWithString: placeholder)
         lbl.font = .systemFont(ofSize: 13)
-        lbl.textColor = (query.isEmpty && filterMode == .all) ? .tertiaryLabelColor : .labelColor
+        lbl.textColor = query.isEmpty ? .secondaryLabelColor : .labelColor
         lbl.lineBreakMode = .byTruncatingTail
         lbl.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         lbl.translatesAutoresizingMaskIntoConstraints = false
@@ -362,7 +466,7 @@ final class ClipPicker: NSObject, NSWindowDelegate {
         badge.translatesAutoresizingMaskIntoConstraints = false
         badge.setContentHuggingPriority(.required, for: .horizontal)
 
-        let row = NSStackView(views: [searchIcon, lbl, badge])
+        let row = NSStackView(views: [badge, searchIcon, lbl])
         row.orientation = .horizontal; row.alignment = .centerY; row.spacing = 8
         row.translatesAutoresizingMaskIntoConstraints = false
         v.addSubview(row)
@@ -393,36 +497,40 @@ final class ClipPicker: NSObject, NSWindowDelegate {
 
     private func makeFilterPill(sym: String?, label: String, active: Bool, mode: FilterMode) -> NSView {
         let v = NSView(); v.wantsLayer = true
-        v.layer?.cornerRadius = 4; v.layer?.cornerCurve = .continuous
+        v.layer?.cornerRadius = 5; v.layer?.cornerCurve = .continuous
         v.layer?.backgroundColor = active
-            ? NSColor.controlAccentColor.withAlphaComponent(0.2).cgColor
-            : NSColor.labelColor.withAlphaComponent(0.06).cgColor
+            ? purpleAccent.withAlphaComponent(0.25).cgColor
+            : NSColor.labelColor.withAlphaComponent(0.12).cgColor
+        v.layer?.borderWidth = 0.5
+        v.layer?.borderColor = active
+            ? purpleAccent.withAlphaComponent(0.5).cgColor
+            : NSColor.labelColor.withAlphaComponent(0.18).cgColor
         v.translatesAutoresizingMaskIntoConstraints = false
 
-        // Content: optional icon + label
+        // Icon-only for pills that have a symbol; text-only for "All".
         let content = NSStackView(); content.orientation = .horizontal; content.spacing = 3
         content.translatesAutoresizingMaskIntoConstraints = false
         if let sym = sym {
             let iv = NSImageView()
-            iv.image = NSImage(systemSymbolName: sym, accessibilityDescription: nil)
-            iv.contentTintColor = active ? .controlAccentColor : .secondaryLabelColor
+            let cfg = NSImage.SymbolConfiguration(pointSize: 11, weight: active ? .semibold : .medium)
+            iv.image = NSImage(systemSymbolName: sym, accessibilityDescription: nil)?.withSymbolConfiguration(cfg)
+            iv.contentTintColor = active ? purpleAccent : .labelColor
             iv.translatesAutoresizingMaskIntoConstraints = false
-            iv.widthAnchor.constraint(equalToConstant: 10).isActive = true
-            iv.heightAnchor.constraint(equalToConstant: 10).isActive = true
+            iv.widthAnchor.constraint(equalToConstant: 13).isActive = true
+            iv.heightAnchor.constraint(equalToConstant: 13).isActive = true
             content.addArrangedSubview(iv)
+        } else {
+            let lbl = NSTextField(labelWithString: label)
+            lbl.font = .systemFont(ofSize: 11, weight: active ? .semibold : .medium)
+            lbl.textColor = active ? purpleAccent : .labelColor
+            content.addArrangedSubview(lbl)
         }
-        let lbl = NSTextField(labelWithString: label)
-        lbl.font = .systemFont(ofSize: 10, weight: active ? .semibold : .regular)
-        lbl.textColor = active ? .controlAccentColor : .secondaryLabelColor
-        content.addArrangedSubview(lbl)
         v.addSubview(content)
         NSLayoutConstraint.activate([
             content.centerXAnchor.constraint(equalTo: v.centerXAnchor),
             content.centerYAnchor.constraint(equalTo: v.centerYAnchor),
-            v.heightAnchor.constraint(equalToConstant: 20),
-            v.widthAnchor.constraint(greaterThanOrEqualToConstant: 40),
-            content.leadingAnchor.constraint(greaterThanOrEqualTo: v.leadingAnchor, constant: 6),
-            content.trailingAnchor.constraint(lessThanOrEqualTo: v.trailingAnchor, constant: -6),
+            v.heightAnchor.constraint(equalToConstant: 22),
+            v.widthAnchor.constraint(equalToConstant: 34),
         ])
 
         // Click handler — cycle through modes; clicking active filter resets to .all
@@ -439,7 +547,7 @@ final class ClipPicker: NSObject, NSWindowDelegate {
 
     func makeHint() -> NSView {
         let v = NSView()
-        let t = NSTextField(labelWithString: "↑↓ · 1-9 pick · ↩ paste · ⌘↩ Claude · ⌘⇧↩ new · esc")
+        let t = NSTextField(labelWithString: "↑↓ · 1-9 pick · ↩ prev · ⌘↩ new · ⌥↩ Claude · esc")
         t.font = .systemFont(ofSize: 10); t.textColor = .quaternaryLabelColor
         t.translatesAutoresizingMaskIntoConstraints = false
         v.addSubview(t)
@@ -460,13 +568,19 @@ final class ClipPicker: NSObject, NSWindowDelegate {
         h.edgeInsets = NSEdgeInsets(top: 0, left: 8, bottom: 0, right: 8)
         h.translatesAutoresizingMaskIntoConstraints = false
 
-        // Source app icon (18×18)
+        // Source app icon (18×18) with tooltip showing app name
         let appIV = NSImageView()
         if let icon = appIcon(bundle: c.bundle) {
             appIV.image = icon
         } else {
             appIV.image = NSImage(systemSymbolName: c.type == "image" ? "photo" : "doc.text", accessibilityDescription: nil)
             appIV.contentTintColor = .tertiaryLabelColor
+        }
+        if !c.bundle.isEmpty,
+           let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: c.bundle) {
+            appIV.toolTip = url.deletingPathExtension().lastPathComponent
+        } else if !c.bundle.isEmpty {
+            appIV.toolTip = c.bundle
         }
         appIV.wantsLayer = true
         appIV.layer?.cornerRadius = 4; appIV.layer?.cornerCurve = .continuous; appIV.layer?.masksToBounds = true
@@ -479,47 +593,51 @@ final class ClipPicker: NSObject, NSWindowDelegate {
         if c.type == "image" {
             let iv = NSImageView()
             let imgPath = (CLIPS as NSString).appendingPathComponent(c.file)
-            if let img = NSImage(contentsOfFile: imgPath) { iv.image = img }
+            let thumbH: CGFloat = 28
+            var thumbW: CGFloat = 44
+            if let img = NSImage(contentsOfFile: imgPath) {
+                iv.image = img
+                let sz = img.size
+                if sz.height > 0 { thumbW = min(max(thumbH * sz.width / sz.height, 20), 56) }
+            }
             iv.imageScaling = .scaleProportionallyDown
             iv.wantsLayer = true
             iv.layer?.cornerRadius = 3; iv.layer?.cornerCurve = .continuous; iv.layer?.masksToBounds = true
             iv.translatesAutoresizingMaskIntoConstraints = false
-            iv.widthAnchor.constraint(equalToConstant: 36).isActive = true
-            iv.heightAnchor.constraint(equalToConstant: 24).isActive = true
+            iv.widthAnchor.constraint(equalToConstant: thumbW).isActive = true
+            iv.heightAnchor.constraint(equalToConstant: thumbH).isActive = true
             h.addArrangedSubview(iv)
-            let tag = NSTextField(labelWithString: "image")
-            tag.font = .systemFont(ofSize: 12); tag.textColor = .secondaryLabelColor
-            h.addArrangedSubview(tag)
         } else {
             let one = c.preview.replacingOccurrences(of: "\n", with: " ")
             let lbl = NSTextField(labelWithString: one.isEmpty ? "(empty)" : one)
             lbl.lineBreakMode = .byTruncatingTail
-            lbl.font = .systemFont(ofSize: 12); lbl.textColor = .labelColor
+            lbl.font = .systemFont(ofSize: 14); lbl.textColor = .labelColor
             lbl.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
             lbl.translatesAutoresizingMaskIntoConstraints = false
             h.addArrangedSubview(lbl)
         }
 
-        let ts = NSTextField(labelWithString: ageString(c.ts))
-        ts.font = .systemFont(ofSize: 10); ts.textColor = .tertiaryLabelColor
-        ts.setContentHuggingPriority(.required, for: .horizontal)
-        h.addArrangedSubview(ts)
+        row.addSubview(h)
 
-        // Index badge: 1-9 for items 0-8, 0 for item 9.
+        // Index badge pinned to trailing edge — always at fixed position, never pushed by content.
         if i < 10 {
             let idxLabel = i < 9 ? "\(i + 1)" : "0"
             let badge = NSTextField(labelWithString: idxLabel)
-            badge.font = .monospacedDigitSystemFont(ofSize: 9, weight: .medium)
+            badge.font = .monospacedDigitSystemFont(ofSize: 11, weight: .medium)
             badge.textColor = .tertiaryLabelColor
             badge.alphaValue = query.isEmpty ? 0.7 : 0.0
-            badge.setContentHuggingPriority(.required, for: .horizontal)
-            h.addArrangedSubview(badge)
+            badge.translatesAutoresizingMaskIntoConstraints = false
+            badge.widthAnchor.constraint(equalToConstant: 14).isActive = true
+            row.addSubview(badge)
+            NSLayoutConstraint.activate([
+                badge.trailingAnchor.constraint(equalTo: row.trailingAnchor, constant: -4),
+                badge.centerYAnchor.constraint(equalTo: row.centerYAnchor),
+            ])
         }
 
-        row.addSubview(h)
         NSLayoutConstraint.activate([
             h.leadingAnchor.constraint(equalTo: row.leadingAnchor),
-            h.trailingAnchor.constraint(equalTo: row.trailingAnchor),
+            h.trailingAnchor.constraint(equalTo: row.trailingAnchor, constant: i < 10 ? -18 : 0),
             h.topAnchor.constraint(equalTo: row.topAnchor),
             h.bottomAnchor.constraint(equalTo: row.bottomAnchor),
         ])
@@ -550,7 +668,7 @@ final class ClipPicker: NSObject, NSWindowDelegate {
     func highlight() {
         for (k, r) in rows.enumerated() {
             r.layer?.backgroundColor = (k == selected)
-                ? NSColor.controlAccentColor.withAlphaComponent(0.22).cgColor : NSColor.clear.cgColor
+                ? purpleAccent.withAlphaComponent(0.28).cgColor : NSColor.clear.cgColor
         }
         // Scroll selected row into view.
         if selected < rows.count {
@@ -561,9 +679,10 @@ final class ClipPicker: NSObject, NSWindowDelegate {
     }
 
     func updatePreview() {
-        guard previewPane != nil else { return }
-        previewPane.subviews.forEach { $0.removeFromSuperview() }
-        guard selected < shown.count else { return }
+        guard let imgV = prevImgV, let txtV = prevTxtV, let metaV = prevMetaV else { return }
+        guard selected < shown.count else {
+            imgV.isHidden = true; txtV.isHidden = true; metaV.stringValue = ""; return
+        }
         let c = shown[selected]
         let path = (CLIPS as NSString).appendingPathComponent(c.file)
 
@@ -573,43 +692,14 @@ final class ClipPicker: NSObject, NSWindowDelegate {
             meta.append(url.deletingPathExtension().lastPathComponent)
         }
         if c.ts > 0 { meta.append(ageString(c.ts) + " ago") }
-        let metaLbl = NSTextField(labelWithString: meta.joined(separator: "  ·  "))
-        metaLbl.font = .systemFont(ofSize: 10); metaLbl.textColor = .tertiaryLabelColor
-        metaLbl.translatesAutoresizingMaskIntoConstraints = false
-        previewPane.addSubview(metaLbl)
-        NSLayoutConstraint.activate([
-            metaLbl.leadingAnchor.constraint(equalTo: previewPane.leadingAnchor, constant: 12),
-            metaLbl.trailingAnchor.constraint(equalTo: previewPane.trailingAnchor, constant: -12),
-            metaLbl.bottomAnchor.constraint(equalTo: previewPane.bottomAnchor, constant: -8),
-        ])
+        metaV.stringValue = meta.joined(separator: "  ·  ")
 
         if c.type == "image", let img = NSImage(contentsOfFile: path) {
-            let iv = NSImageView(); iv.image = img
-            iv.imageScaling = .scaleProportionallyDown   // never upscale; avoids layout jump
-            iv.imageAlignment = .alignCenter
-            iv.wantsLayer = true
-            iv.layer?.cornerRadius = 6; iv.layer?.cornerCurve = .continuous; iv.layer?.masksToBounds = true
-            iv.translatesAutoresizingMaskIntoConstraints = false
-            previewPane.addSubview(iv)
-            NSLayoutConstraint.activate([
-                iv.leadingAnchor.constraint(equalTo: previewPane.leadingAnchor, constant: 10),
-                iv.trailingAnchor.constraint(equalTo: previewPane.trailingAnchor, constant: -10),
-                iv.topAnchor.constraint(equalTo: previewPane.topAnchor, constant: 10),
-                iv.bottomAnchor.constraint(equalTo: metaLbl.topAnchor, constant: -6),
-            ])
+            imgV.image = img; imgV.isHidden = false; txtV.isHidden = true
         } else {
             let body = c.full.isEmpty ? c.preview : c.full
-            let tv = NSTextField(wrappingLabelWithString: body.isEmpty ? "(empty)" : String(body.prefix(800)))
-            tv.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
-            tv.textColor = .labelColor
-            tv.translatesAutoresizingMaskIntoConstraints = false
-            previewPane.addSubview(tv)
-            NSLayoutConstraint.activate([
-                tv.leadingAnchor.constraint(equalTo: previewPane.leadingAnchor, constant: 12),
-                tv.trailingAnchor.constraint(equalTo: previewPane.trailingAnchor, constant: -12),
-                tv.topAnchor.constraint(equalTo: previewPane.topAnchor, constant: 12),
-                tv.bottomAnchor.constraint(lessThanOrEqualTo: metaLbl.topAnchor, constant: -6),
-            ])
+            txtV.stringValue = body.isEmpty ? "(empty)" : String(body.prefix(800))
+            txtV.isHidden = false; imgV.isHidden = true
         }
     }
 
@@ -641,17 +731,22 @@ final class ClipPicker: NSObject, NSWindowDelegate {
         case 126:  // ↑
             if !shown.isEmpty { selected = max(selected - 1, 0); highlight() }
             return true
-        case 123:  // ← → images filter (toggle)
-            filterMode = (filterMode == .images) ? .all : .images
+        case 123:  // ← rotate carousel left: Images←All←Text←Images
+            let leftCycle: [FilterMode] = [.images, .all, .text]
+            let li = leftCycle.firstIndex(of: filterMode) ?? 1
+            filterMode = leftCycle[(li + leftCycle.count - 1) % leftCycle.count]
             query = ""; selected = 0; refresh()
             return true
-        case 124:  // → → text filter (toggle)
-            filterMode = (filterMode == .text) ? .all : .text
+        case 124:  // → rotate carousel right: Images→All→Text→Images
+            let rightCycle: [FilterMode] = [.images, .all, .text]
+            let ri = rightCycle.firstIndex(of: filterMode) ?? 1
+            filterMode = rightCycle[(ri + 1) % rightCycle.count]
             query = ""; selected = 0; refresh()
             return true
         case 36, 76:   // ↩ / numpad ↩
             if selected < shown.count {
-                let target: PasteTarget = cmd && shift ? .claudeNew : cmd ? .claude : .prev
+                let opt = ev.modifierFlags.contains(.option)
+                let target: PasteTarget = cmd ? .claudeNew : opt ? .claude : .prev
                 choose(shown[selected], target: target)
             }
             return true
@@ -672,7 +767,14 @@ final class ClipPicker: NSObject, NSWindowDelegate {
     func hide() { win?.orderOut(nil); NSApp.hide(nil) }
 
     func choose(_ c: Clip, target: PasteTarget) {
+        let savedBundle = prevBundle
         let path = (CLIPS as NSString).appendingPathComponent(c.file)
+        // Stamp last_copy.json as our own bundle before writing to clipboard so
+        // clipwatch (which polls at 25ms) attributes this write to com.claudecommand
+        // (in BLOCK_BUNDLES) and doesn't add it to history as a spurious entry.
+        if let d = try? JSONSerialization.data(withJSONObject: ["bundle": "com.claudecommand", "ts": Date().timeIntervalSince1970]) {
+            try? d.write(to: URL(fileURLWithPath: COPY_SOURCE_PATH))
+        }
         let pb = NSPasteboard.general
         pb.clearContents()
         if c.type == "image", let data = FileManager.default.contents(atPath: path) {
@@ -680,18 +782,61 @@ final class ClipPicker: NSObject, NSWindowDelegate {
         } else if let text = try? String(contentsOfFile: path, encoding: .utf8) {
             pb.setString(text, forType: .string)
         }
-        win.orderOut(nil)
+        isPicking = true
+        win.orderOut(nil)  // hides window; windowDidResignKey fires but isPicking suppresses hide()
+        isPicking = false
+
+        // Use Launch Services (open -b) to activate target — reliable on all macOS
+        // versions, no need to be the frontmost app, no deprecated APIs.
+        func openBundle(_ b: String) {
+            guard !b.isEmpty else { return }
+            let t = Process(); t.launchPath = "/usr/bin/open"; t.arguments = ["-b", b]
+            try? t.run()
+        }
+
+        // Poll on background thread until bundle is frontmost, then hop to main.
+        // 30ms minimum lets the picker window fully dismiss before we check.
+        // Polls every 15ms, caps at ~510ms total. Fires as soon as app is active
+        // — typically 50-150ms vs the old flat 300ms delay.
+        func whenActive(_ bundle: String, then work: @escaping () -> Void) {
+            guard !bundle.isEmpty else {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { work() }
+                return
+            }
+            DispatchQueue.global(qos: .userInteractive).async {
+                usleep(30_000)  // min 30ms: window dismiss + focus handoff
+                for _ in 0..<32 {
+                    if NSRunningApplication.runningApplications(withBundleIdentifier: bundle)
+                        .first?.isActive == true { break }
+                    usleep(15_000)
+                }
+                DispatchQueue.main.async { work() }
+            }
+        }
+
         switch target {
         case .prev:
-            activate(prevBundle); usleep(200_000); postKey(kV, cmd: true)
+            openBundle(savedBundle)
+            whenActive(savedBundle) {
+                postKey(kV, cmd: true)
+                NSApp.hide(nil)
+            }
         case .claude:
-            activate(CLAUDE_BUNDLE); usleep(200_000); postKey(kV, cmd: true)
+            openBundle(CLAUDE_BUNDLE)
+            whenActive(CLAUDE_BUNDLE) {
+                postKey(kV, cmd: true)
+                NSApp.hide(nil)
+            }
         case .claudeNew:
-            activate(CLAUDE_BUNDLE); usleep(200_000)
-            postKey(45, cmd: true)   // ⌘N = new conversation in Claude desktop
-            usleep(300_000); postKey(kV, cmd: true)
+            openBundle(CLAUDE_BUNDLE)
+            whenActive(CLAUDE_BUNDLE) {
+                postKey(45, cmd: true)   // ⌘N — open new Claude window
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                    postKey(kV, cmd: true)
+                    NSApp.hide(nil)
+                }
+            }
         }
-        NSApp.hide(nil)
     }
 }
 
@@ -702,7 +847,10 @@ struct HK { let action: String; let keycode: UInt32; let mods: UInt32 }
 
 func loadHotkeys() -> [HK] {
     guard let data = FileManager.default.contents(atPath: CFG),
-          let arr = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else { return [] }
+          let arr = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
+        // No user file — fall back to built-in defaults.
+        return DEFAULT_BINDINGS.map { HK(action: $0.action, keycode: $0.keycode, mods: $0.mods) }
+    }
     return arr.compactMap { d in
         guard let a = d["action"] as? String,
               let k = d["keycode"] as? Int, let m = d["mods"] as? Int else { return nil }
@@ -722,7 +870,7 @@ let hotKeyHandler: EventHandlerUPP = { (_, event, _) -> OSStatus in
     if let action = hotkeyActions[hkID.id] {
         let front = NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? ""
         if action == "cliphistory" {
-            DispatchQueue.main.async { picker.show(prev: front) }
+            DispatchQueue.main.async { if picker.isVisible { picker.hide() } else { picker.show(prev: front) } }
         } else if action == "settings" {
             DispatchQueue.main.async { settingsWindow.show(tab: .setup) }
         } else {
@@ -746,6 +894,7 @@ func registerFromConfig() {
     hotkeyActions.removeAll()
     let sig = OSType(0x434D4447) // 'CMDG'
     for (i, hk) in loadHotkeys().enumerated() {
+        guard hk.keycode != 0 else { continue }  // keycode 0 = 'A' key; 0 means unbound
         let id = EventHotKeyID(signature: sig, id: UInt32(i + 1))
         hotkeyActions[UInt32(i + 1)] = hk.action
         var ref: EventHotKeyRef?
@@ -762,6 +911,130 @@ func unregisterAllHotkeys() {
     for ref in hotkeyRefs { if let r = ref { UnregisterEventHotKey(r) } }
     hotkeyRefs.removeAll()
     hotkeyActions.removeAll()
+}
+
+// ---- Media-key intercept (F7/F8/F9 = prev/play/next) ----------------------
+// Carbon RegisterEventHotKey never sees these keys when macOS is in media-key
+// mode (the default). We tap at the HID level, check our own hotkey config,
+// and fire the action while swallowing the event so Spotify etc. don't also see it.
+
+// NX media key type → Carbon keycode for the same physical key.
+let MEDIA_TO_CARBON: [Int: UInt32] = [
+    16: 100,   // NX_KEYTYPE_PLAY      → F8
+    17: 101,   // NX_KEYTYPE_NEXT      → F9
+    18: 98,    // NX_KEYTYPE_PREVIOUS  → F7 (some Macs)
+    19: 101,   // NX_KEYTYPE_FAST      → F9 (some Macs)
+    20: 98,    // NX_KEYTYPE_REWIND    → F7 (some Macs)
+]
+
+private var _mediaEventTap: CFMachPort?
+
+func fireMediaAction(_ carbon: UInt32, mods: UInt32 = 0) {
+    let hks = loadHotkeys()
+    guard let hk = hks.first(where: { $0.keycode == carbon && $0.mods == mods }) else { return }
+    let front = NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? ""
+
+    // Shot actions: if screencapture is already running (user pressed again to cancel), kill it.
+    if hk.action.hasPrefix("shot") {
+        let pg = runShell("/usr/bin/pgrep", ["-x", "screencapture"])
+        if pg.code == 0 {
+            _ = runShell("/usr/bin/pkill", ["-x", "screencapture"])
+            return
+        }
+    }
+
+    if hk.action == "cliphistory" {
+        if picker.isVisible { picker.hide() } else { picker.show(prev: front) }
+    } else if hk.action == "settings" {
+        settingsWindow.show(tab: .setup)
+    } else {
+        DispatchQueue.global().async { runWorker(hk.action, source: front) }
+    }
+}
+
+// Carbon keycodes that are also media keys — tap keyDown for these directly
+// so we intercept before Chrome/Carbon/Spotify regardless of keyboard mode.
+let MEDIA_KEYCODES: Set<UInt32> = [96, 97, 98, 99, 100, 101]  // F5–F10
+
+func startMediaKeyHook() {
+    guard AXIsProcessTrusted() else { return }
+    // Intercept both NX_SYSDEFINED (media-key mode) and keyDown (function-key mode).
+    let eventMask = CGEventMask((1 << 14) | (1 << CGEventType.keyDown.rawValue))
+    guard let tap = CGEvent.tapCreate(tap: .cghidEventTap, place: .headInsertEventTap,
+                                      options: .defaultTap, eventsOfInterest: eventMask,
+        callback: { _, type, event, _ -> Unmanaged<CGEvent>? in
+            let passthrough = Unmanaged.passRetained(event)
+
+            // --- media-key mode (NX_SYSDEFINED subtype 8) ---
+            if type.rawValue == 14,
+               let ns = NSEvent(cgEvent: event), ns.subtype.rawValue == 8 {
+                let keyCode = Int((ns.data1 & 0xFFFF0000) >> 16)
+                let isDown  = ((Int(ns.data1) & 0xFF00) >> 8) == 0xA
+                appendLog("[eventTap] NX_SYSDEFINED keyCode=\(keyCode) isDown=\(isDown) carbon=\(MEDIA_TO_CARBON[keyCode] ?? 0)")
+                guard isDown, let carbon = MEDIA_TO_CARBON[keyCode] else { return passthrough }
+                let bound = loadHotkeys().contains { $0.keycode == carbon && $0.mods == 0 }
+                appendLog("[eventTap] NX bound=\(bound) carbon=\(carbon)")
+                guard bound else { return passthrough }
+                DispatchQueue.main.async { fireMediaAction(carbon) }
+                return nil
+            }
+
+            // --- standard function-key mode (regular keyDown) ---
+            if type == .keyDown {
+                let kc = UInt32(event.getIntegerValueField(.keyboardEventKeycode))
+                let f  = event.flags
+
+                // Capture copy/cut source at keypress time — fires BEFORE the app writes to
+                // clipboard, so clipwatch's 25ms poll always sees the correct bundle.
+                // NSEvent.addGlobalMonitorForEvents fires AFTER the write (too late).
+                // Skip our own bundle so paste-ops don't overwrite a real copy source.
+                if f.contains(.maskCommand) && (kc == 8 || kc == 7) {  // Cmd+C or Cmd+X
+                    let bundle = NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? ""
+                    let key = kc == 8 ? "C" : "X"
+                    appendLog("[eventTap] Cmd+\(key) bundle=\(bundle.isEmpty ? "(empty)" : bundle)")
+                    if !bundle.isEmpty && bundle != "com.claudecommand" {
+                        if let d = try? JSONSerialization.data(withJSONObject:
+                            ["bundle": bundle, "ts": Date().timeIntervalSince1970]) {
+                            try? d.write(to: URL(fileURLWithPath: COPY_SOURCE_PATH))
+                            appendLog("[eventTap] wrote last_copy.json bundle=\(bundle)")
+                        }
+                    } else {
+                        appendLog("[eventTap] skipped write (bundle empty or claudecommand)")
+                    }
+                    return passthrough  // never swallow Cmd+C/X
+                }
+
+                guard MEDIA_KEYCODES.contains(kc) else { return passthrough }
+                var cm: UInt32 = 0
+                if f.contains(.maskCommand)   { cm |= 256 }
+                if f.contains(.maskShift)     { cm |= 512 }
+                if f.contains(.maskAlternate) { cm |= 2048 }
+                if f.contains(.maskControl)   { cm |= 4096 }
+                let bound = loadHotkeys().contains { $0.keycode == kc && $0.mods == cm }
+                appendLog("[eventTap] keyDown kc=\(kc) mods=\(cm) bound=\(bound)")
+                guard bound else { return passthrough }
+                DispatchQueue.main.async { fireMediaAction(kc, mods: cm) }
+                return nil
+            }
+
+            return passthrough
+        }, userInfo: nil)
+    else { return }
+    let src = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0)
+    CFRunLoopAddSource(CFRunLoopGetMain(), src, .commonModes)
+    CGEvent.tapEnable(tap: tap, enable: true)
+    _mediaEventTap = tap
+    // macOS auto-disables event taps that block. Re-enable every 5s so hotkeys survive.
+    DispatchQueue.global(qos: .background).asyncAfter(deadline: .now() + 5) { tapWatchdog() }
+}
+
+func tapWatchdog() {
+    guard let tap = _mediaEventTap else { return }
+    if !CGEvent.tapIsEnabled(tap: tap) {
+        CGEvent.tapEnable(tap: tap, enable: true)
+        appendLog("[tapWatchdog] re-enabled media event tap")
+    }
+    DispatchQueue.global(qos: .background).asyncAfter(deadline: .now() + 5) { tapWatchdog() }
 }
 
 // ---- Unix-socket keystroke + picker service --------------------------------
@@ -893,12 +1166,48 @@ func restartApp() {
     }
 }
 
+func validateInstall() {
+    let checks: [(String, String)] = [
+        (WORKER, "send-to-claude.sh missing — reinstall"),
+        (bundledResource("clipwatch.py"), "clipwatch.py missing — reinstall"),
+    ]
+    for (path, msg) in checks where !path.isEmpty && !FileManager.default.fileExists(atPath: path) {
+        appendLog("[startup] \(msg): \(path)")
+        notify("ClaudeCommand install broken", msg)
+    }
+}
+
+func stopClipwatch() {
+    _ = runShell("/usr/bin/pkill", ["-f", "clipwatch.py"])
+}
+
 // Start the bundled clipboard watcher as a child process.
-// Checks if already running first (safe to call on KeepAlive restarts).
+// Restarts automatically if it exits — runs as long as ClaudeCommand is running.
 func startClipwatch() {
-    guard let script = Bundle.main.path(forResource: "clipwatch", ofType: "py") else { return }
-    guard runShell("/usr/bin/pgrep", ["-f", "clipwatch.py"]).code != 0 else { return }
     let logDir = "\(HOME)/.claude/logs"
+    func dbg(_ msg: String) {
+        let path = "\(logDir)/clipwatch-start.log"
+        let line = msg + "\n"
+        if let data = line.data(using: .utf8) {
+            if FileManager.default.fileExists(atPath: path) {
+                if let fh = FileHandle(forWritingAtPath: path) { fh.seekToEndOfFile(); fh.write(data); fh.closeFile() }
+            } else { try? data.write(to: URL(fileURLWithPath: path)) }
+        }
+    }
+    let enabled = UserDefaults.standard.bool(forKey: "cliphistoryEnabled")
+    dbg("startClipwatch: enabled=\(enabled)")
+    guard enabled else { dbg("returning: disabled"); return }
+    let script = bundledResource("clipwatch.py")
+    dbg("script=\(script)")
+    guard FileManager.default.fileExists(atPath: script) else { dbg("returning: no script at \(script)"); return }
+    // Kill any stale clipwatch from a prior install before launching fresh.
+    let pgrep = runShell("/usr/bin/pgrep", ["-f", "clipwatch.py"])
+    dbg("pgrep code=\(pgrep.code)")
+    if pgrep.code == 0 {
+        let out = pgrep.out.trimmingCharacters(in: .whitespacesAndNewlines)
+        dbg("already running pid=\(out) — skipping")
+        return
+    }
     try? FileManager.default.createDirectory(atPath: logDir, withIntermediateDirectories: true)
     let errPath = "\(logDir)/clipwatch.err"
     if !FileManager.default.fileExists(atPath: errPath) {
@@ -910,19 +1219,34 @@ func startClipwatch() {
     var env = ProcessInfo.processInfo.environment; env["HOME"] = HOME
     p.environment = env
     p.standardError = FileHandle(forWritingAtPath: errPath)
-    try? p.run()
+    p.terminationHandler = { proc in
+        let code = proc.terminationStatus
+        dbg("clipwatch exited code=\(code) — restarting in 2s")
+        appendLog("[clipwatch] exited code=\(code) — restarting")
+        DispatchQueue.global().asyncAfter(deadline: .now() + 2) { startClipwatch() }
+    }
+    do { try p.run(); dbg("started pid=\(p.processIdentifier)") }
+    catch { dbg("run failed: \(error)") }
 }
 
 let app = NSApplication.shared
 app.delegate = appDelegate
-UserDefaults.standard.register(defaults: ["showDockIcon": false])  // no dock icon by default
+UserDefaults.standard.register(defaults: ["showDockIcon": false, "cliphistoryEnabled": true])
 applyDockPolicy()                 // menu-bar only unless the user enabled "Show in Dock"
+validateInstall()
 installHotkeys()
+startMediaKeyHook()
+stopClipwatch()   // kill any stale clipwatch from prior install before launching fresh
 startClipwatch()
 startServer()
 
 menuBar.install()                 // greyscale menu-bar icon + Set Up / Shortcuts / Help window
-onboardingWindow.showIfNeeded()   // step-by-step wizard if Accessibility or Screen Recording missing
+// First run: show onboarding wizard. Subsequent runs with permission problems: go straight to Setup.
+if UserDefaults.standard.bool(forKey: "onboardingCompleted") {
+    if !axTrusted() || !screenRecordingOK() { settingsWindow.show(tab: .setup) }
+} else {
+    onboardingWindow.showIfNeeded()
+}
 // Key handling while a window is up: the picker swallows keys while open; the
 // Shortcuts editor swallows the next combo while recording a rebind.
 NSEvent.addLocalMonitorForEvents(matching: .keyDown) { ev in
@@ -930,4 +1254,11 @@ NSEvent.addLocalMonitorForEvents(matching: .keyDown) { ev in
     if settingsModel.handleRecording(ev) { return nil }
     return ev
 }
+
+// Cmd+C/X source capture is now handled inside the CGEventTap (startMediaKeyHook)
+// at .cghidEventTap level — fires BEFORE the app writes to clipboard, so clipwatch
+// always sees the correct bundle. The old NSEvent.addGlobalMonitorForEvents fired
+// AFTER the write (too late for clipwatch's 25ms poll).
+let COPY_SOURCE_PATH = "\(HOME)/.claude/state/last_copy.json"
+
 app.run()

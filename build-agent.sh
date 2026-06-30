@@ -84,7 +84,21 @@ fi
 # self-signed code-signing cert in Keychain Access and export its name/SHA-1:
 #   SIGN_ID="My Cert Name" ./build-agent.sh
 # For a distributable build, use a Developer ID Application identity.
-SIGN_ID="${SIGN_ID:--}"
+# Use a stable signing identity so TCC grants survive rebuilds.
+# Check (in order): env override, any valid codesigning cert in Keychain, ad-hoc.
+if [[ -z "${SIGN_ID:-}" ]]; then
+    EXISTING="$(security find-identity -v -p codesigning 2>/dev/null \
+        | grep -o '"[^"]*"' | head -1 | tr -d '"')"
+    if [[ -n "$EXISTING" ]]; then
+        SIGN_ID="$EXISTING"
+        print -- "[agent] using keychain cert: $SIGN_ID"
+    else
+        SIGN_ID="-"
+        print -- "[agent] ⚠ no signing cert found — using ad-hoc; TCC grants may reset on rebuild"
+        print -- "[agent]   To fix: open Keychain Access → Certificate Assistant → Create Certificate"
+        print -- "[agent]   Name: ClaudeCommandDev, Type: Self-Signed Root, override: Code Signing"
+    fi
+fi
 codesign --force --sign "$SIGN_ID" --identifier "$BUNDLE_ID" "$APP" \
   && print -- "[agent] codesigned ($SIGN_ID)" \
   || { print -- "[agent] ERROR codesign failed (SIGN_ID=$SIGN_ID)"; exit 1; }

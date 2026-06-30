@@ -154,7 +154,7 @@ func setLaunchAtLogin(_ on: Bool) {
 func permissionChecks() -> [StatusCheck] {
     [
         StatusCheck(title: "Accessibility",
-                    detail: "Lets Claude Command fire hotkeys and type ⌘C / ⌘V / Return. The one essential grant.",
+                    detail: "Lets ClaudeCommand fire hotkeys and type ⌘C / ⌘V / Return. The one essential grant.",
                     state: axTrusted() ? .ok : .missing),
         StatusCheck(title: "Screen Recording",
                     detail: "Required for the screenshot actions (macOS screencapture).",
@@ -172,9 +172,12 @@ func componentChecks() -> [StatusCheck] {
                     state: fileExists(home(".claude/state/command-hotkeys.json")) ? .ok : .missing),
         StatusCheck(title: "Right-click actions",
                     detail: "Quick Actions installed in ~/Library/Services (run ./install-quick-action.sh).",
-                    state: fileExists(home("Library/Services/Claude - Go.workflow")) ? .ok : .missing),
+                    state: fileExists(home("Library/Services/Claude - Add.workflow")) ? .ok : .missing),
         StatusCheck(title: "Clipboard daemon",
-                    detail: "clipwatch LaunchAgent loaded (powers the history picker).",
-                    state: serviceLoaded(CLIPWATCH_LABEL) ? .ok : .missing),
+                    detail: UserDefaults.standard.bool(forKey: "cliphistoryEnabled")
+                        ? "Clipboard watcher running (bundled, starts with ClaudeCommand)."
+                        : "Clipboard history is off — enable it in the Clipboard History tab.",
+                    state: !UserDefaults.standard.bool(forKey: "cliphistoryEnabled") ? .unknown
+                         : runShell("/usr/bin/pgrep", ["-f", "clipwatch.py"]).code == 0 ? .ok : .missing),
     ]
 }
