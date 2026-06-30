@@ -879,6 +879,7 @@ func loadHotkeys() -> [HK] {
 }
 
 var hotkeyActions: [UInt32: String] = [:]
+var hotkeyKeycodes: [UInt32: UInt32] = [:]   // hotkey ID → Carbon keycode for PTT polling
 var hotkeyRefs: [EventHotKeyRef?] = []
 
 let hotKeyHandler: EventHandlerUPP = { (_, event, _) -> OSStatus in
@@ -892,21 +893,11 @@ let hotKeyHandler: EventHandlerUPP = { (_, event, _) -> OSStatus in
         } else if action == "settings" {
             DispatchQueue.main.async { settingsWindow.show(tab: .setup) }
         } else if action == "dictate" {
-            Task { @MainActor in
-                if DictationOverlay.shared.isVisible { DictationOverlay.shared.stopRecording() }
-                else {
-                    if let s = NSSound(named: NSSound.Name("Tink")) { s.volume = 0.4; s.play() }
-                    DictationOverlay.shared.show(mode: .insert)
-                }
-            }
+            let kc = CGKeyCode(hotkeyKeycodes[hkID.id] ?? 0)
+            Task { @MainActor in triggerDictation(mode: .insert, keycode: kc) }
         } else if action == "dictateadd" {
-            Task { @MainActor in
-                if DictationOverlay.shared.isVisible { DictationOverlay.shared.stopRecording() }
-                else {
-                    if let s = NSSound(named: NSSound.Name("Tink")) { s.volume = 0.4; s.play() }
-                    DictationOverlay.shared.show(mode: .claude)
-                }
-            }
+            let kc = CGKeyCode(hotkeyKeycodes[hkID.id] ?? 0)
+            Task { @MainActor in triggerDictation(mode: .claude, keycode: kc) }
         } else {
             // Capture selection NOW (main thread, source app still focused)
             // before async dispatch; worker uses CAPTURED_TEXT, skips socket roundtrip.
@@ -929,11 +920,13 @@ func registerFromConfig() {
     for ref in hotkeyRefs { if let r = ref { UnregisterEventHotKey(r) } }
     hotkeyRefs.removeAll()
     hotkeyActions.removeAll()
+    hotkeyKeycodes.removeAll()
     let sig = OSType(0x434D4447) // 'CMDG'
     for (i, hk) in loadHotkeys().enumerated() {
         guard hk.keycode != 0 else { continue }  // keycode 0 = 'A' key; 0 means unbound
         let id = EventHotKeyID(signature: sig, id: UInt32(i + 1))
         hotkeyActions[UInt32(i + 1)] = hk.action
+        hotkeyKeycodes[UInt32(i + 1)] = hk.keycode
         var ref: EventHotKeyRef?
         RegisterEventHotKey(hk.keycode, hk.mods, id, GetApplicationEventTarget(), 0, &ref)
         hotkeyRefs.append(ref)

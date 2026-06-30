@@ -202,8 +202,22 @@ def main():
             if cc != last:
                 last = cc
                 copy_src = read_copy_source()
-                bundle = copy_src if copy_src else current_front
-                source_method = "last_copy.json" if copy_src else "current_front"
+                if copy_src:
+                    bundle = copy_src
+                    source_method = "last_copy.json"
+                else:
+                    # No Cmd+C intercept — look back 200ms in frontmost history.
+                    # The copy action happened just before clipboard changed (0-25ms ago);
+                    # if the user switched apps immediately after copying, current_front
+                    # would be the NEW app (wrong). Walking back finds the actual copier.
+                    rf = list(recent_front)
+                    fallback = current_front
+                    for b in reversed(rf[-8:] if len(rf) >= 8 else rf):
+                        if b and b not in BLOCK_BUNDLES:
+                            fallback = b
+                            break
+                    bundle = fallback
+                    source_method = "recent_front_lookback"
                 types = set(pb.types() or [])
                 is_img = bool(types & {"public.png", "public.tiff"})
                 if is_img and not copy_src:
