@@ -22,9 +22,6 @@ HOTKEYS=(
   "shotgo|Claude - Screenshot Go|cmd F7"
   "shotcomment|Claude - Screenshot Comment|opt F7"
   "cliphistory|Claude - Clipboard History|F6"
-  "todo|Claude - To-Do|cmd F6"
-  "dictate|Claude - Dictate|opt F9"
-  "dictateadd|Claude - Dictate to Claude|cmd F9"
 )
 
 CFG="${HOME}/.claude/state/command-hotkeys.json"

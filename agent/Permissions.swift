@@ -7,7 +7,6 @@ import Cocoa
 import ApplicationServices
 import CoreGraphics
 import AVFoundation
-import Speech
 
 enum CheckState: Equatable { case ok, missing, unknown }
 
@@ -31,19 +30,6 @@ func screenRecordingOK() -> Bool {
 }
 func requestScreenRecording() {
     if #available(macOS 10.15, *) { _ = CGRequestScreenCaptureAccess() }
-}
-
-func micPermissionGranted() -> Bool {
-    AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
-}
-
-func speechPermissionGranted() -> Bool {
-    SFSpeechRecognizer.authorizationStatus() == .authorized
-}
-
-func requestMicAndSpeech() {
-    AVCaptureDevice.requestAccess(for: .audio) { _ in }
-    SFSpeechRecognizer.requestAuthorization { _ in }
 }
 
 func openPrivacyPane(_ anchor: String) {
@@ -169,15 +155,23 @@ func setLaunchAtLogin(_ on: Bool) {
 func permissionChecks() -> [StatusCheck] {
     [
         StatusCheck(title: "Accessibility",
-                    detail: "Lets Claude Command fire hotkeys and type ⌘C / ⌘V / Return. The one essential grant.",
+                    detail: "Lets ClaudeCommand fire hotkeys and type ⌘C / ⌘V / Return. The one essential grant.",
                     state: axTrusted() ? .ok : .missing),
         StatusCheck(title: "Screen Recording",
                     detail: "Required for the screenshot actions (macOS screencapture).",
                     state: screenRecordingOK() ? .ok : .missing),
-        StatusCheck(title: "Microphone & Speech (optional)",
-                    detail: "For dictation only. Enabling it asks for two grants — Microphone and Speech Recognition — so macOS shows two prompts. Speak → Claude Command transcribes live and inserts text.",
-                    state: (micPermissionGranted() && speechPermissionGranted()) ? .ok : .unknown),
+        StatusCheck(title: "Microphone (optional)",
+                    detail: "For dictation only. Parakeet TDT transcribes entirely on-device — no cloud.",
+                    state: AVCaptureDevice.authorizationStatus(for: .audio) == .authorized ? .ok : .unknown),
     ]
+}
+
+func micPermissionGranted() -> Bool {
+    AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
+}
+
+func requestMic() {
+    AVCaptureDevice.requestAccess(for: .audio) { _ in }
 }
 
 func componentChecks() -> [StatusCheck] {
@@ -190,9 +184,12 @@ func componentChecks() -> [StatusCheck] {
                     state: fileExists(home(".claude/state/command-hotkeys.json")) ? .ok : .missing),
         StatusCheck(title: "Right-click actions",
                     detail: "Quick Actions installed in ~/Library/Services (run ./install-quick-action.sh).",
-                    state: fileExists(home("Library/Services/Claude - Go.workflow")) ? .ok : .missing),
+                    state: fileExists(home("Library/Services/Claude - Add.workflow")) ? .ok : .missing),
         StatusCheck(title: "Clipboard daemon",
-                    detail: "clipwatch LaunchAgent loaded (powers the history picker).",
-                    state: serviceLoaded(CLIPWATCH_LABEL) ? .ok : .missing),
+                    detail: UserDefaults.standard.bool(forKey: "cliphistoryEnabled")
+                        ? "Clipboard watcher running (bundled, starts with ClaudeCommand)."
+                        : "Clipboard history is off — enable it in the Clipboard History tab.",
+                    state: !UserDefaults.standard.bool(forKey: "cliphistoryEnabled") ? .unknown
+                         : runShell("/usr/bin/pgrep", ["-f", "clipwatch.py"]).code == 0 ? .ok : .missing),
     ]
 }

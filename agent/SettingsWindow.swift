@@ -5,10 +5,15 @@
 import Cocoa
 import SwiftUI
 import Combine
+import AVFoundation
 
 // Repo URL lives in Updater.swift (GITHUB_REPO_URL) as the single source of truth.
 
-enum SettingsTab: Equatable { case setup, shortcuts, history, dictation, troubleshooting, about }
+enum SettingsTab: Equatable {
+    case setup, shortcuts, history
+    case dictHistory, dictCorrections, dictVocabulary, dictSettings
+    case about
+}
 
 // Single shared model (the local key monitor in main.swift also talks to it
 // while recording a rebind).
@@ -63,10 +68,16 @@ final class SettingsModel: ObservableObject {
     func handleRecording(_ ev: NSEvent) -> Bool {
         guard let action = recordingAction else { return false }
         if ev.keyCode == 53 { cancelRecording(); return true }              // esc cancels
+        if ev.keyCode == 51 || ev.keyCode == 117 {                         // delete / fwd-delete = clear
+            recordingAction = nil
+            clearBinding(action)
+            reregisterHotkeys()
+            return true
+        }
         let key = UInt32(ev.keyCode)
         guard KEYCODE_NAMES[key] != nil else { return true }                // ignore keys we can't name
         recordingAction = nil
-        setBinding(action: action, keycode: key, mods: carbonMods(from: ev.modifierFlags))  // saves + re-registers
+        setBinding(action: action, keycode: key, mods: carbonMods(from: ev.modifierFlags))
         return true
     }
 }
@@ -91,7 +102,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     private func build() {
         let host = NSHostingController(rootView: SettingsRootView(model: settingsModel))
         let w = NSWindow(contentViewController: host)
-        w.title = "Claude Command"
+        w.title = "ClaudeCommand"
         w.styleMask = [.titled, .closable, .miniaturizable, .resizable]
         w.isReleasedWhenClosed = false
         w.delegate = self
@@ -102,28 +113,21 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
             .sink { [weak self] t in self?.sizeWindow(for: t) }
     }
 
-    // Grow the window to fit the tab's content, capped to the visible screen — so a
-    // big display shows everything without inner scrolling; a small one scrolls.
+    // Size once on first show — large enough for all tabs without resizing on switch.
+    // All tabs use ScrollView, so any overflow scrolls gracefully.
     private func sizeWindow(for tab: SettingsTab) {
-        guard let w = window else { return }
-        let ideal: CGFloat
-        switch tab {
-        case .setup:           ideal = 840
-        case .shortcuts:       ideal = 150 + CGFloat(max(1, settingsModel.bindings.count)) * 62
-        case .history:         ideal = 560
-        case .dictation:       ideal = 680
-        case .troubleshooting: ideal = 600
-        case .about:           ideal = 620
-        }
+        guard let w = window, !w.isVisible else { return }
         let cap = ((w.screen ?? NSScreen.main)?.visibleFrame.height ?? 900) - 40
-        let wasVisible = w.isVisible
-        w.setContentSize(NSSize(width: 720, height: max(540, min(ideal, cap))))
-        if !wasVisible { w.center() }
+        let shortcutsH = 200 + CGFloat(max(1, settingsModel.bindings.count)) * 62
+        let h = min(max(920, shortcutsH), cap)
+        w.setContentSize(NSSize(width: 720, height: h))
+        w.center()
     }
 
     func windowWillClose(_ notification: Notification) {
         if settingsModel.recordingAction != nil { settingsModel.cancelRecording() }
-        applyDockPolicy()                              // menu-bar-only again unless "Show in Dock" is on
+        // Defer: window is still isVisible=true during willClose; policy check needs it gone
+        DispatchQueue.main.async { applyDockPolicy() }
     }
 }
 
@@ -144,9 +148,22 @@ struct SettingsRootView: View {
         VStack(alignment: .leading, spacing: 4) {
             tabButton(.setup, "Set Up", "checklist")
             tabButton(.shortcuts, "Shortcuts", "keyboard")
-            tabButton(.history, "History", "clock.arrow.circlepath")
-            tabButton(.dictation, "Dictation", "mic")
-            tabButton(.troubleshooting, "Troubleshooting", "wrench.and.screwdriver")
+            tabButton(.history, "Clipboard History", "clock.arrow.circlepath")
+
+            Divider().padding(.vertical, 4)
+
+            Text("DICTATION")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundColor(.secondary)
+                .padding(.horizontal, 8)
+                .padding(.bottom, 2)
+            tabButton(.dictHistory,     "History",     "clock")
+            tabButton(.dictCorrections, "Corrections", "text.badge.checkmark")
+            tabButton(.dictVocabulary,  "Vocabulary",  "character.book.closed")
+            tabButton(.dictSettings,    "Settings",    "gear")
+
+            Divider().padding(.vertical, 4)
+
             tabButton(.about, "About", "info.circle")
             Spacer()
         }
@@ -155,7 +172,13 @@ struct SettingsRootView: View {
     }
 
     private func tabButton(_ t: SettingsTab, _ label: String, _ icon: String) -> some View {
-        Button(action: { model.tab = t }) {
+        Button(action: {
+            // Always cancel shortcut-recording before switching tabs.
+            // Without this, the local key monitor keeps swallowing keystrokes
+            // (including in text fields on the Corrections/Vocabulary tabs).
+            if model.recordingAction != nil { model.cancelRecording() }
+            model.tab = t
+        }) {
             HStack(spacing: 8) {
                 Image(systemName: icon).frame(width: 18)
                 Text(label); Spacer()
@@ -170,12 +193,14 @@ struct SettingsRootView: View {
 
     @ViewBuilder private var content: some View {
         switch model.tab {
-        case .setup:            SetupView(model: model)
-        case .shortcuts:        ShortcutsView(model: model)
-        case .history:          HistoryView()
-        case .dictation:        DictationView()
-        case .troubleshooting:  TroubleshootingView()
-        case .about:            AboutView(model: model)
+        case .setup:           SetupView(model: model)
+        case .shortcuts:       ShortcutsView(model: model)
+        case .history:         HistoryView()
+        case .dictHistory:     DictHistoryView()
+        case .dictCorrections: DictCorrectionsView()
+        case .dictVocabulary:  DictVocabularyView()
+        case .dictSettings:    DictSettingsView()
+        case .about:           AboutView(model: model)
         }
     }
 }
@@ -214,17 +239,24 @@ struct SetupView: View {
                     }.padding(.vertical, 2)
                 }
 
-                Text("Automation: the first time you Go from a browser, macOS asks once to allow reading the tab URL — approve it.")
-                    .font(.caption).foregroundColor(.secondary)
-
                 Text("Just enabled a grant but the row's still red? macOS only applies it when the agent relaunches — click Restart agent, then Re-check.")
+                    .font(.caption).foregroundColor(.secondary)
+                Text("Grants reset when the app is rebuilt (new binary = new identity to macOS). Re-enable ClaudeCommand in each pane after every build.")
                     .font(.caption).foregroundColor(.secondary)
 
                 HStack(spacing: 10) {
                     Button("Re-check") { model.refresh() }
-                    Button("Restart agent") { exit(0) }   // KeepAlive relaunches us with the new grants live
+                    Button("Restart agent") { restartApp() }
                     Spacer()
                 }
+
+                Divider()
+                Text("Common issues").font(.headline)
+
+                setupTipRow("Hotkeys need fn key",
+                    "If F6–F8 don't fire, go to System Settings > Keyboard and enable \"Use F1, F2… as standard function keys\".")
+                setupTipRow("Logs",
+                    "~/.claude/logs/command-agent.err (agent) · ~/.claude/logs/clipwatch.err (clipboard daemon)")
             }
             .padding(24)
         }
@@ -235,9 +267,9 @@ struct SetupView: View {
     private func action(for title: String) -> CheckAction? {
         switch title {
         case "Accessibility":
-            return CheckAction(label: "Request Access") { requestAccessibility() }   // alert only; user opens Settings from it
+            return CheckAction(label: "Open Settings") { openPrivacyPane("Privacy_Accessibility") }
         case "Screen Recording":
-            return CheckAction(label: "Request Access") { requestScreenRecording() }
+            return CheckAction(label: "Open Settings") { openPrivacyPane("Privacy_ScreenCapture") }
         default:
             return nil
         }
@@ -295,7 +327,7 @@ struct Step: Identifiable {
 struct StepDiagram: View {
     private let steps: [Step] = [
         Step(id: 1, icon: "magnifyingglass", title: "Open the pane", sub: "Privacy & Security in System Settings"),
-        Step(id: 2, icon: "switch.2",        title: "Flip it on",    sub: "Enable Claude Command in the list"),
+        Step(id: 2, icon: "switch.2",        title: "Flip it on",    sub: "Enable ClaudeCommand in the list"),
         Step(id: 3, icon: "checkmark.seal",  title: "Re-check here", sub: "Rows turn green when granted"),
     ]
     var body: some View {
@@ -327,31 +359,21 @@ struct ShortcutsView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
                 Text("Shortcuts").font(.title2).bold()
-                Text("Global hotkeys — they work from any app. Click Set, then press the key combo (e.g. ⌘F8). Esc cancels; Clear removes a binding. Changes apply instantly.")
+                Text("Click a key field and press a combo to set it. Press Delete to clear. Esc cancels. Changes apply instantly.")
                     .foregroundColor(.secondary)
 
                 VStack(spacing: 0) {
                     ForEach(model.bindings) { b in
-                        HStack(spacing: 10) {
+                        HStack(spacing: 12) {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(b.name)
-                                Text(b.detail).font(.caption).foregroundColor(.secondary).fixedSize(horizontal: false, vertical: true)
+                                Text(b.detail).font(.caption).foregroundColor(.secondary)
+                                    .fixedSize(horizontal: false, vertical: true)
                             }
                             Spacer()
-                            Group {
-                                if model.recordingAction == b.action {
-                                    Text("Press keys…").foregroundColor(.accentColor)
-                                } else {
-                                    Text(b.human).font(.system(.body, design: .rounded)).bold()
-                                }
-                            }.frame(width: 110, alignment: .trailing)
-                            Button(model.recordingAction == b.action ? "…" : "Set") {
-                                if model.recordingAction == b.action { model.cancelRecording() }
-                                else { model.startRecording(b.action) }
-                            }.frame(width: 46)
-                            Button("Clear") { model.clearBinding(b.action) }.disabled(b.keycode == 0)
+                            KeyBindingField(action: b.action, binding: b, model: model)
                         }
-                        .padding(.vertical, 7)
+                        .padding(.vertical, 8)
                         Divider()
                     }
                 }
@@ -361,206 +383,51 @@ struct ShortcutsView: View {
     }
 }
 
-// ---- Dictation --------------------------------------------------------------
+struct KeyBindingField: View {
+    let action: String
+    let binding: HotkeyBinding
+    @ObservedObject var model: SettingsModel
 
-func readDictationSilenceTimeout() -> Double {
-    if let v = readCommandConfig()["dictationSilenceTimeout"] as? Double, v >= 0.5 { return v }
-    return 1.5
-}
-
-func writeDictationSilenceTimeout(_ seconds: Double) {
-    var cfg = readCommandConfig()
-    cfg["dictationSilenceTimeout"] = seconds
-    if let data = try? JSONSerialization.data(withJSONObject: cfg, options: [.prettyPrinted]) {
-        try? data.write(to: URL(fileURLWithPath: COMMAND_CONFIG))
-    }
-}
-
-func whisperPostProcessEnabled() -> Bool {
-    readCommandConfig()["whisperPostProcess"] as? Bool ?? false
-}
-
-func setWhisperPostProcess(_ on: Bool) {
-    var cfg = readCommandConfig(); cfg["whisperPostProcess"] = on
-    if let data = try? JSONSerialization.data(withJSONObject: cfg, options: [.prettyPrinted]) {
-        try? data.write(to: URL(fileURLWithPath: COMMAND_CONFIG))
-    }
-}
-
-let DICTATION_VOCAB_PATH = home(".claude/state/dictation-vocab.json")
-
-func readDictationVocab() -> String {
-    guard let data = FileManager.default.contents(atPath: DICTATION_VOCAB_PATH),
-          let arr = try? JSONSerialization.jsonObject(with: data) as? [String] else { return "" }
-    return arr.joined(separator: "\n")
-}
-
-func writeDictationVocab(_ text: String) {
-    let terms = text.split(separator: "\n", omittingEmptySubsequences: true).map(String.init)
-    if let data = try? JSONSerialization.data(withJSONObject: terms, options: [.prettyPrinted]) {
-        try? data.write(to: URL(fileURLWithPath: DICTATION_VOCAB_PATH))
-    }
-}
-
-struct DictationView: View {
-    @State private var silenceTimeout   = readDictationSilenceTimeout()
-    @State private var vocabText        = readDictationVocab()
-    @State private var vocabDirty       = false
-    @State private var micGranted       = micPermissionGranted()
-    @State private var speechGranted    = speechPermissionGranted()
-    @State private var whisperEnabled   = whisperPostProcessEnabled()
-    @State private var whisperFound     = whisperAvailable()
-    @State private var installingWhisper = false
-    @State private var whisperInstallMsg = ""
+    private var isRecording: Bool { model.recordingAction == action }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                Text("Dictation").font(.title2).bold()
-
-                // Permissions
-                GroupBox(label: Text("Permissions").font(.subheadline).bold()) {
-                    VStack(alignment: .leading, spacing: 10) {
-                        HStack(spacing: 10) {
-                            Image(systemName: micGranted ? "checkmark.circle.fill" : "questionmark.circle")
-                                .foregroundColor(micGranted ? .green : .secondary).frame(width: 18)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("Microphone")
-                                Text("Required for live transcription.")
-                                    .font(.caption).foregroundColor(.secondary)
-                            }
-                            Spacer()
-                            if !micGranted {
-                                Button("Enable") {
-                                    requestMicAndSpeech()
-                                    DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
-                                        micGranted    = micPermissionGranted()
-                                        speechGranted = speechPermissionGranted()
-                                    }
-                                }
-                                .buttonStyle(.bordered).controlSize(.small)
-                            }
-                        }
-                        HStack(spacing: 10) {
-                            Image(systemName: speechGranted ? "checkmark.circle.fill" : "questionmark.circle")
-                                .foregroundColor(speechGranted ? .green : .secondary).frame(width: 18)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("Speech Recognition")
-                                Text("Required for on-device transcription.")
-                                    .font(.caption).foregroundColor(.secondary)
-                            }
-                            Spacer()
-                        }
-                    }
-                    .padding(.vertical, 6).padding(.horizontal, 2)
-                }
-
-                // Silence timeout
-                GroupBox(label: Text("Silence Timeout").font(.subheadline).bold()) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Slider(value: $silenceTimeout, in: 1.0...3.0, step: 0.1) {
-                            Text("Silence timeout")
-                        } minimumValueLabel: {
-                            Text("1s").font(.caption).foregroundColor(.secondary)
-                        } maximumValueLabel: {
-                            Text("3s").font(.caption).foregroundColor(.secondary)
-                        }
-                        .onChange(of: silenceTimeout) { _, v in writeDictationSilenceTimeout(v) }
-
-                        Text("Auto-stops after \(String(format: "%.1f", silenceTimeout))s of silence.")
-                            .font(.caption).foregroundColor(.secondary)
-                    }
-                    .padding(.vertical, 6).padding(.horizontal, 2)
-                }
-
-                // Whisper post-processing
-                GroupBox(label: Text("Whisper Post-Processing").font(.subheadline).bold()) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Toggle("Refine with whisper-cli (better accuracy)", isOn: $whisperEnabled)
-                            .onChange(of: whisperEnabled) { _, v in setWhisperPostProcess(v) }
-
-                        if whisperFound {
-                            Text("whisper-cli found ✓")
-                                .font(.caption).foregroundColor(.green)
-                        } else if installingWhisper {
-                            HStack(spacing: 6) {
-                                ProgressView().scaleEffect(0.6)
-                                Text("Installing whisper-cli…").font(.caption).foregroundColor(.secondary)
-                            }
-                        } else {
-                            HStack(spacing: 8) {
-                                Text("whisper-cli not found").font(.caption).foregroundColor(.secondary)
-                                Button("Install") { installWhisper() }
-                                    .buttonStyle(.bordered).controlSize(.small)
-                            }
-                        }
-                        if !whisperInstallMsg.isEmpty {
-                            Text(whisperInstallMsg).font(.caption2).foregroundColor(.secondary)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-
-                        Text("When enabled, SFSpeechRecognizer shows text live while whisper refines the final result for proper nouns and acronyms.")
-                            .font(.caption).foregroundColor(.secondary)
-                    }
-                    .padding(.vertical, 6).padding(.horizontal, 2)
-                }
-
-                // Vocabulary
-                GroupBox(label: Text("Custom Vocabulary").font(.subheadline).bold()) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("One term per line. Helps the recognizer handle proper nouns, product names, and jargon.")
-                            .font(.caption).foregroundColor(.secondary)
-
-                        TextEditor(text: $vocabText)
-                            .font(.system(.body, design: .monospaced))
-                            .frame(minHeight: 120)
-                            .border(Color.gray.opacity(0.3), width: 1)
-                            .onChange(of: vocabText) { _, _ in vocabDirty = true }
-
-                        Button("Save") {
-                            writeDictationVocab(vocabText)
-                            vocabDirty = false
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .disabled(!vocabDirty)
-
-                        Text("Your own terms, stored locally at ~/.claude/state/dictation-vocab.json.")
-                            .font(.caption).foregroundColor(.secondary)
-                    }
-                    .padding(.vertical, 6).padding(.horizontal, 2)
-                }
-            }
-            .padding(24)
+        ZStack {
+            RoundedRectangle(cornerRadius: 7)
+                .fill(isRecording
+                    ? Color.accentColor.opacity(0.12)
+                    : Color(nsColor: .controlBackgroundColor))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 7)
+                        .stroke(isRecording ? Color.accentColor : Color.gray.opacity(0.35), lineWidth: 1)
+                )
+            Text(isRecording ? "Press keys…" : (binding.keycode == 0 ? "—" : binding.human))
+                .font(.system(.body, design: .rounded).bold())
+                .foregroundColor(isRecording ? .accentColor : (binding.keycode == 0 ? .secondary : .primary))
+                .lineLimit(1)
+                .padding(.horizontal, 10)
         }
-        .onAppear {
-            micGranted     = micPermissionGranted()
-            speechGranted  = speechPermissionGranted()
-            whisperEnabled = whisperPostProcessEnabled()
-            whisperFound   = whisperAvailable()
+        .frame(width: 120, height: 30)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            if isRecording { model.cancelRecording() }
+            else { model.startRecording(action) }
         }
+        .help(isRecording ? "Press a key combo · Delete to clear · Esc to cancel" : "Click to set shortcut")
     }
+}
 
-    // Install whisper-cli via Homebrew (provides better dictation accuracy).
-    private func installWhisper() {
-        installingWhisper = true; whisperInstallMsg = ""
-        DispatchQueue.global(qos: .userInitiated).async {
-            let brew = ["/opt/homebrew/bin/brew", "/usr/local/bin/brew"].first { fileExists($0) }
-            guard let brew else {
-                DispatchQueue.main.async {
-                    installingWhisper = false
-                    whisperInstallMsg = "Homebrew not found — install it from brew.sh, then try again."
-                }
-                return
-            }
-            let r = runShell(brew, ["install", "whisper-cpp"])
-            DispatchQueue.main.async {
-                installingWhisper = false
-                whisperFound = whisperAvailable()
-                whisperInstallMsg = whisperFound
-                    ? "whisper-cli installed ✓"
-                    : "Install failed (exit \(r.code)). In Terminal: brew install whisper-cpp"
-            }
-        }
+private func setupTipRow(_ title: String, _ body: String) -> some View {
+    VStack(alignment: .leading, spacing: 3) {
+        Text(title).font(.subheadline).bold()
+        Text(body).font(.caption).foregroundColor(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+}
+
+private func actionExplainRow(_ name: String, _ detail: String) -> some View {
+    VStack(alignment: .leading, spacing: 3) {
+        Text(name).font(.callout).bold()
+        Text(detail).font(.caption).foregroundColor(.secondary).fixedSize(horizontal: false, vertical: true)
     }
 }
 
@@ -587,7 +454,7 @@ struct TroubleshootingView: View {
                     Button("Re-scan") { reload() }
                 }
 
-                Text("Live scan of everything Claude Command needs. Red rows have a fix — follow the step, then Re-scan.")
+                Text("Red means a requirement isn't met yet — not a crash. Grant permissions in the Set Up tab first, then Re-scan here.")
                     .foregroundColor(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
 
@@ -621,14 +488,14 @@ struct TroubleshootingView: View {
             DiagItem(
                 title: "Accessibility",
                 ok: axTrusted(),
-                fix: "Open System Settings > Privacy & Security > Accessibility. Find Claude Command and flip it ON. Then Re-scan.",
+                fix: "Open System Settings > Privacy & Security > Accessibility. Find ClaudeCommand and flip it ON. Then Re-scan.",
                 action: { requestAccessibility(); openPrivacyPane("Privacy_Accessibility") },
                 actionLabel: "Open Settings"
             ),
             DiagItem(
                 title: "Screen Recording",
                 ok: screenRecordingOK(),
-                fix: "Open System Settings > Privacy & Security > Screen Recording. Toggle Claude Command ON. Then Re-scan.",
+                fix: "Open System Settings > Privacy & Security > Screen Recording. Toggle ClaudeCommand ON. Then Re-scan.",
                 action: { openPrivacyPane("Privacy_ScreenCapture") },
                 actionLabel: "Open Settings"
             ),
@@ -641,22 +508,22 @@ struct TroubleshootingView: View {
             ),
             DiagItem(
                 title: "Hotkeys configured",
-                ok: fileExists(home(".claude/state/command-hotkeys.json")),
-                fix: "Hotkey config missing. Run ./set-hotkeys.sh from the claude-command folder.",
+                ok: loadBindings().contains { $0.keycode > 0 },
+                fix: "No hotkeys bound. Open Shortcuts tab and assign at least one key.",
                 action: nil,
                 actionLabel: ""
             ),
             DiagItem(
                 title: "Quick Actions installed",
-                ok: fileExists(home("Library/Services/Claude - Go.workflow")),
+                ok: fileExists(home("Library/Services/Claude - Add.workflow")),
                 fix: "Right-click actions missing. Run ./install-quick-action.sh from the claude-command folder.",
                 action: nil,
                 actionLabel: ""
             ),
             DiagItem(
                 title: "Clipboard daemon",
-                ok: serviceLoaded(CLIPWATCH_LABEL),
-                fix: "Clipboard history daemon not running. Run ./install-agent.sh — it installs clipwatch alongside the main agent.",
+                ok: runShell("/usr/bin/pgrep", ["-f", "clipwatch.py"]).code == 0,
+                fix: "Clipboard history daemon not running. Run ./install-agent.sh to reinstall.",
                 action: nil,
                 actionLabel: ""
             ),
@@ -708,9 +575,11 @@ struct ClearOption: Identifiable {
 }
 
 struct HistoryView: View {
+    @State private var enabled = UserDefaults.standard.bool(forKey: "cliphistoryEnabled")
     @State private var retentionText = String(readRetentionDays())
     @State private var pendingClear: ClearOption? = nil
     @State private var status = ""
+    @State private var theme = pickerTheme()
 
     private let clears: [ClearOption] = [
         ClearOption(label: "Last 15 minutes", seconds: 15 * 60),
@@ -723,44 +592,78 @@ struct HistoryView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 Text("Clipboard History").font(.title2).bold()
-                Text("Every copy is saved to a searchable picker (default hotkey F6). History stays on this Mac, readable only by you, and is pruned automatically.")
-                    .foregroundColor(.secondary).fixedSize(horizontal: false, vertical: true)
 
                 GroupBox {
-                    HStack(spacing: 10) {
-                        Text("Keep history for")
-                        TextField("", text: $retentionText)
-                            .frame(width: 54)
-                            .multilineTextAlignment(.center)
-                            .textFieldStyle(.roundedBorder)
-                            .onSubmit { commitRetention() }
-                        Text("days")
+                    HStack(spacing: 12) {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("Enable Clipboard History").font(.callout).bold()
+                            Text("Captures every copy to a searchable picker. History stays on this Mac, readable only by you.")
+                                .font(.caption).foregroundColor(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
                         Spacer()
-                        Button("Apply") { commitRetention() }.controlSize(.small)
+                        Toggle("", isOn: $enabled)
+                            .labelsHidden()
+                            .onChange(of: enabled) { _, v in
+                                UserDefaults.standard.set(v, forKey: "cliphistoryEnabled")
+                                if v { startClipwatch() } else { stopClipwatch() }
+                            }
                     }
-                    .padding(8)
+                    .padding(10)
                 }
 
-                GroupBox(label: Text("Clear history").bold()) {
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text("Wipe recent clips — handy right after copying a password or token.")
-                            .font(.caption).foregroundColor(.secondary)
-                        HStack(spacing: 8) {
-                            ForEach(clears) { opt in
-                                Button(role: opt.seconds == 0 ? .destructive : nil) {
-                                    pendingClear = opt
-                                } label: {
-                                    Text(opt.label).frame(maxWidth: .infinity)
+                if enabled {
+                    GroupBox {
+                        HStack(spacing: 10) {
+                            Text("Keep history for")
+                            Stepper(value: Binding(
+                                get: { Int(retentionText) ?? readRetentionDays() },
+                                set: { retentionText = String($0); commitRetention() }
+                            ), in: 1...365) {
+                                Text("\(retentionText) days").frame(minWidth: 70, alignment: .leading)
+                            }
+                            Spacer()
+                        }
+                        .padding(8)
+                    }
+
+                    GroupBox(label: Text("Appearance").bold()) {
+                        HStack(spacing: 10) {
+                            Text("Picker theme")
+                            Spacer()
+                            Picker("", selection: $theme) {
+                                Text("Auto").tag(PickerTheme.auto)
+                                Text("Light").tag(PickerTheme.light)
+                                Text("Dark").tag(PickerTheme.dark)
+                            }
+                            .pickerStyle(.segmented)
+                            .frame(width: 180)
+                            .onChange(of: theme) { _, v in setPickerTheme(v) }
+                        }
+                        .padding(8)
+                    }
+
+                    GroupBox(label: Text("Clear history").bold()) {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("Wipe recent clips — handy right after copying a password or token.")
+                                .font(.caption).foregroundColor(.secondary)
+                            HStack(spacing: 8) {
+                                ForEach(clears) { opt in
+                                    Button(role: opt.seconds == 0 ? .destructive : nil) {
+                                        pendingClear = opt
+                                    } label: {
+                                        Text(opt.label).frame(maxWidth: .infinity)
+                                    }
+                                    .controlSize(.small)
                                 }
-                                .controlSize(.small)
                             }
                         }
+                        .padding(8)
                     }
-                    .padding(8)
-                }
 
-                if !status.isEmpty {
-                    Text(status).font(.caption).foregroundColor(.secondary)
+                    if !status.isEmpty {
+                        Text(status).font(.caption).foregroundColor(.secondary)
+                    }
                 }
                 Spacer()
             }
@@ -830,6 +733,7 @@ struct AboutView: View {
     @ObservedObject var model: SettingsModel
     @State private var launchAtLogin = launchAtLoginEnabled()
     @State private var showIcon = !UserDefaults.standard.bool(forKey: "hideMenuBarIcon")
+    @State private var showDock = showDockIcon()
 
     @State private var updateStatus = ""
     @State private var checking = false
@@ -852,7 +756,7 @@ struct AboutView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                Text("Claude Command").font(.title2).bold()
+                Text("ClaudeCommand").font(.title2).bold()
                 Text("Select text or an image in any Mac app → hotkey or right-click → it lands in the Claude Code desktop app, with source context attached. Plus a clipboard-history picker and screenshot→Claude.")
                     .foregroundColor(.secondary).fixedSize(horizontal: false, vertical: true)
 
@@ -892,11 +796,13 @@ struct AboutView: View {
 
                 Toggle("Launch at login", isOn: $launchAtLogin)
                     .onChange(of: launchAtLogin) { _, v in setLaunchAtLogin(v) }
-                Toggle("Show menu-bar icon", isOn: $showIcon)
+                Toggle("Show in Menu Bar", isOn: $showIcon)
                     .onChange(of: showIcon) { _, v in
                         UserDefaults.standard.set(!v, forKey: "hideMenuBarIcon")
                         if v { menuBar.showIcon() } else { menuBar.hideIcon() }
                     }
+                Toggle("Show Dock icon", isOn: $showDock)
+                    .onChange(of: showDock) { _, v in setShowDockIcon(v); applyDockPolicy() }
 
                 Divider()
 
@@ -931,5 +837,387 @@ struct AboutView: View {
                 installing = false
                 updateStatus = msg
             })
+    }
+}
+
+// ---- Dictation: History -------------------------------------------------------
+
+struct DictHistoryView: View {
+    @ObservedObject private var hist:  HistoryStore    = .shared
+    @ObservedObject private var vocab: VocabularyStore = .shared
+
+    private var suggestions: [(wrong: String, correct: String, count: Int)] {
+        hist.suggestions(ignoring: Set(vocab.replacements.map { $0.wrong }))
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                Text("Dictation History").font(.title2).bold()
+
+                if !suggestions.isEmpty {
+                    GroupBox(label: Text("Suggested Corrections").font(.subheadline).bold()) {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("Patterns seen ≥2× where raw and processed transcripts differ.")
+                                .font(.caption).foregroundColor(.secondary)
+                            ForEach(suggestions.prefix(5), id: \.wrong) { s in
+                                HStack {
+                                    Text(s.wrong).foregroundColor(.secondary)
+                                    Image(systemName: "arrow.right").font(.caption)
+                                    Text(s.correct)
+                                    Text("×\(s.count)").font(.caption2).foregroundColor(.secondary)
+                                    Spacer()
+                                    Button("Add to Corrections") {
+                                        vocab.addReplacement(wrong: s.wrong, correct: s.correct)
+                                    }.buttonStyle(.bordered).controlSize(.small)
+                                }.font(.system(size: 13))
+                                Divider()
+                            }
+                        }.padding(.vertical, 6)
+                    }
+                }
+
+                GroupBox(label: HStack {
+                    Text("All Entries (\(hist.records.count))").font(.subheadline).bold()
+                    Spacer()
+                    if !hist.records.isEmpty {
+                        Button("Clear All") { hist.clearAll() }
+                            .foregroundColor(.red).buttonStyle(.plain).font(.caption)
+                    }
+                }) {
+                    VStack(alignment: .leading, spacing: 0) {
+                        if hist.records.isEmpty {
+                            Text("No dictations yet. Use the Dictate hotkey to record your first one.")
+                                .font(.caption).foregroundColor(.secondary).padding(.vertical, 12)
+                        } else {
+                            ForEach(hist.records) { e in
+                                HistoryEntryRow(entry: e)
+                                Divider()
+                            }
+                        }
+                    }.padding(.vertical, 4)
+                }
+            }.padding(24)
+        }
+    }
+}
+
+struct HistoryEntryRow: View {
+    let entry: HistoryStore.Record
+    @ObservedObject private var hist:  HistoryStore    = .shared
+    @ObservedObject private var vocab: VocabularyStore = .shared
+    @State private var showAddCorrection = false
+    @State private var corrWrong  = ""
+    @State private var corrCorrect = ""
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 6) {
+                Text(entry.mode == "insert" ? "Insert" : "→ Claude")
+                    .font(.caption2)
+                    .padding(.horizontal, 5).padding(.vertical, 2)
+                    .background(Color.accentColor.opacity(0.15)).cornerRadius(4)
+                Text(RelativeDateTimeFormatter().localizedString(for: entry.timestamp, relativeTo: Date()))
+                    .font(.caption2).foregroundColor(.secondary)
+                Spacer()
+                Button {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(entry.processed, forType: .string)
+                } label: { Image(systemName: "doc.on.doc").font(.caption) }
+                .buttonStyle(.plain).help("Copy")
+
+                Button { showAddCorrection.toggle() } label: {
+                    Image(systemName: "plus.bubble").font(.caption)
+                }.buttonStyle(.plain).help("Add correction")
+
+                Button { hist.remove(id: entry.id) } label: {
+                    Image(systemName: "trash").font(.caption).foregroundColor(.red)
+                }.buttonStyle(.plain).help("Delete")
+            }
+            Text(entry.processed).font(.system(size: 13)).lineLimit(3)
+            if entry.processed != entry.raw {
+                Text("Raw: \(entry.raw)").font(.caption2).foregroundColor(.secondary).lineLimit(2)
+            }
+            if showAddCorrection {
+                HStack(spacing: 6) {
+                    TextField("Misheard", text: $corrWrong)
+                        .textFieldStyle(.roundedBorder).frame(maxWidth: 120)
+                    Image(systemName: "arrow.right").foregroundColor(.secondary)
+                    TextField("Correct", text: $corrCorrect)
+                        .textFieldStyle(.roundedBorder).frame(maxWidth: 120)
+                    Button("Add") {
+                        vocab.addReplacement(wrong: corrWrong, correct: corrCorrect)
+                        corrWrong = ""; corrCorrect = ""; showAddCorrection = false
+                    }.disabled(corrWrong.isEmpty || corrCorrect.isEmpty)
+                    Button("Cancel") { showAddCorrection = false; corrWrong = ""; corrCorrect = "" }
+                        .buttonStyle(.plain).foregroundColor(.secondary)
+                }.padding(.top, 4)
+            }
+        }.padding(.vertical, 6)
+    }
+}
+
+// ---- Dictation: Corrections ---------------------------------------------------
+
+struct DictCorrectionsView: View {
+    @ObservedObject private var vocab: VocabularyStore = .shared
+    @ObservedObject private var hist:  HistoryStore    = .shared
+    @State private var newWrong   = ""
+    @State private var newCorrect = ""
+
+    private var suggestions: [(wrong: String, correct: String, count: Int)] {
+        hist.suggestions(ignoring: Set(vocab.replacements.map { $0.wrong }))
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                Text("Word Corrections").font(.title2).bold()
+                Text("Misheard → Correct. Applied before any other processing.")
+                    .foregroundColor(.secondary)
+
+                GroupBox(label: Text("Active Corrections").font(.subheadline).bold()) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        if vocab.replacements.isEmpty {
+                            Text("No corrections yet.")
+                                .font(.caption).foregroundColor(.secondary)
+                        } else {
+                            ForEach(vocab.replacements) { r in
+                                HStack {
+                                    Text(r.wrong).foregroundColor(.secondary)
+                                    Image(systemName: "arrow.right").font(.caption)
+                                    Text(r.correct)
+                                    Spacer()
+                                    Button { vocab.removeReplacement(id: r.id) } label: {
+                                        Image(systemName: "trash").foregroundColor(.red)
+                                    }.buttonStyle(.plain)
+                                }.font(.system(size: 13))
+                                Divider()
+                            }
+                        }
+                        HStack(spacing: 6) {
+                            TextField("Misheard", text: $newWrong)
+                                .textFieldStyle(.roundedBorder).frame(maxWidth: 140)
+                            Image(systemName: "arrow.right").foregroundColor(.secondary)
+                            TextField("Correct", text: $newCorrect)
+                                .textFieldStyle(.roundedBorder).frame(maxWidth: 140)
+                            Button("Add") {
+                                vocab.addReplacement(wrong: newWrong, correct: newCorrect)
+                                newWrong = ""; newCorrect = ""
+                            }.disabled(newWrong.isEmpty || newCorrect.isEmpty)
+                        }.padding(.top, 4)
+                    }.padding(.vertical, 6)
+                }
+
+                if !suggestions.isEmpty {
+                    GroupBox(label: Text("Suggestions from History").font(.subheadline).bold()) {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("Patterns seen ≥2× where raw and processed transcripts differ.")
+                                .font(.caption).foregroundColor(.secondary)
+                            ForEach(suggestions, id: \.wrong) { s in
+                                HStack {
+                                    Text(s.wrong).foregroundColor(.secondary)
+                                    Image(systemName: "arrow.right").font(.caption)
+                                    Text(s.correct)
+                                    Text("×\(s.count)").font(.caption2).foregroundColor(.secondary)
+                                    Spacer()
+                                    Button("Add") {
+                                        vocab.addReplacement(wrong: s.wrong, correct: s.correct)
+                                    }.buttonStyle(.borderedProminent).controlSize(.small)
+                                }.font(.system(size: 13))
+                                Divider()
+                            }
+                        }.padding(.vertical, 6)
+                    }
+                }
+            }.padding(24)
+        }
+    }
+}
+
+// ---- Dictation: Vocabulary ----------------------------------------------------
+
+struct DictVocabularyView: View {
+    @ObservedObject private var vocab: VocabularyStore = .shared
+    @State private var newVocab  = ""
+    @State private var newFiller = ""
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                Text("Vocabulary").font(.title2).bold()
+
+                GroupBox(label: Text("Vocabulary Hints").font(.subheadline).bold()) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Proper nouns, product names — hints the model toward correct spelling.")
+                            .font(.caption).foregroundColor(.secondary)
+                        if vocab.vocab.isEmpty {
+                            Text("No terms yet.").font(.caption).foregroundColor(.secondary)
+                        } else {
+                            ForEach(Array(vocab.vocab.enumerated()), id: \.offset) { i, term in
+                                HStack {
+                                    Text(term)
+                                    Spacer()
+                                    Button { vocab.removeVocab(at: IndexSet([i])) } label: {
+                                        Image(systemName: "trash").foregroundColor(.red)
+                                    }.buttonStyle(.plain)
+                                }.font(.system(size: 13))
+                                Divider()
+                            }
+                        }
+                        HStack(spacing: 6) {
+                            TextField("Term", text: $newVocab).textFieldStyle(.roundedBorder)
+                            Button("Add") { vocab.addVocab(newVocab); newVocab = "" }
+                                .disabled(newVocab.isEmpty)
+                        }.padding(.top, 4)
+                    }.padding(.vertical, 6)
+                }
+
+                GroupBox(label: Text("Filler Words").font(.subheadline).bold()) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Words stripped from transcripts when filler removal is on. Toggle per entry.")
+                            .font(.caption).foregroundColor(.secondary)
+                        ForEach(vocab.fillers) { f in
+                            HStack {
+                                Toggle("", isOn: Binding(
+                                    get: { f.enabled },
+                                    set: { _ in vocab.toggleFiller(id: f.id) }
+                                )).labelsHidden().toggleStyle(.checkbox)
+                                Text(f.phrase).foregroundColor(f.enabled ? .primary : .secondary)
+                                if f.customPattern != nil {
+                                    Text("regex").font(.caption2)
+                                        .padding(.horizontal, 4).padding(.vertical, 1)
+                                        .background(Color.secondary.opacity(0.2)).cornerRadius(3)
+                                }
+                                Spacer()
+                                Button { vocab.removeFiller(id: f.id) } label: {
+                                    Image(systemName: "trash").foregroundColor(.red)
+                                }.buttonStyle(.plain)
+                            }.font(.system(size: 13))
+                            Divider()
+                        }
+                        HStack(spacing: 6) {
+                            TextField("Phrase", text: $newFiller).textFieldStyle(.roundedBorder)
+                            Button("Add") { vocab.addFiller(phrase: newFiller); newFiller = "" }
+                                .disabled(newFiller.isEmpty)
+                        }.padding(.top, 4)
+                    }.padding(.vertical, 6)
+                }
+            }.padding(24)
+        }
+    }
+}
+
+// ---- Dictation: Settings ------------------------------------------------------
+
+struct DictSettingsView: View {
+    @ObservedObject private var rec:  Recorder           = recorder
+    @ObservedObject private var proc: ProcessingSettings = .shared
+    @State private var micGranted = AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                Text("Dictation Settings").font(.title2).bold()
+                Text("On-device transcription via Parakeet TDT — no cloud, no streaming, runs on Apple Neural Engine.")
+                    .foregroundColor(.secondary).fixedSize(horizontal: false, vertical: true)
+
+                GroupBox(label: Text("Model").font(.subheadline).bold()) {
+                    HStack(spacing: 12) {
+                        modelStatusIcon
+                        modelStatusText
+                        Spacer()
+                        modelActionButton
+                    }.padding(.vertical, 8)
+                }
+
+                GroupBox(label: Text("Microphone").font(.subheadline).bold()) {
+                    HStack(spacing: 10) {
+                        Image(systemName: micGranted ? "checkmark.circle.fill" : "xmark.circle.fill")
+                            .foregroundColor(micGranted ? .green : .red).frame(width: 18)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Microphone access")
+                            Text("Required for dictation.")
+                                .font(.caption).foregroundColor(.secondary)
+                        }
+                        Spacer()
+                        if !micGranted {
+                            Button("Enable") {
+                                AVCaptureDevice.requestAccess(for: .audio) { _ in
+                                    DispatchQueue.main.async {
+                                        micGranted = AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
+                                    }
+                                }
+                            }.buttonStyle(.bordered).controlSize(.small)
+                        }
+                    }.padding(.vertical, 6)
+                }
+
+                GroupBox(label: Text("Processing").font(.subheadline).bold()) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Toggle("Filler removal (um, uh, you know…)", isOn: $proc.fillerRemoval)
+                        Toggle("Smart formatting (punctuation commands, backtrack, lists)", isOn: $proc.smartFormatting)
+                        Toggle("AI cleanup — Apple Intelligence, on-device (macOS 26+)", isOn: $proc.aiCleanup)
+                        Text("Punctuation: \"period\", \"comma\", \"new paragraph\".\nBacktrack: \"scratch that\", \"no wait\", \"i mean\" removes the preceding phrase.")
+                            .font(.caption).foregroundColor(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }.padding(.vertical, 6)
+                }
+            }.padding(24)
+        }
+        .onAppear {
+            micGranted = AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
+        }
+    }
+
+    @ViewBuilder private var modelStatusIcon: some View {
+        switch rec.modelStatus {
+        case .ready:
+            Image(systemName: "checkmark.circle.fill").foregroundColor(.green).font(.title2)
+        case .notDownloaded:
+            Image(systemName: "arrow.down.circle").foregroundColor(.secondary).font(.title2)
+        case .downloading:
+            ProgressView().scaleEffect(0.8)
+        case .error:
+            Image(systemName: "exclamationmark.circle.fill").foregroundColor(.red).font(.title2)
+        }
+    }
+
+    @ViewBuilder private var modelStatusText: some View {
+        switch rec.modelStatus {
+        case .ready:
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Parakeet TDT ready").bold()
+                Text("On-device, ~650 MB").font(.caption).foregroundColor(.secondary)
+            }
+        case .notDownloaded:
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Model not downloaded")
+                Text("~650 MB, one-time, local only").font(.caption).foregroundColor(.secondary)
+            }
+        case .downloading(let p):
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Downloading… \(Int(p * 100))%")
+                ProgressView(value: p).frame(width: 200)
+            }
+        case .error(let msg):
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Error").bold().foregroundColor(.red)
+                Text(msg).font(.caption).foregroundColor(.secondary)
+            }
+        }
+    }
+
+    @ViewBuilder private var modelActionButton: some View {
+        switch rec.modelStatus {
+        case .notDownloaded, .error:
+            Button("Download") { Task { await recorder.downloadModels() } }
+                .buttonStyle(.borderedProminent)
+        case .ready:
+            Button("Remove") { recorder.removeModels() }
+                .buttonStyle(.bordered).foregroundColor(.red)
+        default:
+            EmptyView()
+        }
     }
 }

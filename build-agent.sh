@@ -21,14 +21,12 @@ print -- "[agent] version ${VERSION}"
 rm -rf "$APP"
 mkdir -p "$BIN_DIR"
 
-print -- "[agent] compiling…"
-# Whole agent/ folder — main.swift holds top-level boot; the rest are declarations
-# (menu bar, settings window, permissions, action catalog).
-if ! swiftc -O ${SRC_DIR}/*.swift -o "${BIN_DIR}/ClaudeCommand" \
-       -framework Cocoa -framework Carbon -framework SwiftUI \
-       -framework Speech -framework AVFoundation 2>&1; then
-  print -- "[agent] ERROR swiftc failed"; exit 1
+print -- "[agent] compiling (swift build)…"
+# SPM build — FluidAudio dependency requires Package.swift resolution.
+if ! ( cd "${SRC_DIR}" && swift build -c release 2>&1 ); then
+  print -- "[agent] ERROR swift build failed"; exit 1
 fi
+cp "${SRC_DIR}/.build/release/ClaudeCommand" "${BIN_DIR}/ClaudeCommand"
 
 cat > "${APP}/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -44,19 +42,23 @@ cat > "${APP}/Contents/Info.plist" <<PLIST
 	<key>CFBundleIconFile</key><string>AppIcon</string>
 	<key>LSUIElement</key><true/>
 	<key>LSMinimumSystemVersion</key><string>13.0</string>
-	<key>NSMicrophoneUsageDescription</key><string>Claude Command uses your microphone to transcribe speech for dictation.</string>
-	<key>NSSpeechRecognitionUsageDescription</key><string>Claude Command uses speech recognition to convert your voice into text for dictation.</string>
+	<key>NSMicrophoneUsageDescription</key><string>ClaudeCommand uses your microphone for on-device dictation via Parakeet TDT.</string>
 </dict>
 </plist>
 PLIST
 
-# Bundle send-to-claude.sh into Resources.
+# Bundle send-to-claude.sh + clipwatch.py into Resources.
+mkdir -p "${APP}/Contents/Resources"
 SEND="${DIR}/send-to-claude.sh"
 if [ -f "$SEND" ]; then
-  mkdir -p "${APP}/Contents/Resources"
   cp "$SEND" "${APP}/Contents/Resources/send-to-claude.sh"
   chmod +x "${APP}/Contents/Resources/send-to-claude.sh"
   print -- "[agent] bundled send-to-claude.sh"
+fi
+CLIPWATCH="${DIR}/clipwatch.py"
+if [ -f "$CLIPWATCH" ]; then
+  cp "$CLIPWATCH" "${APP}/Contents/Resources/clipwatch.py"
+  print -- "[agent] bundled clipwatch.py"
 fi
 
 # App icon (orbital-ring star). Build AppIcon.icns from agent/icon.png if present.
@@ -79,7 +81,21 @@ fi
 # self-signed code-signing cert in Keychain Access and export its name/SHA-1:
 #   SIGN_ID="My Cert Name" ./build-agent.sh
 # For a distributable build, use a Developer ID Application identity.
-SIGN_ID="${SIGN_ID:--}"
+# Use a stable signing identity so TCC grants survive rebuilds.
+# Check (in order): env override, any valid codesigning cert in Keychain, ad-hoc.
+if [[ -z "${SIGN_ID:-}" ]]; then
+    EXISTING="$(security find-identity -v -p codesigning 2>/dev/null \
+        | grep -o '"[^"]*"' | head -1 | tr -d '"')"
+    if [[ -n "$EXISTING" ]]; then
+        SIGN_ID="$EXISTING"
+        print -- "[agent] using keychain cert: $SIGN_ID"
+    else
+        SIGN_ID="-"
+        print -- "[agent] ⚠ no signing cert found — using ad-hoc; TCC grants may reset on rebuild"
+        print -- "[agent]   To fix: open Keychain Access → Certificate Assistant → Create Certificate"
+        print -- "[agent]   Name: ClaudeCommandDev, Type: Self-Signed Root, override: Code Signing"
+    fi
+fi
 codesign --force --sign "$SIGN_ID" --identifier "$BUNDLE_ID" "$APP" \
   && print -- "[agent] codesigned ($SIGN_ID)" \
   || { print -- "[agent] ERROR codesign failed (SIGN_ID=$SIGN_ID)"; exit 1; }
