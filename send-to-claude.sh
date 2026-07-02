@@ -131,9 +131,10 @@ fi
 # the go/comment dispatch reopens Claude (or we restore it on cancel).
 SHOT=0
 case "$ACTION" in
-  shotgo|shotcomment|shotadd|shotfullgo|customshot)
+  shotgo|shotcomment|shotadd|shotfullgo|customshot|shothandoff)
     SHOT=1
-    if [ "$DRY_RUN" != "1" ]; then
+    # shothandoff never touches the Claude window — skip the hide/restore dance.
+    if [ "$DRY_RUN" != "1" ] && [ "$ACTION" != "shothandoff" ]; then
       agent_cmd "hide $CLAUDE_BUNDLE" >/dev/null 2>&1 && sleep 0.15   # let the window clear
     fi
     CC0="$(pb_cc)"
@@ -146,7 +147,7 @@ case "$ACTION" in
     CC1="$(pb_cc)"
     if [ "$DRY_RUN" != "1" ] && { [ "$CC1" = "$CC0" ] || ! clipboard_has_image; }; then
       log "screenshot cancelled / no image"
-      agent_cmd "activate $CLAUDE_BUNDLE" >/dev/null 2>&1   # bring Claude back
+      [ "$ACTION" = "shothandoff" ] || agent_cmd "activate $CLAUDE_BUNDLE" >/dev/null 2>&1   # bring Claude back
       exit 0
     fi
     IMG=1
@@ -358,6 +359,23 @@ case "$ACTION" in
           wait_for_claude || log "WARN not frontmost"; sleep 0.3; agent_cmd return >/dev/null 2>&1 || true
         fi
       fi
+    fi
+    ;;
+
+  handoff)
+    # Background skill handoff — no Claude window. The vendored Electron-free
+    # pipeline renders the settings template and pipes it to `claude -p` in the
+    # background; contract: vendor/claude-command-capture/docs/HANDOFF.md.
+    HANDOFF_SH="${SCRIPT_DIR}/capture-handoff.sh"
+    [ -f "$HANDOFF_SH" ] || { log "capture-handoff.sh missing at $HANDOFF_SH"; notify "Handoff worker missing — rebuild the agent."; exit 1; }
+    [ "$SHOT" = "1" ] && SRC="screenshot" || SRC="selection"
+    if [ "$DRY_RUN" = "1" ]; then print -r -- "DRY_RUN handoff src=$SRC img=$IMG sel_bytes=${#SEL}"; exit 0; fi
+    export HANDOFF_IMG="$IMG" HANDOFF_SOURCE="$SRC" HANDOFF_CONTEXT="$CONTEXT"
+    if [ "$IMG" = "1" ]; then
+      exec /bin/zsh "$HANDOFF_SH" </dev/null
+    else
+      print -rn -- "$SEL" | /bin/zsh "$HANDOFF_SH"
+      exit $?
     fi
     ;;
 
