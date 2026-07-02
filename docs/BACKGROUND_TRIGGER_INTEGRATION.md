@@ -32,7 +32,7 @@ Dropped (Electron-specific, superseded by native equivalents):
 |---|---|
 | `src/main.js` (tray, globalShortcut) | `agent/main.swift` Carbon hotkeys + menu bar |
 | `src/capture/*` (osascript ⌘C, screencapture, clipboard) | `send-to-claude.sh` capture stages |
-| `src/windows/*`, `renderer/*` (settings/text-entry UIs) | native Settings window; text entry via selection/clipboard |
+| `src/windows/*`, `renderer/*` (settings/text-entry UIs) | native Handoff Settings window + text-entry panel (`agent/Handoff.swift`) |
 
 Kept unchanged: `src/{settings,prompt,runner,submit,submissions,paths}.js`, `test/`,
 `docs/HANDOFF.md` (the contract), `examples/skills/triage-capture/`.
@@ -96,19 +96,28 @@ valid inputs to `submit-cli.js` for other callers.
 
 ## Using it
 
-1. `node vendor/claude-command-capture/bin/submit-cli.js --init-settings`, then set `skill`
-   (and `cli.cwd` to the project that owns the skill) in
-   `~/Library/Application Support/claude-command/settings.json`.
-2. Rebuild + restart the agent (`./build-agent.sh`, `./install-agent.sh`).
-3. Bind **Skill Handoff** / **Screenshot Handoff** in Settings → Shortcuts.
-4. Select text (or shoot a region) → hotkey → notification "Submitted to Claude" → record in
-   `submissions/`, output in `logs/<id>.log`.
+1. Rebuild + restart the agent (`./build-agent.sh`, `./install-agent.sh`).
+2. Menu bar ▸ **Handoffs ▸ Handoff Settings…** — set the skill name and the CLI working
+   directory (the project that owns the skill). Equivalent: edit
+   `~/Library/Application Support/claude-command/settings.json` or run
+   `node vendor/claude-command-capture/bin/submit-cli.js --init-settings`.
+3. Bind **Skill Handoff** / **Screenshot Handoff** / **Text Handoff** in Settings →
+   Shortcuts.
+4. Select text (or shoot a region, or type into the entry window) → notification "Submitted
+   to Claude" → record in `submissions/`, output in `logs/<id>.log`, last runs under
+   menu bar ▸ Handoffs.
 
-## Follow-ups (not in this pass)
+## Native UI (agent/Handoff.swift + MenuBar.swift)
 
-- Native Settings tab for skill/template/CLI config (Settings window currently has unrelated
-  WIP; avoid touching it). Until then: edit `settings.json` directly.
-- Dedicated text-entry quick window (imported `renderer/text-entry`); dictation or selection
-  cover most of it natively.
-- Recent-submissions view in the menu bar (imported tray showed last runs) — read via
-  `listSubmissions()`.
+Ports of the imported Electron UI surfaces, kept out of the WIP-heavy Settings window:
+
+- **Handoff Settings window** — skill, CLI command / cwd / extra args, both prompt
+  templates, notifications toggle. Reads/patches `settings.json` in place; keys this UI
+  doesn't own (`cli.baseArgs`, the ignored Electron `hotkeys` block, future fields) are
+  preserved verbatim.
+- **Handoffs menu** (menu bar) — last 8 submission records as `✓/✗/… source → /skill — age`
+  (replaces the imported tray's Recent Submissions; click opens the log), plus Text Entry
+  and Handoff Settings.
+- **Text-entry panel** (replaces imported `renderer/text-entry`) — floating panel, ⌘⏎
+  submits with `source: "text"`, Esc closes. Also reachable via the **Text Handoff**
+  hotkey action.

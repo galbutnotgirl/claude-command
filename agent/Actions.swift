@@ -20,6 +20,7 @@ let COMMAND_ACTIONS: [CommandAction] = [
     CommandAction(id: "cliphistory", name: "Clipboard History",  detail: "Floating picker of recent clips."),
     CommandAction(id: "handoff",     name: "Skill Handoff",      detail: "Selection → background claude -p run of your configured skill."),
     CommandAction(id: "shothandoff", name: "Screenshot Handoff", detail: "Capture → background claude -p run of your configured skill."),
+    CommandAction(id: "handofftext", name: "Text Handoff",       detail: "Quick entry window → background claude -p run of your configured skill."),
     CommandAction(id: "dictate",     name: "Dictate → Insert",   detail: "Speak → on-device Parakeet transcription → paste at cursor."),
     CommandAction(id: "dictateadd",  name: "Dictate → Claude",   detail: "Speak → on-device Parakeet transcription → send to Claude."),
 ]
@@ -94,6 +95,7 @@ let DEFAULT_BINDINGS: [(action: String, keycode: UInt32, mods: UInt32)] = [
     ("cliphistory", 97,   0),      // F6  — clipboard history picker
     ("handoff",     0,    0),      // unbound — background skill handoff
     ("shothandoff", 0,    0),      // unbound — screenshot skill handoff
+    ("handofftext", 0,    0),      // unbound — text-entry skill handoff
     ("dictate",     96,   0),      // F5  — dictate → insert at cursor
     ("dictateadd",  96,   2048),   // ⌥F5 — dictate → send to Claude
 ]
