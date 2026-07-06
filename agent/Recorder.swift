@@ -40,6 +40,8 @@ final class Recorder: ObservableObject {
     private var lastTranscript = ""
     private var sessionID = 0
     private var streamTask: Task<Void, Never>?
+    private var audioContinuation: AsyncStream<AVAudioPCMBuffer>.Continuation?
+    private var bufferFeederTask: Task<Void, Never>?
 
     private func log(_ s: String) { DebugLog.shared.append(s) }
 
@@ -159,6 +161,16 @@ final class Recorder: ObservableObject {
             self.currentMgr = mgr
 
             var bufCount = 0
+            // Buffers are fed through an AsyncStream (not one detached Task per
+            // buffer) so stop() can deterministically drain every enqueued buffer
+            // — including the last 1-2 captured right at key-release — instead of
+            // guessing how long in-flight Tasks need to land.
+            let (bufStream, bufContinuation) = AsyncStream<AVAudioPCMBuffer>.makeStream()
+            self.audioContinuation = bufContinuation
+            self.bufferFeederTask = Task {
+                for await buf in bufStream { await mgr.streamAudio(buf) }
+                self.log("buffer feeder drained")
+            }
             inputNode.installTap(onBus: 0, bufferSize: 4096, format: hwFormat) { [weak self] buf, _ in
                 bufCount += 1
                 if let channelData = buf.floatChannelData?[0] {
@@ -167,7 +179,7 @@ final class Recorder: ObservableObject {
                     let rms = n > 0 ? sqrt(sum / Float(n)) : 0
                     Task { @MainActor in self?.audioLevel = min(rms * 20, 1.0) }
                 }
-                Task { await mgr.streamAudio(buf) }
+                bufContinuation.yield(buf)
             }
 
             do {
@@ -212,8 +224,10 @@ final class Recorder: ObservableObject {
         log("■ stop wasListening=\(wasListening)")
         cancelSilenceTimer()
         // Stop new audio input — but NOT the streamTask yet.
-        // Tap callbacks may have already enqueued streamAudio Tasks for the last
-        // 1-2 buffers (~85ms each); those Tasks are independent and keep running.
+        // The last 1-2 buffers (~85ms each) captured right at key-release are
+        // still sitting in bufferFeederTask's queue; finishing the continuation
+        // below and awaiting the feeder guarantees they're delivered to the ASR
+        // manager before finish() is called.
         audioEngine?.inputNode.removeTap(onBus: 0)
         audioEngine?.stop(); audioEngine = nil
         state = .idle
@@ -221,22 +235,24 @@ final class Recorder: ObservableObject {
 
         let capturedStreamTask = streamTask
         streamTask = nil
+        let capturedFeederTask = bufferFeederTask
+        bufferFeederTask = nil
+        audioContinuation?.finish()
+        audioContinuation = nil
 
         Task {
-            // Wait for in-flight streamAudio Tasks (spawned by the tap callback just
-            // before stop) to deliver their buffers to the ASR manager.
-            // 300ms covers 3-4 tap buffers at 4096 frames / 48 kHz (~85ms each).
-            try? await Task.sleep(nanoseconds: 300_000_000)
+            await capturedFeederTask?.value   // drain every enqueued buffer, deterministically
             capturedStreamTask?.cancel()   // now safe to end the update loop
             do {
                 self.log("calling finish()…")
                 let text = try await mgr?.finish() ?? ""
-                self.log("finish() → \"\(text)\" (\(text.count) chars)")
-                if !text.isEmpty {
-                    self.onFinal?(text, mode)
-                } else if !self.lastTranscript.isEmpty {
-                    self.log("using lastTranscript fallback")
-                    self.onFinal?(self.lastTranscript, mode)
+                self.log("finish() → \"\(text)\" (\(text.count) chars), lastTranscript=\(self.lastTranscript.count) chars")
+                // Use whichever is longer: finish() should be complete, but if it
+                // returns less than the last partial (e.g. model flush gap), keep the
+                // partial — it's less likely to have dropped tail words than finish().
+                let best = text.count >= self.lastTranscript.count ? text : self.lastTranscript
+                if !best.isEmpty {
+                    self.onFinal?(best, mode)
                 } else {
                     self.log("⚠ finish empty — nothing to dispatch")
                     DispatchQueue.main.async { playUISound(settingsModel.stopSound) }
@@ -253,6 +269,8 @@ final class Recorder: ObservableObject {
         audioEngine?.inputNode.removeTap(onBus: 0)
         audioEngine?.stop(); audioEngine = nil
         streamTask?.cancel(); streamTask = nil
+        audioContinuation?.finish(); audioContinuation = nil
+        bufferFeederTask?.cancel(); bufferFeederTask = nil
         cancelSilenceTimer()
         lastTranscript = ""; liveTranscript = ""
         audioLevel = 0
