@@ -40,6 +40,8 @@ final class Recorder: ObservableObject {
     private var lastTranscript = ""
     private var sessionID = 0
     private var streamTask: Task<Void, Never>?
+    private var audioContinuation: AsyncStream<AVAudioPCMBuffer>.Continuation?
+    private var bufferFeederTask: Task<Void, Never>?
 
     private func log(_ s: String) { DebugLog.shared.append(s) }
 
@@ -159,6 +161,16 @@ final class Recorder: ObservableObject {
             self.currentMgr = mgr
 
             var bufCount = 0
+            // Buffers are fed through an AsyncStream (not one detached Task per buffer)
+            // so stop() can deterministically drain every enqueued buffer — including
+            // the last 1-2 captured during the post-stop grace window below — instead
+            // of guessing how long in-flight Tasks need to land.
+            let (bufStream, bufContinuation) = AsyncStream<AVAudioPCMBuffer>.makeStream()
+            self.audioContinuation = bufContinuation
+            self.bufferFeederTask = Task {
+                for await buf in bufStream { await mgr.streamAudio(buf) }
+                self.log("buffer feeder drained")
+            }
             inputNode.installTap(onBus: 0, bufferSize: 4096, format: hwFormat) { [weak self] buf, _ in
                 bufCount += 1
                 if let channelData = buf.floatChannelData?[0] {
@@ -167,7 +179,7 @@ final class Recorder: ObservableObject {
                     let rms = n > 0 ? sqrt(sum / Float(n)) : 0
                     Task { @MainActor in self?.audioLevel = min(rms * 20, 1.0) }
                 }
-                Task { await mgr.streamAudio(buf) }
+                bufContinuation.yield(buf)
             }
 
             do {
@@ -222,24 +234,29 @@ final class Recorder: ObservableObject {
         let capturedStreamTask = streamTask
         streamTask = nil
         // Don't tear the tap/engine down synchronously here — that was the actual
-        // source of dropped tail words, not the downstream flush wait below. People
-        // keep talking through the last syllable as they release the key/hotkey;
+        // source of dropped tail words, not the flush step below. People keep
+        // talking through the last syllable as they release the key/hotkey;
         // removeTap() discards whatever's in the CURRENTLY-FILLING buffer (up to
         // ~85ms of audio at 4096 frames/48kHz) that hasn't hit a full callback yet.
         // No amount of waiting for finish() can recover audio that was never
         // captured. Keep the mic open a little longer than the stop signal instead.
         let engineToStop = audioEngine
         audioEngine = nil
+        let capturedFeederTask = bufferFeederTask
+        bufferFeederTask = nil
 
         Task {
             try? await Task.sleep(nanoseconds: 220_000_000)   // capture the trailing syllable
             engineToStop?.inputNode.removeTap(onBus: 0)
             engineToStop?.stop()
 
-            // Wait for in-flight streamAudio Tasks (spawned by the tap callback just
-            // before the teardown above) to deliver their buffers to the ASR manager.
-            // 500ms covers system-load variance; 300ms was occasionally too tight.
-            try? await Task.sleep(nanoseconds: 500_000_000)
+            // The buffers captured during the grace window above are still sitting in
+            // the feeder's queue. Finishing the continuation and awaiting the feeder
+            // drains every one of them deterministically — no sleep, no guessing how
+            // long delivery to the ASR manager takes under system load.
+            self.audioContinuation?.finish()
+            self.audioContinuation = nil
+            await capturedFeederTask?.value
             capturedStreamTask?.cancel()   // now safe to end the update loop
             do {
                 self.log("calling finish()…")
@@ -267,6 +284,8 @@ final class Recorder: ObservableObject {
         audioEngine?.inputNode.removeTap(onBus: 0)
         audioEngine?.stop(); audioEngine = nil
         streamTask?.cancel(); streamTask = nil
+        audioContinuation?.finish(); audioContinuation = nil
+        bufferFeederTask?.cancel(); bufferFeederTask = nil
         cancelSilenceTimer()
         lastTranscript = ""; liveTranscript = ""
         audioLevel = 0
