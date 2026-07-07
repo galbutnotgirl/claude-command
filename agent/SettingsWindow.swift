@@ -743,14 +743,59 @@ struct CustomActionSheet: View {
 
 struct TemplatesView: View {
     @StateObject private var model = TemplatesModel()
+    // Defaults to the first action in display order (Add) — same list Shortcuts uses.
+    @State private var previewAction: String = DEFAULT_COMMAND_TEMPLATES.first?.action ?? "add"
+    @State private var previewSource: PreviewSource = PreviewSource(label: "Generic (no match)", appName: "Chrome", url: "", enrich: "")
+
+    private let sampleSelection = "the exact text you'd have selected"
+
+    private var sources: [PreviewSource] { previewSources(from: model.rules) }
+
+    private var preview: String {
+        guard let t = model.templates.first(where: { $0.action == previewAction }) else { return "" }
+        return composePreview(action: t.action, pre: t.pre, post: t.post,
+                               source: previewSource, selection: sampleSelection)
+    }
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 Text("Templates").font(.title2).bold()
-                Text("Text auto-inserted around the selection for Go / New / Add. Use {context} in any of them to insert the per-app context hint below — Go's default uses it, but it works the same in all three. Defaults are shown below — edit anything, or Reset to go back.")
+                Text("Text auto-inserted around the selection for Add / New / Go. Use {context} in any of them to insert the matching rule below — Go's default uses it, but it works the same in all three.")
                     .foregroundColor(.secondary)
 
+                // ---- one shared preview, up top ----
+                GroupBox(label: Text("Preview").bold()) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack(spacing: 8) {
+                            Text("Action").font(.caption).foregroundColor(.secondary)
+                            Picker("", selection: $previewAction) {
+                                ForEach(model.templates) { t in Text(actionName(t.action)).tag(t.action) }
+                            }
+                            .labelsHidden().frame(width: 100)
+
+                            Text("Preview as").font(.caption).foregroundColor(.secondary)
+                            Picker("", selection: $previewSource) {
+                                ForEach(sources) { s in Text(s.label).tag(s) }
+                            }
+                            .labelsHidden().frame(width: 180)
+                            .onAppear { if let first = sources.first { previewSource = first } }
+                            Spacer()
+                        }
+                        Text(preview.isEmpty ? "(empty)" : preview)
+                            .font(.system(size: 11, design: .monospaced))
+                            .foregroundColor(.secondary)
+                            .textSelection(.enabled)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(8)
+                            .background(Color(nsColor: .textBackgroundColor).opacity(0.5))
+                            .cornerRadius(6)
+                    }
+                    .padding(.vertical, 6)
+                }
+
+                // ---- Add, New, Go — same order as Settings ▸ Shortcuts ----
                 ForEach(model.templates) { t in
                     CommandTemplateBox(template: t, model: model)
                 }
@@ -758,7 +803,7 @@ struct TemplatesView: View {
                 Divider().padding(.vertical, 4)
 
                 HStack {
-                    Text("Auto-Context Rules").font(.headline)
+                    Text("Context Rules").font(.headline)
                     Spacer()
                     Button("Reset All to Default") { model.resetRulesToDefault() }
                         .buttonStyle(.plain).font(.caption).foregroundColor(.secondary)
@@ -786,16 +831,6 @@ struct CommandTemplateBox: View {
     @ObservedObject var model: TemplatesModel
     @State private var pre: String = ""
     @State private var post: String = ""
-    @State private var previewSource: PreviewSource = PreviewSource(label: "Generic (no match)", appName: "Chrome", url: "", enrich: "")
-
-    private let sampleSelection = "the exact text you'd have selected"
-
-    private var sources: [PreviewSource] { previewSources(from: model.rules) }
-
-    private var preview: String {
-        composePreview(action: template.action, pre: pre, post: post,
-                        source: previewSource, selection: sampleSelection)
-    }
 
     var body: some View {
         GroupBox(label: HStack {
@@ -818,7 +853,7 @@ struct CommandTemplateBox: View {
                         .onChange(of: pre) { _, v in model.setTemplate(action: template.action, pre: v) }
                 }
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("After selection — {context} inserts the auto-context line below")
+                    Text("After selection — {context} inserts the matching rule above")
                         .font(.caption).foregroundColor(.secondary)
                     TextEditor(text: $post)
                         .font(.system(size: 12, design: .monospaced))
@@ -826,27 +861,6 @@ struct CommandTemplateBox: View {
                         .overlay(RoundedRectangle(cornerRadius: 4).stroke(Color.gray.opacity(0.3)))
                         .onChange(of: post) { _, v in model.setTemplate(action: template.action, post: v) }
                 }
-
-                Divider().padding(.vertical, 2)
-
-                HStack(spacing: 8) {
-                    Text("Preview as").font(.caption).foregroundColor(.secondary)
-                    Picker("", selection: $previewSource) {
-                        ForEach(sources) { s in Text(s.label).tag(s) }
-                    }
-                    .labelsHidden().frame(width: 180)
-                    .onAppear { if let first = sources.first { previewSource = first } }
-                    Spacer()
-                }
-                Text(preview.isEmpty ? "(empty)" : preview)
-                    .font(.system(size: 11, design: .monospaced))
-                    .foregroundColor(.secondary)
-                    .textSelection(.enabled)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(8)
-                    .background(Color(nsColor: .textBackgroundColor).opacity(0.5))
-                    .cornerRadius(6)
             }
             .padding(.vertical, 6)
         }

@@ -32,11 +32,13 @@ struct CommandTemplate: Identifiable {
 // in Go's default post because Go is the one action framed as "go research and act" —
 // Comment/Add can use {context} too (send-to-claude.sh expands it in pre/post for all
 // three), it's just not part of their *default* text.
+// Order matches Settings ▸ Shortcuts (Add, New, Go) — same three actions, same order,
+// wherever they show up.
 let DEFAULT_COMMAND_TEMPLATES: [CommandTemplate] = [
+    CommandTemplate(action: "add", pre: "", post: ""),
+    CommandTemplate(action: "comment", pre: "", post: ""),
     CommandTemplate(action: "go", pre: "",
                      post: "(Right-click \"Go\": {context} Then do what's most useful and report.)"),
-    CommandTemplate(action: "comment", pre: "", post: ""),
-    CommandTemplate(action: "add", pre: "", post: ""),
 ]
 
 func loadCommandTemplates() -> [CommandTemplate] {
