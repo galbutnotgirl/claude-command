@@ -15,50 +15,72 @@
 
 import Foundation
 
-// ---- command wrap templates (pre/post text around the selection) -----------
+// ---- command wrap templates: one string, placeholders mark where things go ---
+// Was a separate "before"/"after" pair per action — collapsed to a single string
+// with {selection} marking where the captured text goes, same model custom actions
+// already use ({selection}/{text} in CustomAction.prompt, see Actions.swift). One
+// text box instead of two, and the same mental model everywhere in the app.
 
 let COMMAND_TEMPLATES_PATH = (NSHomeDirectory() as NSString)
     .appendingPathComponent(".claude/state/command-templates.json")
 
+// Placeholders available in any CommandTemplate.template or EnrichRule.text:
+//   {selection} / {prompt} / {text}  — the captured selection (aliases, pick whichever reads better)
+//   {context}                        — the matching Context rule's hint, wrapped in a "go research this" instruction
+//   {source}                         — "[from: AppName]" (or the rule's Display name, or "AppName — URL")
+//   {url}                            — the raw source URL, or "" if there wasn't one
+// {selection} is auto-appended at the end if you leave it out (never silently dropped).
+// {source} is auto-prepended at the top if you leave it out, so it still guides Claude
+// even in a template you haven't touched — same "use it if present, sensible fallback if
+// not" rule for both, rather than two different behaviors to remember.
+struct TemplateVariable: Identifiable {
+    let token: String; let label: String; let detail: String
+    var id: String { token }
+}
+let TEMPLATE_VARIABLES: [TemplateVariable] = [
+    TemplateVariable(token: "{selection}", label: "Selection",
+                      detail: "The captured text (aliases: {prompt}, {text}). Auto-appended at the end if omitted."),
+    TemplateVariable(token: "{context}", label: "Context",
+                      detail: "The matching Context rule's hint, wrapped in a \"research this before acting\" instruction."),
+    TemplateVariable(token: "{source}", label: "Source",
+                      detail: "\"[from: AppName]\" — or a rule's Display name, or \"AppName — URL\". Auto-prepended at the top if omitted."),
+    TemplateVariable(token: "{url}", label: "URL",
+                      detail: "The raw source URL, if the source app had one — empty string otherwise."),
+]
+
 struct CommandTemplate: Identifiable {
     let action: String   // "go" | "comment" | "add"
-    var pre: String       // text inserted before the selection — {context} works here too
-    var post: String      // text inserted after the selection — {context} expands to the auto-context line
+    var template: String
     var id: String { action }
 }
 
 // Matches the strings currently hardcoded in send-to-claude.sh, so shipping this
-// feature changes nothing until a user actually edits a template. {context} is only
-// in Go's default post because Go is the one action framed as "go research and act" —
-// Comment/Add can use {context} too (send-to-claude.sh expands it in pre/post for all
-// three), it's just not part of their *default* text.
+// feature changes nothing until a user actually edits a template.
 // Order matches Settings ▸ Shortcuts (Add, New, Go) — same three actions, same order,
 // wherever they show up.
 let DEFAULT_COMMAND_TEMPLATES: [CommandTemplate] = [
-    CommandTemplate(action: "add", pre: "", post: ""),
-    CommandTemplate(action: "comment", pre: "", post: ""),
-    CommandTemplate(action: "go", pre: "",
-                     post: "(Right-click \"Go\": {context} Then do what's most useful and report.)"),
+    CommandTemplate(action: "add", template: "{selection}"),
+    CommandTemplate(action: "comment", template: "{selection}"),
+    CommandTemplate(action: "go",
+                     template: "{selection}\n\n(Right-click \"Go\": {context} Then do what's most useful and report.)"),
 ]
 
 func loadCommandTemplates() -> [CommandTemplate] {
     var byAction: [String: CommandTemplate] = [:]
     for d in DEFAULT_COMMAND_TEMPLATES { byAction[d.action] = d }
     if let data = FileManager.default.contents(atPath: COMMAND_TEMPLATES_PATH),
-       let obj = try? JSONSerialization.jsonObject(with: data) as? [String: [String: String]] {
-        for (action, fields) in obj {
+       let obj = try? JSONSerialization.jsonObject(with: data) as? [String: String] {
+        for (action, template) in obj {
             guard byAction[action] != nil else { continue }   // only known built-in actions
-            byAction[action] = CommandTemplate(action: action,
-                                                pre: fields["pre"] ?? "",
-                                                post: fields["post"] ?? "")
+            byAction[action] = CommandTemplate(action: action, template: template)
         }
     }
     return DEFAULT_COMMAND_TEMPLATES.map { byAction[$0.action] ?? $0 }
 }
 
 func saveCommandTemplates(_ templates: [CommandTemplate]) {
-    var obj: [String: [String: String]] = [:]
-    for t in templates { obj[t.action] = ["pre": t.pre, "post": t.post] }
+    var obj: [String: String] = [:]
+    for t in templates { obj[t.action] = t.template }
     if let data = try? JSONSerialization.data(withJSONObject: obj, options: [.prettyPrinted]) {
         try? data.write(to: URL(fileURLWithPath: COMMAND_TEMPLATES_PATH))
     }
@@ -179,33 +201,47 @@ func previewSources(from rules: [EnrichRule]) -> [PreviewSource] {
     return out
 }
 
+// Expands {selection}/{prompt}/{text}, {context}, {source}, {url} in one template
+// string. {selection} is appended at the end if missing; {source} is prepended at
+// the top if missing — so an untouched template (no placeholders at all) produces
+// exactly what the old hardcoded pre/post model did, and a template that uses every
+// placeholder explicitly has full control over the ordering. send-to-claude.sh
+// mirrors this exact logic — see its expand_template() function.
+func expandTemplate(_ template: String, selection: String, source: String, url: String, contextLine: String) -> String {
+    var t = template
+    for token in ["{selection}", "{prompt}", "{text}"] { t = t.replacingOccurrences(of: token, with: selection) }
+    t = t.replacingOccurrences(of: "{context}", with: contextLine)
+    t = t.replacingOccurrences(of: "{url}", with: url)
+
+    let hadSelection = template.contains("{selection}") || template.contains("{prompt}") || template.contains("{text}")
+    if !hadSelection {
+        t = t.isEmpty ? selection : t + "\n\n" + selection
+    }
+    if template.contains("{source}") {
+        t = t.replacingOccurrences(of: "{source}", with: source)
+    } else if !source.isEmpty {
+        t = "\(source)\n\n\(t)"
+    }
+    return t
+}
+
 // action: "go" | "comment" | "add". Set includeContext: false to preview with
 // "Include source app" off (mirrors send-to-claude.sh's INCLUDE_CONTEXT=0 / a
-// custom action's toggle) — the [from: …] + enrich block simply disappears.
-func composePreview(action: String, pre: String, post: String,
+// custom action's toggle) — the {source} substitution/auto-prepend simply doesn't happen.
+func composePreview(action: String, template: String,
                      source: PreviewSource, selection: String,
                      includeContext: Bool = true) -> String {
-    var context = ""
+    let srcText: String
     if includeContext {
-        let src = !source.displayName.isEmpty ? source.displayName
+        let name = !source.displayName.isEmpty ? source.displayName
             : (source.url.isEmpty ? source.appName : "\(source.appName) — \(source.url)")
-        context = "[from: \(src)]\n"
-        if !source.enrich.isEmpty { context += "\(source.enrich)\n" }
-        context += "\n"
+        srcText = "[from: \(name)]" + (source.enrich.isEmpty ? "" : "\n\(source.enrich)")
+    } else {
+        srcText = ""
     }
     let contextLine = "Before acting, research for context to be maximally useful: "
         + (source.enrich.isEmpty ? "identify the source and pull any related thread, doc, message or record via the matching MCP connector." : source.enrich)
-    let expandedPost = post.replacingOccurrences(of: "{context}", with: contextLine)
-    let expandedPre = pre.replacingOccurrences(of: "{context}", with: contextLine)
-
-    switch action {
-    case "go":
-        return context + expandedPre + selection + "\n\n" + expandedPost
-    case "comment":
-        return context + expandedPre + selection + expandedPost + "\n\n"
-    default: // "add"
-        return context + expandedPre + selection + expandedPost
-    }
+    return expandTemplate(template, selection: selection, source: srcText, url: source.url, contextLine: contextLine)
 }
 
 // ---- settings-tab model ------------------------------------------------------
@@ -215,10 +251,9 @@ final class TemplatesModel: ObservableObject {
     @Published var templates: [CommandTemplate] = loadCommandTemplates()
     @Published var rules: [EnrichRule] = loadEnrichRules()
 
-    func setTemplate(action: String, pre: String? = nil, post: String? = nil) {
+    func setTemplate(action: String, template: String) {
         guard let i = templates.firstIndex(where: { $0.action == action }) else { return }
-        if let pre = pre { templates[i].pre = pre }
-        if let post = post { templates[i].post = post }
+        templates[i].template = template
         saveCommandTemplates(templates)
     }
 

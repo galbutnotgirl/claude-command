@@ -763,7 +763,7 @@ struct TemplatesView: View {
 
     private var preview: String {
         guard let t = model.templates.first(where: { $0.action == previewAction }) else { return "" }
-        return composePreview(action: t.action, pre: t.pre, post: t.post,
+        return composePreview(action: t.action, template: t.template,
                                source: previewSource, selection: sampleSelection)
     }
 
@@ -776,8 +776,10 @@ struct TemplatesView: View {
                     Button("Export…") { exportTemplates() }
                     Button("Import…") { importTemplates(model: model) }
                 }
-                Text("Text auto-inserted around the selection for Add / New / Go. Use {context} in any of them to insert the matching rule below — Go's default uses it, but it works the same in all three.")
+                Text("One template per action — place {selection}, {context}, {source}, {url} wherever you want them. See Variables below for what each one does.")
                     .foregroundColor(.secondary)
+
+                TemplateVariablesLegend()
 
                 // ---- one shared preview, up top — visually its own thing, not
                 // part of the Add/New/Go boxes below it. ----
@@ -847,8 +849,7 @@ struct TemplatesView: View {
 struct CommandTemplateBox: View {
     let template: CommandTemplate
     @ObservedObject var model: TemplatesModel
-    @State private var pre: String = ""
-    @State private var post: String = ""
+    @State private var text: String = ""
 
     var body: some View {
         GroupBox(label: HStack {
@@ -857,32 +858,41 @@ struct CommandTemplateBox: View {
             Spacer()
             Button("Reset") {
                 model.resetTemplate(action: template.action)
-                pre = model.templates.first { $0.action == template.action }?.pre ?? ""
-                post = model.templates.first { $0.action == template.action }?.post ?? ""
+                text = model.templates.first { $0.action == template.action }?.template ?? ""
             }
             .buttonStyle(.plain).font(.caption).foregroundColor(.secondary)
         }) {
-            VStack(alignment: .leading, spacing: 8) {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("Before selection").font(.caption).foregroundColor(.secondary)
-                    TextField("(nothing)", text: $pre)
-                        .textFieldStyle(.roundedBorder)
-                        .font(.system(size: 12, design: .monospaced))
-                        .onChange(of: pre) { _, v in model.setTemplate(action: template.action, pre: v) }
-                }
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("After selection — {context} inserts the matching rule above")
-                        .font(.caption).foregroundColor(.secondary)
-                    TextEditor(text: $post)
-                        .font(.system(size: 12, design: .monospaced))
-                        .frame(minHeight: 50)
-                        .overlay(RoundedRectangle(cornerRadius: 4).stroke(Color.gray.opacity(0.3)))
-                        .onChange(of: post) { _, v in model.setTemplate(action: template.action, post: v) }
+            TextEditor(text: $text)
+                .font(.system(size: 12, design: .monospaced))
+                .frame(minHeight: 70)
+                .overlay(RoundedRectangle(cornerRadius: 4).stroke(Color.gray.opacity(0.3)))
+                .onChange(of: text) { _, v in model.setTemplate(action: template.action, template: v) }
+                .padding(.vertical, 6)
+        }
+        .onAppear { text = template.template }
+    }
+}
+
+// Shared legend — every placeholder available in a CommandTemplate or Context
+// rule text, in one place, instead of scattered across each field's help text.
+struct TemplateVariablesLegend: View {
+    var body: some View {
+        GroupBox(label: Text("Variables").bold()) {
+            VStack(alignment: .leading, spacing: 6) {
+                ForEach(TEMPLATE_VARIABLES) { v in
+                    HStack(alignment: .top, spacing: 8) {
+                        Text(v.token)
+                            .font(.system(size: 12, design: .monospaced)).bold()
+                            .foregroundColor(.accentColor)
+                            .frame(width: 90, alignment: .leading)
+                        Text(v.detail)
+                            .font(.caption).foregroundColor(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
             }
             .padding(.vertical, 6)
         }
-        .onAppear { pre = template.pre; post = template.post }
     }
 }
 

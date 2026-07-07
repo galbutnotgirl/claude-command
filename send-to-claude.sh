@@ -281,44 +281,58 @@ fi
 # text (if one matched) wrapped in an instruction to actually go use it.
 CONTEXT_LINE="Before acting, research for context to be maximally useful: ${ENRICH:-identify the source and pull any related thread, doc, message or record via the matching MCP connector.}"
 
-CONTEXT=""
+# {source} expands to this — "[from: …]" plus the matched rule's hint, if any.
+# A matched rule's display name replaces "AppName — URL": for a browser match
+# that's otherwise just "Google Chrome — https://mail.google.com/..." once the
+# URL has already said "this is Gmail" — the browser itself is noise at that point.
+SOURCE_LINE=""
 if [ "$INCLUDE_CONTEXT" = "1" ]; then
-  # A matched rule's display name replaces "AppName — URL" — for a browser match
-  # that's just "Google Chrome — https://mail.google.com/..." once the URL has
-  # already said "this is Gmail"; the browser itself is noise at that point.
   SRC="${DISPLAY_NAME:-$APP_NAME}"
   [ -z "$DISPLAY_NAME" ] && [ -n "$URL" ] && SRC="${APP_NAME} — ${URL}"
-  [ -n "$SRC" ] && CONTEXT="[from: ${SRC}]"$'\n'
-  [ -n "$ENRICH" ] && CONTEXT="${CONTEXT}${ENRICH}"$'\n'
-  [ -n "$CONTEXT" ] && CONTEXT="${CONTEXT}"$'\n'
+  [ -n "$SRC" ] && SOURCE_LINE="[from: ${SRC}]"
+  [ -n "$ENRICH" ] && SOURCE_LINE="${SOURCE_LINE}"$'\n'"${ENRICH}"
 fi
 
-# Pre/post wrap templates for the built-in go/comment/add commands: user-editable
-# in Settings ▸ Templates (~/.claude/state/command-templates.json). Empty pre/post
-# (the default — file usually doesn't exist) means zero behavior change. {context}
-# works in any of the six fields below, not just Go's — Go's just the only one
-# that uses it by default.
+# One template per built-in command (go/comment/add): user-editable in Settings ▸
+# Templates (~/.claude/state/command-templates.json), single string with
+# placeholders instead of separate before/after fields — same {selection}-or-
+# auto-appended model custom actions already use. Absent file (the default)
+# means zero behavior change. Mirrors CommandTemplates.swift's expandTemplate().
 TEMPLATES_PATH="${HOME}/.claude/state/command-templates.json"
-read_template() {  # $1 = action, $2 = pre|post
+read_template() {  # $1 = action
   [ -f "$TEMPLATES_PATH" ] || { printf ''; return; }
   /usr/bin/python3 -c "
 import json
 try:
     d = json.load(open('$TEMPLATES_PATH'))
-    print(d.get('$1', {}).get('$2', ''), end='')
+    print(d.get('$1', ''), end='')
 except Exception:
     pass
 " 2>/dev/null
 }
-expand_context() { printf '%s' "${1//\{context\}/$CONTEXT_LINE}"; }
-GO_PRE="$(expand_context "$(read_template go pre)")"
-GO_POST="$(read_template go post)"
-[ -z "$GO_POST" ] && GO_POST='(Right-click "Go": {context} Then do what'"'"'s most useful and report.)'
-GO_POST="$(expand_context "$GO_POST")"
-COMMENT_PRE="$(expand_context "$(read_template comment pre)")"
-COMMENT_POST="$(expand_context "$(read_template comment post)")"
-ADD_PRE="$(expand_context "$(read_template add pre)")"
-ADD_POST="$(expand_context "$(read_template add post)")"
+expand_template() {  # $1 = raw template string, $2 = selection text to substitute
+                      # ($2 lets the go+image case pass "(image attached below)" in
+                      # place of $SEL, same as the old hardcoded behavior there)
+  local raw="$1" t="$1" sel="$2"
+  t="${t//\{selection\}/$sel}"; t="${t//\{prompt\}/$sel}"; t="${t//\{text\}/$sel}"
+  t="${t//\{context\}/$CONTEXT_LINE}"
+  t="${t//\{url\}/$URL}"
+  if [[ "$raw" != *"{selection}"* && "$raw" != *"{prompt}"* && "$raw" != *"{text}"* ]]; then
+    if [ -z "$t" ]; then t="$sel"; else t="${t}"$'\n\n'"${sel}"; fi
+  fi
+  if [[ "$raw" == *"{source}"* ]]; then
+    t="${t//\{source\}/$SOURCE_LINE}"
+  elif [ -n "$SOURCE_LINE" ]; then
+    t="${SOURCE_LINE}"$'\n\n'"${t}"
+  fi
+  printf '%s' "$t"
+}
+GO_RAW="$(read_template go)"
+[ -z "$GO_RAW" ] && GO_RAW='{selection}
+
+(Right-click "Go": {context} Then do what'"'"'s most useful and report.)'
+COMMENT_RAW="$(read_template comment)"
+ADD_RAW="$(read_template add)"
 
 open_new() {  # $1 = q text (may be empty)
   local q="$1"
@@ -338,8 +352,7 @@ open_new() {  # $1 = q text (may be empty)
 case "$ACTION" in
   go)
     PRIOR="$BUNDLE_ID"
-    GO_Q="${CONTEXT}${GO_PRE}${SEL}"$'\n\n'"${GO_POST}"
-    if [ "$IMG" = "1" ]; then GO_Q="${CONTEXT}${GO_PRE}(image attached below)"$'\n\n'"${GO_POST}"; fi
+    GO_Q="$(expand_template "$GO_RAW" "$([ "$IMG" = "1" ] && echo "(image attached below)" || printf '%s' "$SEL")")"
     open_new "$GO_Q" || { notify "Could not open Claude."; exit 1; }
     if [ "$DRY_RUN" = "1" ]; then [ "$IMG" = "1" ] && print -r -- "DRY_RUN would paste image"; print -r -- "DRY_RUN would submit + restore focus to $PRIOR"; exit 0; fi
     wait_for_claude || log "WARN Claude not frontmost"
@@ -355,11 +368,11 @@ case "$ACTION" in
 
   comment)
     if [ "$IMG" = "1" ]; then
-      open_new "${CONTEXT}${COMMENT_PRE}${COMMENT_POST}" || { notify "Could not open Claude."; exit 1; }
+      open_new "$(expand_template "$COMMENT_RAW" "")" || { notify "Could not open Claude."; exit 1; }
       [ "$DRY_RUN" = "1" ] && { print -r -- "DRY_RUN would paste image into new session"; exit 0; }
       wait_for_claude || log "WARN not frontmost"; sleep 0.3; helper_paste
     else
-      open_new "${CONTEXT}${COMMENT_PRE}${SEL}${COMMENT_POST}"$'\n\n'
+      open_new "$(expand_template "$COMMENT_RAW" "$SEL")"$'\n\n'
     fi
     ;;
 
@@ -368,7 +381,7 @@ case "$ACTION" in
       [ "$DRY_RUN" = "1" ] && { print -r -- "DRY_RUN would activate Claude + paste image into open chat"; exit 0; }
       helper_activate "$CLAUDE_BUNDLE"; wait_for_claude || true; sleep 0.3; helper_paste
     else
-      PAYLOAD="${CONTEXT}${ADD_PRE}${SEL}${ADD_POST}"
+      PAYLOAD="$(expand_template "$ADD_RAW" "$SEL")"
       if [ "$DRY_RUN" = "1" ]; then print -r -- "DRY_RUN would copy payload + paste into open Claude chat"; exit 0; fi
       copy_for_send "$PAYLOAD" "$COPY_SOURCE"
       helper_activate "$CLAUDE_BUNDLE"; wait_for_claude || true; sleep 0.3; helper_paste
