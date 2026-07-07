@@ -5,13 +5,12 @@
 // behaves exactly as before until the user opens Settings and changes something.
 //
 // Backlog (not built yet — moved here from the old top-level BACKLOG.md):
-//   - Update functionality: agent/Updater.swift already checks GitHub releases; the
-//     actual download/install/relaunch flow still needs wiring up.
-//   - Release functionality: release.sh exists but needs review/hardening — version
-//     bump, build, sign, notarize?, tag, GitHub release upload.
 //   - Bug submissions: a way for users to report bugs from inside the app (e.g. a menu
 //     item that opens a pre-filled GitHub issue, or a "Send Feedback" flow with logs
 //     attached).
+// (Update download/install/relaunch was already fully wired — see Updater.swift's
+// install()/handOffSwap(); verified against the live GitHub API. Release hardening
+// covered separately — see release.sh's own header comment.)
 
 import Foundation
 
