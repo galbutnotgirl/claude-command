@@ -18,8 +18,6 @@ let COMMAND_ACTIONS: [CommandAction] = [
     CommandAction(id: "shotcomment", name: "Screenshot New",     detail: "Capture → new session; you add a note."),
     CommandAction(id: "shotgo",      name: "Screenshot Go",      detail: "Capture → new session, auto-submit."),
     CommandAction(id: "cliphistory", name: "Clipboard History",  detail: "Floating picker of recent clips."),
-    CommandAction(id: "handoff",     name: "Skill Handoff",      detail: "Selection → background claude -p run of your configured skill."),
-    CommandAction(id: "shothandoff", name: "Screenshot Handoff", detail: "Capture → background claude -p run of your configured skill."),
     CommandAction(id: "handofftext", name: "Text Handoff",       detail: "Quick entry window → background claude -p run of your configured skill."),
     CommandAction(id: "dictate",     name: "Dictate → Insert",   detail: "Speak → on-device Parakeet transcription → paste at cursor."),
     CommandAction(id: "dictateadd",  name: "Dictate → Claude",   detail: "Speak → on-device Parakeet transcription → send to Claude."),
@@ -27,7 +25,7 @@ let COMMAND_ACTIONS: [CommandAction] = [
 
 // Built-in but prompt-triggering like a user custom action — grouped with
 // Custom Actions in the Shortcuts tab instead of the plain hotkey list.
-let HANDOFF_ACTION_IDS: Set<String> = ["handoff", "shothandoff", "handofftext"]
+let HANDOFF_ACTION_IDS: Set<String> = ["handofftext"]
 
 func actionName(_ id: String) -> String { COMMAND_ACTIONS.first { $0.id == id }?.name ?? id }
 func actionDetail(_ id: String) -> String { COMMAND_ACTIONS.first { $0.id == id }?.detail ?? "" }
@@ -97,8 +95,6 @@ let DEFAULT_BINDINGS: [(action: String, keycode: UInt32, mods: UInt32)] = [
     ("shotcomment", 98,   2048),   // ⌥F7 — screenshot → new session
     ("shotgo",      0,    0),      // unbound
     ("cliphistory", 97,   0),      // F6  — clipboard history picker
-    ("handoff",     0,    0),      // unbound — background skill handoff
-    ("shothandoff", 0,    0),      // unbound — screenshot skill handoff
     ("handofftext", 0,    0),      // unbound — text-entry skill handoff
     ("dictate",     96,   0),      // F5  — dictate → insert at cursor
     ("dictateadd",  96,   2048),   // ⌥F5 — dictate → send to Claude
@@ -192,6 +188,63 @@ func saveCustomActions(_ actions: [CustomAction]) {
     }
     if let data = try? JSONSerialization.data(withJSONObject: arr, options: [.prettyPrinted]) {
         try? data.write(to: URL(fileURLWithPath: CUSTOM_ACTIONS_PATH))
+    }
+    DispatchQueue.main.async { reregisterHotkeys() }
+}
+
+// ---- custom handoffs ---------------------------------------------------------
+// Background skill handoffs (rendered prompt piped to `claude -p` in the
+// background, no Claude window) — configurable per-action like CustomAction
+// above, instead of the old fixed Skill Handoff / Screenshot Handoff pair that
+// shared one global skill+template. Stored in ~/.claude/state/custom-handoffs.json.
+
+let CUSTOM_HANDOFFS_PATH = (NSHomeDirectory() as NSString)
+    .appendingPathComponent(".claude/state/custom-handoffs.json")
+
+struct CustomHandoff: Identifiable {
+    var id: String
+    var name: String
+    var kind: String            // "text" (selection/clipboard) | "screenshot" (clipboard image)
+    var skill: String
+    var promptTemplate: String  // placeholders: {skillInvocation} {skill} {source} {timestamp} {content} {file}
+    var keycode: UInt32
+    var mods: UInt32
+    var enabled: Bool
+
+    var actionID: String { "handoffcustom:\(id)" }
+    var human: String { keycode == 0 ? "—" : humanShortcut(keycode: keycode, mods: mods) }
+
+    static func makeNew(name: String, kind: String, skill: String, promptTemplate: String) -> CustomHandoff {
+        CustomHandoff(id: UUID().uuidString, name: name, kind: kind, skill: skill,
+                      promptTemplate: promptTemplate, keycode: 0, mods: 0, enabled: true)
+    }
+}
+
+func loadCustomHandoffs() -> [CustomHandoff] {
+    guard let data = FileManager.default.contents(atPath: CUSTOM_HANDOFFS_PATH),
+          let arr = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else { return [] }
+    return arr.compactMap { d in
+        guard let id = d["id"] as? String, let name = d["name"] as? String else { return nil }
+        return CustomHandoff(
+            id: id, name: name,
+            kind: d["kind"] as? String ?? "text",
+            skill: d["skill"] as? String ?? "",
+            promptTemplate: d["promptTemplate"] as? String ?? HandoffConfig.defaultTextTemplate,
+            keycode: UInt32(d["keycode"] as? Int ?? 0),
+            mods: UInt32(d["mods"] as? Int ?? 0),
+            enabled: d["enabled"] as? Bool ?? true
+        )
+    }
+}
+
+func saveCustomHandoffs(_ items: [CustomHandoff]) {
+    let arr = items.map { h -> [String: Any] in
+        ["id": h.id, "name": h.name, "kind": h.kind, "skill": h.skill,
+         "promptTemplate": h.promptTemplate, "keycode": Int(h.keycode),
+         "mods": Int(h.mods), "enabled": h.enabled]
+    }
+    if let data = try? JSONSerialization.data(withJSONObject: arr, options: [.prettyPrinted]) {
+        try? data.write(to: URL(fileURLWithPath: CUSTOM_HANDOFFS_PATH))
     }
     DispatchQueue.main.async { reregisterHotkeys() }
 }

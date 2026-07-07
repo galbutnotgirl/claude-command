@@ -1053,6 +1053,10 @@ let hotKeyHandler: EventHandlerUPP = { (_, event, _) -> OSStatus in
                           customPrompt: prompt, customSubmit: autoSubmit,
                           customSession: session, customIncludeSource: inclSrc)
             }
+        } else if action.hasPrefix("handoffcustom:") {
+            guard let h = loadCustomHandoffs().first(where: { $0.actionID == action }) else { return noErr }
+            let sel = h.kind == "screenshot" ? "" : captureOrClipboard()
+            DispatchQueue.global().async { runCustomHandoff(h, capturedText: sel) }
         } else {
             // Capture selection NOW (main thread, source app still focused)
             // before async dispatch; worker uses CAPTURED_TEXT, skips socket roundtrip.
@@ -1100,6 +1104,18 @@ func registerFromConfig() {
         hotkeyKeycodes[hkID] = ca.keycode
         var ref: EventHotKeyRef?
         RegisterEventHotKey(ca.keycode, ca.mods, id, GetApplicationEventTarget(), 0, &ref)
+        hotkeyRefs.append(ref)
+    }
+    // Custom handoff hotkeys (custom-handoffs.json). IDs start at 1000 — far past
+    // custom actions' 100+ range, so the two lists can never collide.
+    for (k, h) in loadCustomHandoffs().enumerated() {
+        guard h.enabled, h.keycode != 0 else { continue }
+        let hkID = UInt32(1000 + k)
+        let id = EventHotKeyID(signature: sig, id: hkID)
+        hotkeyActions[hkID] = h.actionID
+        hotkeyKeycodes[hkID] = h.keycode
+        var ref: EventHotKeyRef?
+        RegisterEventHotKey(h.keycode, h.mods, id, GetApplicationEventTarget(), 0, &ref)
         hotkeyRefs.append(ref)
     }
 }
@@ -1227,6 +1243,9 @@ func fireMediaAction(_ carbon: UInt32, mods: UInt32 = 0) {
                       customPrompt: prompt, customSubmit: ca.isAutoSubmit,
                       customSession: session, customIncludeSource: inclSrc)
         }
+    } else if let h = loadCustomHandoffs().first(where: { $0.enabled && $0.keycode == carbon && $0.mods == mods }) {
+        let sel = h.kind == "screenshot" ? "" : captureOrClipboard()
+        DispatchQueue.global().async { runCustomHandoff(h, capturedText: sel) }
     }
 }
 

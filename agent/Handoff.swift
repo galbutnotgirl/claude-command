@@ -241,34 +241,7 @@ func retryHandoffSubmission(_ s: HandoffSubmission) {
         notify("Retry failed", "No stored prompt for this submission.")
         return
     }
-    let scriptDir = (bundledResource("capture-handoff.sh") as NSString).deletingLastPathComponent
-    var core = (scriptDir as NSString).appendingPathComponent("claude-command-capture")
-    if !FileManager.default.fileExists(atPath: core) {
-        core = (scriptDir as NSString).appendingPathComponent("vendor/claude-command-capture")
-    }
-    let shim = (core as NSString).appendingPathComponent("bin/submit-cli.js")
-    guard FileManager.default.fileExists(atPath: shim) else {
-        notify("Retry failed", "Handoff core missing — rebuild the agent.")
-        return
-    }
-    guard let node = which("node") else {
-        notify("Retry failed", "Node.js 20+ not found on PATH.")
-        return
-    }
-    let p = Process()
-    p.executableURL = URL(fileURLWithPath: node)
-    p.arguments = [shim, "--base-dir", HANDOFF_BASE, "--retry-prompt", "--source", s.source, "--kind", s.kind]
-        + (s.skill.map { ["--skill", $0] } ?? [])
-    let stdin = Pipe()
-    p.standardInput = stdin
-    do {
-        try p.run()
-        stdin.fileHandleForWriting.write(prompt.data(using: .utf8) ?? Data())
-        stdin.fileHandleForWriting.closeFile()
-    } catch {
-        appendLog("[handoff] retry launch failed: \(error)")
-        notify("Retry failed", "Could not start submit-cli.js")
-    }
+    submitHandoffPrompt(prompt, source: s.source, kind: s.kind, skill: s.skill, failureTitle: "Retry failed")
 }
 
 private func which(_ name: String) -> String? {
@@ -277,6 +250,93 @@ private func which(_ name: String) -> String? {
         if FileManager.default.isExecutableFile(atPath: path) { return path }
     }
     return nil
+}
+
+// Shared submit path for retryHandoffSubmission and runCustomHandoff — both hand
+// an already-rendered prompt to submit-cli.js's --retry-prompt mode, skipping
+// buildPrompt() (which would need a matching global settings.json skill/template).
+private func submitHandoffPrompt(_ prompt: String, source: String, kind: String, skill: String?, failureTitle: String) {
+    let scriptDir = (bundledResource("capture-handoff.sh") as NSString).deletingLastPathComponent
+    var core = (scriptDir as NSString).appendingPathComponent("claude-command-capture")
+    if !FileManager.default.fileExists(atPath: core) {
+        core = (scriptDir as NSString).appendingPathComponent("vendor/claude-command-capture")
+    }
+    let shim = (core as NSString).appendingPathComponent("bin/submit-cli.js")
+    guard FileManager.default.fileExists(atPath: shim) else {
+        notify(failureTitle, "Handoff core missing — rebuild the agent.")
+        return
+    }
+    guard let node = which("node") else {
+        notify(failureTitle, "Node.js 20+ not found on PATH.")
+        return
+    }
+    let p = Process()
+    p.executableURL = URL(fileURLWithPath: node)
+    p.arguments = [shim, "--base-dir", HANDOFF_BASE, "--retry-prompt", "--source", source, "--kind", kind]
+        + (skill.map { ["--skill", $0] } ?? [])
+    let stdin = Pipe()
+    p.standardInput = stdin
+    do {
+        try p.run()
+        stdin.fileHandleForWriting.write(prompt.data(using: .utf8) ?? Data())
+        stdin.fileHandleForWriting.closeFile()
+    } catch {
+        appendLog("[handoff] submit launch failed: \(error)")
+        notify(failureTitle, "Could not start submit-cli.js")
+    }
+}
+
+// ---- user-configurable custom handoffs --------------------------------------
+// Each CustomHandoff carries its own skill + prompt template (same placeholder
+// scheme as HandoffConfig), so it doesn't touch the global settings.json at all.
+
+func renderCustomHandoffPrompt(_ h: CustomHandoff, content: String?, file: String?) -> String {
+    let skill = h.skill.trimmingCharacters(in: .whitespaces)
+    var s = h.promptTemplate
+    s = s.replacingOccurrences(of: "{skillInvocation}", with: skill.isEmpty ? "" : "/\(skill)")
+    s = s.replacingOccurrences(of: "{skill}", with: skill)
+    s = s.replacingOccurrences(of: "{source}", with: h.kind == "screenshot" ? "screenshot" : "selection")
+    s = s.replacingOccurrences(of: "{timestamp}", with: handoffISO.string(from: Date()))
+    if let content { s = s.replacingOccurrences(of: "{content}", with: content) }
+    if let file { s = s.replacingOccurrences(of: "{file}", with: file) }
+    return s
+}
+
+// Writes the clipboard's image to a fresh file under captures/ and returns its
+// path — the native (AppKit-direct) equivalent of capture-handoff.sh's Python
+// NSPasteboard dump, since this process already links AppKit.
+private func writeClipboardImageFile() -> String? {
+    let pb = NSPasteboard.general
+    var data = pb.data(forType: .png)
+    if data == nil, let tiff = pb.data(forType: .tiff), let rep = NSBitmapImageRep(data: tiff) {
+        data = rep.representation(using: .png, properties: [:])
+    }
+    guard let pngData = data else { return nil }
+    let dir = "\(HANDOFF_BASE)/captures"
+    try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+    let path = "\(dir)/\(UUID().uuidString.lowercased()).png"
+    do { try pngData.write(to: URL(fileURLWithPath: path)); return path } catch { return nil }
+}
+
+func runCustomHandoff(_ h: CustomHandoff, capturedText: String = "") {
+    guard h.enabled else { return }
+    let skill = h.skill.isEmpty ? nil : h.skill
+    if h.kind == "screenshot" {
+        guard let file = writeClipboardImageFile() else {
+            notify("Handoff failed", "No image on the clipboard.")
+            return
+        }
+        let prompt = renderCustomHandoffPrompt(h, content: nil, file: file)
+        submitHandoffPrompt(prompt, source: "screenshot", kind: "image", skill: skill, failureTitle: "Handoff failed")
+    } else {
+        let text = capturedText.isEmpty ? (NSPasteboard.general.string(forType: .string) ?? "") : capturedText
+        guard !text.isEmpty else {
+            notify("Handoff failed", "Nothing selected or on the clipboard.")
+            return
+        }
+        let prompt = renderCustomHandoffPrompt(h, content: text, file: nil)
+        submitHandoffPrompt(prompt, source: "selection", kind: "text", skill: skill, failureTitle: "Handoff failed")
+    }
 }
 
 // ---- settings window ----------------------------------------------------------
