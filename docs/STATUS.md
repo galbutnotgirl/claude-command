@@ -80,7 +80,7 @@ detail — that doc is current as of alpha.6 and is the one to read before touch
     was logged out (fixed via `claude /login` — separate from any of this app's code);
     discovered the intake script's hardcoded sync token was stale; discovered the *right*
     fix was registering the user's already-built `project-tracker` MCP server
-    (`~/Claude-Code-Projects/claude-command-project-tracker/mcp-server`) with the local
+    (`~/Claude-Code-Projects/claude-project-tracker/mcp-server`) with the local
     `claude` CLI (`claude mcp add project-tracker --scope user ...`) instead of curling the
     API directly with a token at all. This is now a real, working, tested Custom Handoff
     (F9, `isHandoff: true`, calls `mcp__project-tracker__create_task`).
