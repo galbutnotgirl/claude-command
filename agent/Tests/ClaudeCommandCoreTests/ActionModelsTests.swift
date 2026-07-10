@@ -68,6 +68,32 @@ final class ActionModelsTests: XCTestCase {
         XCTAssertTrue(ca.shouldIncludeSource(for: trig))  // untouched — still inherits
     }
 
+    func testDeliveryAndDestinationInheritFromAction() {
+        var ca = CustomAction.makeNew(name: "n", prompt: "p", kind: .text)
+        ca.delivery = .existingChat
+        ca.destination = .cowork
+        let trig = ca.triggers[0]
+        XCTAssertEqual(ca.effectiveDelivery(for: trig), .existingChat)
+        XCTAssertEqual(ca.effectiveDestination(for: trig), .cowork)
+    }
+
+    func testTriggerDeliveryAndDestinationOverridesWin() {
+        var ca = CustomAction.makeNew(name: "n", prompt: "p", kind: .text)
+        ca.delivery = .newChat
+        ca.destination = .chat
+        var trig = ca.triggers[0]
+        trig.deliveryOverride = .background
+        trig.destinationOverride = .code
+        XCTAssertEqual(ca.effectiveDelivery(for: trig), .background)
+        XCTAssertEqual(ca.effectiveDestination(for: trig), .code)
+    }
+
+    func testLegacyDeliveryMapping() {
+        XCTAssertEqual(ActionDelivery.fromLegacy(isHandoff: true, sessionMode: "new"), .background)
+        XCTAssertEqual(ActionDelivery.fromLegacy(isHandoff: false, sessionMode: "add"), .existingChat)
+        XCTAssertEqual(ActionDelivery.fromLegacy(isHandoff: false, sessionMode: "new"), .newChat)
+    }
+
     // ---- CommandAction catalog lookups ---------------------------------------
 
     func testActionNameFallsBackToIDWhenUnknown() {
@@ -79,9 +105,9 @@ final class ActionModelsTests: XCTestCase {
     }
 
     func testFixedCatalogHasNoHandoffActionsLeft() {
-        // Skill/Screenshot Handoff, and now Text Handoff too, were folded into
-        // user-configurable Custom Actions (kind: .popup for the old Text
-        // Handoff) — none of the fixed catalog entries should be handoffs.
+        // Old fixed background actions were folded into user-configurable Custom
+        // Actions (kind: .popup for the old text-entry path) — none of the fixed
+        // catalog entries should be handoffs.
         XCTAssertFalse(COMMAND_ACTIONS.contains { $0.id.lowercased().contains("handoff") })
     }
 

@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Command settings reference covering Set Up, Shortcuts, Context, Command History, Clipboard History, Dictation, and About.">
+  <title>Command Settings Reference</title>
+  <link rel="canonical" href="https://galbutnotgirl.github.io/command/settings.html">
+  <meta property="og:site_name" content="Command">
+  <meta property="og:title" content="Command Settings Reference">
+  <meta property="og:description" content="Command settings reference covering Set Up, Shortcuts, Context, Command History, Clipboard History, Dictation, and About.">
+  <meta property="og:type" content="website">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="Command Settings Reference">
+  <meta name="twitter:description" content="Command settings reference covering Set Up, Shortcuts, Context, Command History, Clipboard History, Dictation, and About.">
+  <link rel="stylesheet" href="site.css">
+</head>
+<body>
+  <a class="skip-link" href="#content">Skip to content</a>
+  <div class="doc-wrap">
+    <nav class="toc" aria-label="Documentation sections">
+      <div class="toc-title">Settings Reference</div>
+      <a href="index.html">Overview</a>
+      <a href="install.html">Install Guide</a>
+      <a href="uninstall.html">Uninstall</a>
+      <a href="guide.html">User Guide</a>
+      <a href="settings.html">Settings Reference</a>
+      <a href="quick-reference.html">Quick Reference</a>
+      <a href="examples.html">Examples</a>
+      <a href="faq.html">FAQ</a>
+      <a href="changelog.html">Changelog</a>
+      <a href="limitations.html">Alpha Limitations</a>
+      <a href="updates.html">Updates</a>
+      <a href="permissions.html">Permissions</a>
+      <a href="privacy.html">Privacy</a>
+      <a href="troubleshooting.html">Troubleshooting</a>
+      <a href="support.html">Support</a>
+      <a href="security.html">Security Policy</a>
+      <a href="icon-treatments.html">Icon Treatments</a>
+      <a href="background.html">Background Architecture</a>
+      <a href="release.html">Release Checklist</a>
+      <a href="#setup">Set Up</a>
+      <a href="#shortcuts">Shortcuts</a>
+      <a href="#context">Context</a>
+      <a href="#command-history">Command History</a>
+      <a href="#clipboard-history">Clipboard History</a>
+      <a href="#dictation">Dictation</a>
+      <a href="#about">About</a>
+      <a href="#related-docs">Related Docs</a>
+      <a href="SETTINGS_REFERENCE.md">Markdown source</a>
+    </nav>
+    <main id="content" class="doc-main">
+      <header class="doc-hero">
+        <h1>Settings Reference</h1>
+        <p class="lead">Map every Settings tab to its job: setup checks, prompt-centered shortcuts, context rules, history, dictation, updates, import/export, and support.</p>
+        <div class="nav">
+          <a class="button primary" href="quick-reference.html">Quick Reference</a>
+          <a class="button" href="guide.html">User Guide</a>
+        </div>
+      </header>
+
+      <section id="setup">
+        <h2>Set Up</h2>
+        <p>Use <strong>Set Up</strong> first after install or update.</p>
+        <table>
+          <thead><tr><th>Area</th><th>What it checks</th></tr></thead>
+          <tbody>
+            <tr><td>Permissions</td><td>Accessibility, Screen Recording, and Microphone state.</td></tr>
+            <tr><td>Components</td><td>App bundle, launch service, app dispatch socket, Clipboard History, shortcut config, optional Quick Actions, and Background runner.</td></tr>
+            <tr><td>Actions</td><td>Re-check current state, restart Command, open relevant macOS privacy panes.</td></tr>
+          </tbody>
+        </table>
+        <p>Required items should be green before using global shortcuts. Optional items only matter for workflows you use: Screen Recording for screenshots, Microphone for dictation or voice triggers, Clipboard History for picker/history, and Quick Actions for source installs that still use macOS Services.</p>
+      </section>
+
+      <section id="shortcuts">
+        <h2>Shortcuts</h2>
+        <p>Use <strong>Shortcuts</strong> for prompt-centered commands.</p>
+        <table>
+          <thead><tr><th>Control</th><th>Purpose</th></tr></thead>
+          <tbody>
+            <tr><td>Default Claude destination</td><td>Top-level fallback destination: Chat, Cowork, or Code.</td></tr>
+            <tr><td>Compose</td><td>Shared built-in prompt for selected-text and screenshot combinations: existing chat, new chat, or new chat with auto-submit.</td></tr>
+            <tr><td>Custom Actions</td><td>User-defined prompt groups with selected text, screenshot, popup, or voice triggers.</td></tr>
+            <tr><td>Trigger rows</td><td>Per-trigger key binding plus optional delivery, destination, and auto-submit override.</td></tr>
+          </tbody>
+        </table>
+        <p>Inheritance rule: <code>—</code> means no override. Trigger settings win over action defaults. Action defaults win over global destination.</p>
+      </section>
+
+      <section id="context">
+        <h2>Context</h2>
+        <p>Use <strong>Context</strong> to add app/site-specific source instructions to prompts.</p>
+        <table>
+          <thead><tr><th>Control</th><th>Purpose</th></tr></thead>
+          <tbody>
+            <tr><td>Preview as</td><td>Shows how current context rules affect a sample source.</td></tr>
+            <tr><td>Context rules</td><td>Match app name, bundle ID, URL host, and optional path prefix.</td></tr>
+            <tr><td>Display name</td><td>Replaces noisy browser names in <code>[from: ...]</code> source lines.</td></tr>
+            <tr><td>Rule text</td><td>Adds source-specific instruction text. Use <code>{url}</code> when the source URL should appear in prompt text.</td></tr>
+          </tbody>
+        </table>
+        <p>Use path prefixes for shared hosts like <code>docs.google.com</code>: split Google Docs, Sheets, and Slides into separate rules.</p>
+      </section>
+
+      <section id="command-history">
+        <h2>Command History</h2>
+        <p>Use <strong>Command History</strong> to inspect what Command sent.</p>
+        <table>
+          <thead><tr><th>Section</th><th>Includes</th></tr></thead>
+          <tbody>
+            <tr><td>Foreground</td><td>Existing-chat and new-chat sends.</td></tr>
+            <tr><td>Background</td><td><code>claude -p</code> runs, status, result line, logs, retry, and mark-failed controls.</td></tr>
+          </tbody>
+        </table>
+        <p>Retention defaults to seven days. Changing command retention also aligns background-run retention.</p>
+      </section>
+
+      <section id="clipboard-history">
+        <h2>Clipboard History</h2>
+        <p>Use <strong>Clipboard History</strong> to configure the picker.</p>
+        <table>
+          <thead><tr><th>Control</th><th>Purpose</th></tr></thead>
+          <tbody>
+            <tr><td>Shortcut</td><td>Opens searchable clipboard picker.</td></tr>
+            <tr><td>Retention</td><td>How long local clipboard history is kept. Default is seven days.</td></tr>
+            <tr><td>Theme</td><td>Picker appearance.</td></tr>
+            <tr><td>Clear controls</td><td>Remove recent or all clipboard history.</td></tr>
+          </tbody>
+        </table>
+        <p>Clipboard History skips known password apps and secret-looking values.</p>
+      </section>
+
+      <section id="dictation">
+        <h2>Dictation</h2>
+        <p>Dictation has four tabs.</p>
+        <table>
+          <thead><tr><th>Tab</th><th>Purpose</th></tr></thead>
+          <tbody>
+            <tr><td>History</td><td>Raw and processed transcripts, audio playback, and suggested corrections.</td></tr>
+            <tr><td>Corrections</td><td>Misheard phrase replacement rules.</td></tr>
+            <tr><td>Vocabulary</td><td>Proper nouns, product names, filler words, and terms the model should preserve.</td></tr>
+            <tr><td>Dictation Settings</td><td>Microphone access, model status, dictation shortcuts, processing, and sounds.</td></tr>
+          </tbody>
+        </table>
+        <p>Voice custom actions are configured in <strong>Shortcuts</strong>. Built-in dictation shortcuts live in <strong>Dictation Settings</strong>.</p>
+      </section>
+
+      <section id="about">
+        <h2>About</h2>
+        <p>Use <strong>About</strong> for release, help, and portability workflows.</p>
+        <table>
+          <thead><tr><th>Control</th><th>Purpose</th></tr></thead>
+          <tbody>
+            <tr><td>Update channel</td><td>Alpha or Beta today; Stable is visible but unavailable until the first stable release exists.</td></tr>
+            <tr><td>Check for Updates</td><td>Finds releases allowed by selected channel.</td></tr>
+            <tr><td>Launch at login</td><td>Creates or toggles the Command launch service for startup. Downloaded app installs do not need Terminal scripts.</td></tr>
+            <tr><td>Show in Menu Bar</td><td>Shows or hides the status item.</td></tr>
+            <tr><td>Show Dock icon</td><td>Switches between menu-bar-only and Dock-visible app behavior.</td></tr>
+            <tr><td>Import / Export</td><td>Move shortcuts, prompt settings, context rules, dictation vocabulary, Background settings, and app preferences. Exports default to <code>command-export.json</code>.</td></tr>
+            <tr><td>Help &amp; Documentation</td><td>Repository link plus bundled docs buttons.</td></tr>
+            <tr><td>View on GitHub</td><td>Opens the project repository.</td></tr>
+            <tr><td>Documentation / User Guide / Install Guide / Uninstall</td><td>Main help, end-to-end setup, first install, and removal.</td></tr>
+            <tr><td>Settings Reference / Quick Reference / Troubleshooting / Permissions / Support / Security Policy</td><td>Tab map, shortcut cheat sheet, symptom fixes, permission help, bug-report guidance, feature-request guidance, and private-report guidance.</td></tr>
+            <tr><td>Examples / FAQ / Updates / Privacy / Changelog / Alpha Limitations</td><td>Workflow examples, common questions, update flow, local data, release notes, and alpha expectations.</td></tr>
+            <tr><td>Icon Treatments / Background Architecture / Release Checklist</td><td>Active-state visuals, background-run internals, and maintainer ship gates.</td></tr>
+            <tr><td>Support &amp; Reporting</td><td>Diagnostics, public bug/feature routes, and private security reporting.</td></tr>
+            <tr><td>Copy Diagnostic Info</td><td>Copies app path, bundle ID, version, minimum macOS, update channel/check status, shortcut binding summary, Set Up status, log tails, recent command summaries, Clipboard History errors, and recent dictation previews.</td></tr>
+            <tr><td>Report a Bug</td><td>Opens GitHub issue template with key diagnostic fields prefilled.</td></tr>
+            <tr><td>Request Feature</td><td>Opens GitHub feature request template for non-bug workflow, trigger, destination, docs, or release improvements.</td></tr>
+            <tr><td>Private Security Report</td><td>Opens GitHub private advisory for vulnerabilities, exposed secrets, private logs, or sensitive diagnostics.</td></tr>
+          </tbody>
+        </table>
+        <h3>Import / Export Sections</h3>
+        <table>
+          <thead><tr><th>Section</th><th>Includes</th></tr></thead>
+          <tbody>
+            <tr><td>Shortcuts and prompts</td><td>Built-in shortcut bindings, custom actions, trigger rows, and built-in compose auto-submit settings.</td></tr>
+            <tr><td>Prompt text and context rules</td><td>Built-in prompt text and Context rules.</td></tr>
+            <tr><td>Dictation vocabulary</td><td>Corrections, vocabulary terms, and filler words.</td></tr>
+            <tr><td>Background settings</td><td>Shared <code>claude -p</code> command, working directory, extra args, and notification settings.</td></tr>
+            <tr><td>App preferences</td><td>Default Claude destination, retention days, and dictation sounds.</td></tr>
+          </tbody>
+        </table>
+        <p>Import modes:</p>
+        <table>
+          <thead><tr><th>Mode</th><th>Result</th></tr></thead>
+          <tbody>
+            <tr><td>Keep current</td><td>Skip section.</td></tr>
+            <tr><td>Merge</td><td>Keep current items; incoming items win matching keys.</td></tr>
+            <tr><td>Overwrite</td><td>Replace current section with imported section.</td></tr>
+          </tbody>
+        </table>
+        <p>Review copied diagnostics before sharing because log tails, recent command summaries, and recent dictation previews can include sensitive text.</p>
+      </section>
+      <section id="related-docs">
+        <h2>Related Docs</h2>
+        <div class="grid">
+          <a class="card" href="install.html"><strong>Install Guide</strong><span class="muted">First launch, permissions, and setup checks.</span></a>
+          <a class="card" href="guide.html"><strong>User Guide</strong><span class="muted">Prompt setup, custom actions, and workflows.</span></a>
+          <a class="card" href="quick-reference.html"><strong>Quick Reference</strong><span class="muted">Default shortcuts, variables, and common fixes.</span></a>
+          <a class="card" href="permissions.html"><strong>Permissions</strong><span class="muted">macOS prompts, optional items, and reset commands.</span></a>
+          <a class="card" href="troubleshooting.html"><strong>Troubleshooting</strong><span class="muted">Symptom-first fixes and logs.</span></a>
+        </div>
+      </section>
+    </main>
+  </div>
+</body>
+</html>

@@ -73,7 +73,7 @@ public let DEFAULT_BINDINGS: [(action: String, keycode: UInt32, mods: UInt32)] =
 // How the action's content gets captured before the prompt is rendered:
 //   text       — current selection, falling back to the clipboard
 //   screenshot — a screencapture region, attached to the prompt (paste mode)
-//                or saved to a file the prompt can reference via {file} (handoff mode)
+//                or saved to a file the prompt can reference via {file} (background mode)
 //   popup      — a small floating text box; you type, ⌘⏎ runs it
 //   voice      — press-and-hold (or double-tap to lock) to dictate, same
 //                trigger model as the built-in Dictate actions
@@ -81,11 +81,46 @@ public enum ActionKind: String, CaseIterable, Codable, Sendable {
     case text, screenshot, popup, voice
     public var label: String {
         switch self {
-        case .text:       return "Text (selection/clipboard)"
+        case .text:       return "Selected text"
         case .screenshot: return "Screenshot"
         case .popup:      return "Popup (type it)"
         case .voice:      return "Voice (dictate)"
         }
+    }
+}
+
+public enum ClaudeDestination: String, CaseIterable, Codable, Sendable {
+    case `default`, chat, cowork, code
+
+    public var label: String {
+        switch self {
+        case .default: return "Default"
+        case .chat: return "Chat"
+        case .cowork: return "Cowork"
+        case .code: return "Code"
+        }
+    }
+
+    public var envValue: String? { self == .default ? nil : rawValue }
+}
+
+public enum ActionDelivery: String, CaseIterable, Codable, Sendable {
+    case existingChat, newChat, background
+
+    public var label: String {
+        switch self {
+        case .existingChat: return "Existing chat"
+        case .newChat: return "New chat"
+        case .background: return "Background"
+        }
+    }
+
+    public var isHandoff: Bool { self == .background }
+    public var sessionMode: String { self == .existingChat ? "add" : "new" }
+
+    public static func fromLegacy(isHandoff: Bool, sessionMode: String) -> ActionDelivery {
+        if isHandoff { return .background }
+        return sessionMode == "add" ? .existingChat : .newChat
     }
 }
 
@@ -102,16 +137,21 @@ public struct ActionTrigger: Identifiable, Sendable {
     public var isAutoSubmitOverride: Bool?
     public var sessionModeOverride: String?
     public var includeSourceOverride: Bool?
+    public var deliveryOverride: ActionDelivery?
+    public var destinationOverride: ClaudeDestination?
 
     public var human: String { keycode == 0 ? "—" : humanShortcut(keycode: keycode, mods: mods) }
 
     public init(id: String = UUID().uuidString, kind: ActionKind, keycode: UInt32 = 0, mods: UInt32 = 0,
                 enabled: Bool = true, isAutoSubmitOverride: Bool? = nil, sessionModeOverride: String? = nil,
-                includeSourceOverride: Bool? = nil) {
+                includeSourceOverride: Bool? = nil, deliveryOverride: ActionDelivery? = nil,
+                destinationOverride: ClaudeDestination? = nil) {
         self.id = id; self.kind = kind; self.keycode = keycode; self.mods = mods; self.enabled = enabled
         self.isAutoSubmitOverride = isAutoSubmitOverride
         self.sessionModeOverride = sessionModeOverride
         self.includeSourceOverride = includeSourceOverride
+        self.deliveryOverride = deliveryOverride
+        self.destinationOverride = destinationOverride
     }
 }
 
@@ -138,6 +178,8 @@ public struct CustomAction: Identifiable, Sendable {
     public var enabled: Bool
     public var isHandoff: Bool = false  // true = background `claude -p` run (no Claude window) instead of pasting in
     public var skill: String = ""      // only used when isHandoff; target skill for the background run
+    public var delivery: ActionDelivery
+    public var destination: ClaudeDestination
     // One shared body (name/prompt/skill/delivery), any number of ways to
     // fire it — a popup binding and a voice binding of the same action reuse
     // one prompt instead of duplicating it across separate custom actions.
@@ -145,22 +187,33 @@ public struct CustomAction: Identifiable, Sendable {
 
     public init(id: String, name: String, prompt: String, isAutoSubmit: Bool,
                 sessionMode: String, includeSource: Bool, enabled: Bool,
-                isHandoff: Bool = false, skill: String = "", triggers: [ActionTrigger]) {
+                isHandoff: Bool = false, skill: String = "", delivery: ActionDelivery? = nil,
+                destination: ClaudeDestination = .default, triggers: [ActionTrigger]) {
         self.id = id; self.name = name; self.prompt = prompt
         self.isAutoSubmit = isAutoSubmit; self.sessionMode = sessionMode; self.includeSource = includeSource
-        self.enabled = enabled; self.isHandoff = isHandoff; self.skill = skill; self.triggers = triggers
+        self.enabled = enabled; self.isHandoff = isHandoff; self.skill = skill
+        self.delivery = delivery ?? ActionDelivery.fromLegacy(isHandoff: isHandoff, sessionMode: sessionMode)
+        self.destination = destination; self.triggers = triggers
     }
 
     public static func makeNew(name: String, prompt: String, kind: ActionKind, isHandoff: Bool = false, skill: String = "") -> CustomAction {
         CustomAction(id: UUID().uuidString, name: name, prompt: prompt, isAutoSubmit: false,
                      sessionMode: "new", includeSource: true, enabled: true,
-                     isHandoff: isHandoff, skill: skill, triggers: [ActionTrigger(kind: kind)])
+                     isHandoff: isHandoff, skill: skill,
+                     delivery: isHandoff ? .background : .newChat,
+                     destination: .default, triggers: [ActionTrigger(kind: kind)])
     }
 
     public func actionID(for trigger: ActionTrigger) -> String { triggerActionID(actionID: id, triggerID: trigger.id) }
 
     // Effective per-trigger settings — the override if the trigger set one, else this action's default.
     public func autoSubmit(for t: ActionTrigger) -> Bool { t.isAutoSubmitOverride ?? isAutoSubmit }
-    public func effectiveSessionMode(for t: ActionTrigger) -> String { t.sessionModeOverride ?? sessionMode }
+    public func effectiveDelivery(for t: ActionTrigger) -> ActionDelivery {
+        t.deliveryOverride ?? t.sessionModeOverride.map { ActionDelivery.fromLegacy(isHandoff: false, sessionMode: $0) } ?? delivery
+    }
+    public func effectiveSessionMode(for t: ActionTrigger) -> String { effectiveDelivery(for: t).sessionMode }
     public func shouldIncludeSource(for t: ActionTrigger) -> Bool { t.includeSourceOverride ?? includeSource }
+    public func effectiveDestination(for t: ActionTrigger) -> ClaudeDestination {
+        t.destinationOverride ?? destination
+    }
 }

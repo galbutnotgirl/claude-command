@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Command FAQ covering install, shortcuts, auto-submit behavior, privacy, background actions, dictation, updates, imports, bug reports, and feature requests.">
+  <title>Command FAQ</title>
+  <link rel="canonical" href="https://galbutnotgirl.github.io/command/faq.html">
+  <meta property="og:site_name" content="Command">
+  <meta property="og:title" content="Command FAQ">
+  <meta property="og:description" content="Command FAQ covering install, shortcuts, auto-submit behavior, privacy, background actions, dictation, updates, imports, bug reports, and feature requests.">
+  <meta property="og:type" content="website">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="Command FAQ">
+  <meta name="twitter:description" content="Command FAQ covering install, shortcuts, auto-submit behavior, privacy, background actions, dictation, updates, imports, bug reports, and feature requests.">
+  <link rel="stylesheet" href="site.css">
+</head>
+<body>
+  <a class="skip-link" href="#content">Skip to content</a>
+  <div class="doc-wrap">
+    <nav class="toc" aria-label="Documentation sections">
+      <div class="toc-title">FAQ</div>
+      <a href="index.html">Overview</a>
+      <a href="install.html">Install Guide</a>
+      <a href="uninstall.html">Uninstall</a>
+      <a href="guide.html">User Guide</a>
+      <a href="settings.html">Settings Reference</a>
+      <a href="quick-reference.html">Quick Reference</a>
+      <a href="examples.html">Examples</a>
+      <a href="faq.html">FAQ</a>
+      <a href="changelog.html">Changelog</a>
+      <a href="limitations.html">Alpha Limitations</a>
+      <a href="updates.html">Updates</a>
+      <a href="permissions.html">Permissions</a>
+      <a href="privacy.html">Privacy</a>
+      <a href="troubleshooting.html">Troubleshooting</a>
+      <a href="support.html">Support</a>
+      <a href="security.html">Security Policy</a>
+      <a href="icon-treatments.html">Icon Treatments</a>
+      <a href="background.html">Background Architecture</a>
+      <a href="release.html">Release Checklist</a>
+      <a href="#shortcuts">Shortcuts</a>
+      <a href="#privacy">Privacy</a>
+      <a href="#background">Background</a>
+      <a href="#dictation">Dictation</a>
+      <a href="#updates">Updates</a>
+      <a href="#install">Install</a>
+      <a href="#move">Moving Macs</a>
+      <a href="FAQ.md">Markdown source</a>
+    </nav>
+    <main id="content" class="doc-main">
+      <header class="doc-hero">
+        <h1>FAQ</h1>
+        <p class="lead">Answers for install, first-run setup, shortcut conflicts, privacy, background runs, dictation, and import/export.</p>
+      </header>
+      <section id="shortcuts">
+        <h2>Shortcuts</h2>
+        <h3>Why are auto-submit combinations unbound by default?</h3>
+        <p>Auto-submit opens a new chat, presses Return, and restores focus. Bind <strong>Selected text -> New chat + auto-submit</strong> or <strong>Screenshot -> New chat + auto-submit</strong> in <strong>Settings -> Shortcuts</strong> when you want that faster behavior.</p>
+        <h3>What if F5-F8 already control brightness, media, or dictation?</h3>
+        <p>Enable standard function keys in macOS <strong>System Settings -> Keyboard</strong>, or rebind Command shortcuts in <strong>Settings -> Shortcuts</strong> and <strong>Settings -> Dictation Settings</strong>.</p>
+        <p>For dictation, Home, End, PgUp, and PgDn are often better choices than F-keys on keyboards where media keys get in the way. Built-in Dictate shortcuts live in <strong>Dictation Settings</strong>; voice prompt triggers live in <strong>Shortcuts</strong>.</p>
+        <h3>What do the built-in Compose combinations do?</h3>
+        <table>
+          <thead><tr><th>Combination</th><th>Result</th></tr></thead>
+          <tbody>
+            <tr><td>Existing chat</td><td>Send captured content into the current Claude chat.</td></tr>
+            <tr><td>New chat</td><td>Open a new Claude chat and wait for your note.</td></tr>
+            <tr><td>New chat + auto-submit</td><td>Open a new Claude chat, auto-submit, and restore focus.</td></tr>
+          </tbody>
+        </table>
+        <h3>What does <code>—</code> mean in a trigger row?</h3>
+        <p><code>—</code> means inherit. The trigger uses the prompt/action default delivery, destination, or submit setting.</p>
+      </section>
+      <section id="privacy">
+        <h2>Privacy</h2>
+        <h3>Does Command upload clipboard or dictation history?</h3>
+        <p>Command does not upload clipboard or dictation history. Those records stay in local files. See <a href="privacy.html">Privacy</a> for exact locations.</p>
+        <h3>Where is data stored?</h3>
+        <ul>
+          <li><code>~/.claude/state/</code></li>
+          <li><code>~/.claude/state/cliphistory/</code></li>
+          <li><code>~/Library/Application Support/DictationLab/</code></li>
+          <li><code>~/Library/Application Support/claude-command/</code></li>
+        </ul>
+        <h3>Why do some local paths still say <code>claude-command</code>?</h3>
+        <p>Command was previously named ClaudeCommand. Local support paths and the bundle identifier stay stable on purpose so macOS permissions, shortcuts, command history, background records, and exports keep working across alpha updates. User-facing app, repo, release asset, and GitHub Pages names are now Command.</p>
+      </section>
+      <section id="background">
+        <h2>Background Actions</h2>
+        <h3>Why did a background action fail?</h3>
+        <p>Background actions run local <code>claude -p</code>. If one fails, open <strong>Settings -> Command History -> Background</strong>, expand failed run, and inspect log. Also check <strong>Background Settings</strong> for CLI command, working directory, and extra args.</p>
+        <h3>Why did Claude - To-Do send text instead of the URL?</h3>
+        <p>Right-click Services prefer highlighted text. Clear the text selection first, then run <strong>Claude - To-Do</strong> from Safari, Chrome, Brave, Chromium, or Arc to send the current tab URL as a background action. Check <strong>Command History -> Background</strong> for the captured source.</p>
+      </section>
+      <section id="dictation">
+        <h2>Dictation</h2>
+        <h3>Why does dictation miss final words?</h3>
+        <p>Voice input depends on stop timing and model finalization. In current alpha builds, stop timing is tuned inside the app rather than exposed as a slider. The stop sound means release was accepted; the menu-bar recording chip stays visible until tail capture, model finalization, and dispatch finish. If final words are cut off, release the key after the last word, then check <strong>Dictation History</strong> to see whether the raw transcript or processed transcript lost the tail. Include that detail plus diagnostics in a bug report.</p>
+      </section>
+      <section id="updates">
+        <h2>Updates</h2>
+        <h3>How do updates work?</h3>
+        <p>Use <strong>Settings -> About</strong> to choose Alpha or Beta and run <strong>Check for Updates</strong>. Stable is visible but unavailable until the first stable release exists. See <a href="updates.html">Updates</a> for manual alpha installs, backup/export before updating, failed updates, and rollback.</p>
+      </section>
+      <section id="install">
+        <h2>Install</h2>
+        <h3>How do I install Command the first time?</h3>
+        <p>Download the latest <code>Command-*.zip</code> from the <a href="https://github.com/galbutnotgirl/command/releases/latest">latest GitHub Release</a>, optionally verify it with the matching <code>.zip.sha256</code> file in the same folder, move <code>Command.app</code> to <code>~/Applications</code>, then open <strong>Settings -> Set Up</strong>. See <a href="install.html">Install Guide</a> for first launch, permissions, setup checks, and source install.</p>
+      </section>
+      <section id="move">
+        <h2>Moving Macs</h2>
+        <h3>Can I move settings to another Mac?</h3>
+        <p>Use <strong>Settings -> About -> Import / Export</strong>. Export sections from old Mac, then import on new Mac. Use <strong>Merge</strong> unless you want to replace local settings.</p>
+        <h3>What should I include in a bug report?</h3>
+        <p>Use <strong>Settings -> About -> Copy Diagnostic Info</strong>, then <strong>Report a Bug</strong>. Include trigger, shortcut, expected result, actual result, and relevant diagnostic lines. For background actions, include full Command History log text when the summary is not enough.</p>
+        <h3>How should I request a feature?</h3>
+        <p>Use <strong>Settings -> About -> Request Feature</strong> or the <a href="https://github.com/galbutnotgirl/command/issues/new?template=feature_request.md">Feature request template</a>. Include workflow, trigger type, delivery mode, destination, auto-submit preference, current workaround, and whether the request needs Settings UI, menu-bar behavior, docs/examples, import/export support, or release-note coverage.</p>
+      </section>
+    </main>
+  </div>
+</body>
+</html>

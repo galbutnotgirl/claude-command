@@ -38,7 +38,7 @@ final class OnboardingWindowController: NSObject, NSWindowDelegate {
             applyDockPolicy()
         }))
         let w = NSWindow(contentViewController: host)
-        w.title = "ClaudeCommand"
+        w.title = "Command"
         w.styleMask = [.titled, .closable]
         w.isReleasedWhenClosed = false
         w.delegate = self
@@ -199,15 +199,15 @@ struct WelcomeStepView: View {
 
     @State private var keysAppeared = false
 
-    private let previewKeys = ["F8", "⌘F8", "⌥F8", "F7", "⌘F7", "F6", "⌘F6"]
+    private let previewKeys = ["F8", "⌥F8", "F7", "⌥F7", "F6", "F5", "⌥F5"]
 
     private let features: [(icon: String, color: Color, label: String, detail: String)] = [
-        ("bolt.fill",              .orange, "Instant Go",
-         "Select text in any app → ⌘F8. Claude has it and auto-submits. Focus returns immediately."),
+        ("bolt.fill",              .orange, "Prompt Shortcuts",
+         "Select text in any app. Press F8 to add it to Claude, or Option-F8 to open a new chat."),
         ("camera.on.rectangle",    .purple, "Screenshot to Claude",
-         "Drag to capture or press Space for a window. Image drops straight into Claude."),
+         "Drag to capture or press Space for a window. Send screenshots to existing chat, new chat, or a custom action."),
         ("clock.arrow.circlepath", .blue,   "Clipboard History",
-         "Every copy is saved. Press F6 for a searchable picker — paste into Claude or anywhere."),
+         "When enabled, copies stay local. Press F6 for a searchable picker — paste into Claude or anywhere."),
     ]
 
     var body: some View {
@@ -237,7 +237,7 @@ struct WelcomeStepView: View {
             }
             .padding(.bottom, 8)
 
-            Text("Global hotkeys from any app — select, capture, or paste into Claude without switching windows.")
+            Text("Global hotkeys from any app — selected text, screenshots, clipboard history, and dictation without breaking flow.")
                 .font(.subheadline)
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
@@ -331,7 +331,7 @@ struct AccessibilityStepView: View {
 
             Text("Allow Accessibility").font(.title2).bold()
 
-            Text("ClaudeCommand types into the Claude app on your behalf — pasting your selected text, pressing Return to submit, and returning focus to your previous app. macOS requires Accessibility access for this.")
+            Text("Command uses Accessibility to copy selected text, paste into Claude, submit when requested, restore focus, and run global shortcuts from any app.")
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
@@ -339,8 +339,8 @@ struct AccessibilityStepView: View {
 
             // Mockup of what the user will see in System Settings
             SettingsMockup(
-                appName: "ClaudeCommand",
-                description: "Find ClaudeCommand in the list and flip the switch ON.",
+                appName: "Command",
+                description: "Find Command in the list and flip the switch ON.",
                 switchColor: .blue
             )
 
@@ -353,7 +353,7 @@ struct AccessibilityStepView: View {
             } else {
                 HStack(spacing: 6) {
                     ProgressView().scaleEffect(0.7)
-                    Text("In the alert, choose Open System Settings, then flip the ClaudeCommand switch ON. This screen advances on its own once it's on.")
+                    Text("In the alert, choose Open System Settings, then flip the Command switch ON. This screen advances on its own once it's on.")
                         .font(.subheadline).foregroundColor(.secondary)
                         .multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
                 }
@@ -386,7 +386,7 @@ struct ScreenRecordingStepView: View {
 
             Text("Allow Screen Recording").font(.title2).bold()
 
-            Text("The Screenshot actions (F7 / Cmd-F7) capture your screen and drop the image straight into Claude. macOS requires Screen Recording access for this.")
+            Text("Screenshot actions (F7 / Option-F7) capture your screen for Claude prompts. macOS requires Screen Recording access for this.")
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
@@ -394,8 +394,8 @@ struct ScreenRecordingStepView: View {
 
             if !requested {
                 SettingsMockup(
-                    appName: "ClaudeCommand",
-                    description: "Find ClaudeCommand in the list and flip the switch ON.",
+                    appName: "Command",
+                    description: "Find Command in the list and flip the switch ON.",
                     switchColor: .blue,
                     paneName: "Screen Recording"
                 )
@@ -410,7 +410,7 @@ struct ScreenRecordingStepView: View {
                     VStack(spacing: 6) {
                         Text("1. Flip switch ON").font(.caption).fontWeight(.medium).foregroundColor(.secondary)
                         SettingsMockup(
-                            appName: "ClaudeCommand",
+                            appName: "Command",
                             description: "",
                             switchColor: .blue,
                             paneName: "Screen Recording"
@@ -532,7 +532,7 @@ struct QuitReopenMockup: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.top, 10).padding(.horizontal, 12)
 
-                Text("\"ClaudeCommand\" may not be able to record until it is quit.")
+                Text("\"Command\" may not be able to record until it is quit.")
                     .font(.system(size: 11, weight: .semibold))
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
@@ -595,7 +595,7 @@ struct MicrophoneStepView: View {
             Text("Microphone access")
                 .font(.title2).bold()
 
-            Text("Optional — for on-device dictation via Parakeet TDT.\nSkip if you don't plan to use the Dictate hotkey.")
+            Text("Optional — for on-device dictation via Parakeet TDT.\nSkip if you don't plan to use Dictate or voice custom actions.")
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 380)
@@ -648,7 +648,7 @@ struct DoneStepView: View {
                     .font(.system(size: 42)).foregroundColor(.green)
             }
             Text("You're all set!").font(.title2).bold()
-            Text("Permissions granted. ClaudeCommand is restarting so they take effect.")
+            Text("Permissions granted. Command is restarting so they take effect.")
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 380)

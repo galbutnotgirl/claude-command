@@ -1,0 +1,20 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Install Guide
+    url: https://galbutnotgirl.github.io/command/install.html
+    about: Download Alpha, verify install, update, and fix common install issues.
+  - name: Troubleshooting
+    url: https://galbutnotgirl.github.io/command/troubleshooting.html
+    about: Fix permissions, shortcuts, screenshots, dictation, clipboard history, background actions, and update problems.
+  - name: Support
+    url: https://galbutnotgirl.github.io/command/support.html
+    about: What diagnostics, logs, and repro details to include before filing a bug.
+  - name: Security Policy
+    url: https://galbutnotgirl.github.io/command/security.html
+    about: Read supported versions, redaction guidance, and private reporting path.
+  - name: Private Security Report
+    url: https://github.com/galbutnotgirl/command/security/advisories/new
+    about: Report vulnerabilities, exposed secrets, private logs, or sensitive diagnostics privately.
+  - name: Latest Alpha release
+    url: https://github.com/galbutnotgirl/command/releases/latest
+    about: Download the newest Alpha build and checksum.

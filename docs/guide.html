@@ -1,0 +1,302 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Command user guide for setup, prompt-centered shortcuts, custom actions, background runs, dictation, import/export, updates, and uninstall.">
+  <title>Command User Guide</title>
+  <link rel="canonical" href="https://galbutnotgirl.github.io/command/guide.html">
+  <meta property="og:site_name" content="Command">
+  <meta property="og:title" content="Command User Guide">
+  <meta property="og:description" content="Command user guide for setup, prompt-centered shortcuts, custom actions, background runs, dictation, import/export, updates, and uninstall.">
+  <meta property="og:type" content="website">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="Command User Guide">
+  <meta name="twitter:description" content="Command user guide for setup, prompt-centered shortcuts, custom actions, background runs, dictation, import/export, updates, and uninstall.">
+  <link rel="stylesheet" href="site.css">
+</head>
+<body>
+  <a class="skip-link" href="#content">Skip to content</a>
+  <div class="doc-wrap">
+    <nav class="toc" aria-label="Documentation sections">
+      <div class="toc-title">User Guide</div>
+      <a href="index.html">Overview</a>
+      <a href="install.html">Install Guide</a>
+      <a href="uninstall.html">Uninstall</a>
+      <a href="guide.html">User Guide</a>
+      <a href="settings.html">Settings Reference</a>
+      <a href="quick-reference.html">Quick Reference</a>
+      <a href="examples.html">Examples</a>
+      <a href="faq.html">FAQ</a>
+      <a href="changelog.html">Changelog</a>
+      <a href="limitations.html">Alpha Limitations</a>
+      <a href="updates.html">Updates</a>
+      <a href="permissions.html">Permissions</a>
+      <a href="privacy.html">Privacy</a>
+      <a href="troubleshooting.html">Troubleshooting</a>
+      <a href="support.html">Support</a>
+      <a href="security.html">Security Policy</a>
+      <a href="icon-treatments.html">Icon Treatments</a>
+      <a href="background.html">Background Architecture</a>
+      <a href="release.html">Release Checklist</a>
+      <a href="#quick-start">Quick Start</a>
+      <a href="#menu-bar">Menu Bar</a>
+      <a href="#model">Prompt Model</a>
+      <a href="#compose">Built-In Compose</a>
+      <a href="#actions">Custom Actions</a>
+      <a href="#context-rules">Context Rules</a>
+      <a href="#clipboard-history">Clipboard History</a>
+      <a href="#background">Background</a>
+      <a href="#command-history">Command History</a>
+      <a href="#dictation">Dictation</a>
+      <a href="#import-export">Import / Export</a>
+      <a href="#privacy-local-files">Privacy And Local Files</a>
+      <a href="#updates">Updating</a>
+      <a href="#troubleshooting">Troubleshooting</a>
+      <a href="#uninstall">Uninstall</a>
+      <a href="USER_GUIDE.md">Markdown source</a>
+    </nav>
+    <main id="content" class="doc-main">
+      <header class="doc-hero">
+        <h1>User Guide</h1>
+        <p class="lead">Set up prompt-centered macOS shortcuts for Claude: selected text, screenshots, typed notes, voice, clipboard history, and background <code>claude -p</code> runs.</p>
+        <div class="nav">
+          <a class="button primary" href="quick-reference.html">Quick Reference</a>
+          <a class="button" href="settings.html">Settings Reference</a>
+          <a class="button" href="examples.html">Examples</a>
+        </div>
+      </header>
+
+      <section id="quick-start">
+        <h2>Quick Start</h2>
+        <ol>
+          <li>Install and launch Command. See <a href="install.html">Install Guide</a> for first-time install details.</li>
+          <li>Open menu-bar icon, then choose <strong>Settings</strong>.</li>
+          <li>In <strong>Set Up</strong>, grant Accessibility. Add Screen Recording for screenshots and Microphone for dictation or voice custom actions.</li>
+          <li>Open <strong>Shortcuts</strong> and confirm built-in Compose combinations you want.</li>
+          <li>Select text in any app and try <strong>Selected text -> Existing chat</strong> or <strong>Selected text -> New chat</strong>.</li>
+        </ol>
+        <p>For permission details and reset commands, see <a href="permissions.html">Permissions</a>.</p>
+        <table>
+          <thead><tr><th>Built-in combination</th><th>Default</th><th>Result</th></tr></thead>
+          <tbody>
+            <tr><td>Selected text -> Existing chat</td><td><kbd>F8</kbd></td><td>Send selected text into current Claude chat.</td></tr>
+            <tr><td>Selected text -> New chat</td><td><kbd>Option-F8</kbd></td><td>Open new Claude chat and wait.</td></tr>
+            <tr><td>Selected text -> New chat + auto-submit</td><td>Unbound</td><td>Open new Claude chat, submit, then restore focus.</td></tr>
+            <tr><td>Screenshot -> Existing chat</td><td><kbd>F7</kbd></td><td>Capture screenshot and add to current chat.</td></tr>
+            <tr><td>Screenshot -> New chat</td><td><kbd>Option-F7</kbd></td><td>Capture screenshot and open new chat.</td></tr>
+            <tr><td>Screenshot -> New chat + auto-submit</td><td>Unbound</td><td>Capture screenshot, open new chat, submit.</td></tr>
+            <tr><td>Clipboard History</td><td><kbd>F6</kbd></td><td>Open searchable clipboard picker.</td></tr>
+            <tr><td>Dictate -> Insert</td><td><kbd>F5</kbd></td><td>Speak and paste transcript at cursor.</td></tr>
+            <tr><td>Dictate -> Claude</td><td><kbd>Option-F5</kbd></td><td>Speak and send transcript to Claude.</td></tr>
+          </tbody>
+        </table>
+        <p>You can change prompt and trigger shortcuts from <strong>Settings -> Shortcuts</strong>. Dictation shortcuts live in <strong>Settings -> Dictation Settings</strong>.</p>
+        <h3>Shortcut capture notes</h3>
+        <table>
+          <thead><tr><th>Case</th><th>Guidance</th></tr></thead>
+          <tbody>
+            <tr><td>F5-F8</td><td>Default alpha bindings, but macOS or hardware keyboards may treat them as media/brightness keys unless standard function keys are enabled.</td></tr>
+            <tr><td>Home, End, PgUp, PgDn</td><td>Useful alternatives for press-and-hold dictation on keyboards where F-keys conflict. Bind them in <strong>Dictation Settings</strong>.</td></tr>
+            <tr><td>Press-and-hold dictation</td><td>Hold to record, release after the last word. The stop sound confirms release; the active menu-bar chip may stay visible while tail capture, transcription, cleanup, and dispatch finish.</td></tr>
+            <tr><td>Locked dictation</td><td>Double-tap to lock recording on when holding is awkward; stop from the menu or dictation control.</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="menu-bar">
+        <h2>Menu Bar</h2>
+        <p>Command lives in the macOS menu bar. The menu is intentionally short.</p>
+        <table>
+          <thead><tr><th>Menu item</th><th>Shows when</th><th>Use</th></tr></thead>
+          <tbody>
+            <tr><td>Bound prompt/action shortcuts</td><td>Trigger is enabled and has a key binding.</td><td>Run that prompt/action without opening Settings.</td></tr>
+            <tr><td>Stop Dictation / Cancel Dictation</td><td>Dictation is recording.</td><td>End or cancel the current recording from the menu.</td></tr>
+            <tr><td>Settings</td><td>Always.</td><td>Open Settings; keyboard shortcut is Command-,.</td></tr>
+            <tr><td>Quit Command</td><td>Always.</td><td>Quit the app; keyboard shortcut is Command-Q.</td></tr>
+          </tbody>
+        </table>
+        <p>Unbound combinations, disabled triggers, and auto-submit combinations with no shortcut do not appear in the menu. They stay editable in <strong>Settings -> Shortcuts</strong>.</p>
+      </section>
+
+      <section id="model">
+        <h2>Prompt Model</h2>
+        <p>Command is organized around prompts. Each prompt can have many triggers, one default delivery, one default destination, and per-trigger overrides.</p>
+        <div class="grid">
+          <div class="card"><strong>Triggers</strong><span class="muted">Selected text, screenshot, popup, voice.</span></div>
+          <div class="card"><strong>Delivery</strong><span class="muted">Existing chat, new chat, background.</span></div>
+          <div class="card"><strong>Destination</strong><span class="muted">Default, Chat, Cowork, Code.</span></div>
+          <div class="card"><strong>Inheritance</strong><span class="muted"><code>—</code> means trigger inherits prompt/action default.</span></div>
+        </div>
+      </section>
+
+      <section id="compose">
+        <h2>Built-In Compose</h2>
+        <p>Built-in Compose lives at the top of <strong>Shortcuts</strong>. It is one shared prompt with selected-text and screenshot combinations.</p>
+        <table>
+          <thead><tr><th>Combination</th><th>Input</th><th>Delivery</th><th>Default submit</th></tr></thead>
+          <tbody>
+            <tr><td>Selected text -> Existing chat</td><td>Selected text</td><td>Existing chat</td><td>No</td></tr>
+            <tr><td>Selected text -> New chat</td><td>Selected text</td><td>New chat</td><td>No</td></tr>
+            <tr><td>Selected text -> New chat + auto-submit</td><td>Selected text</td><td>New chat</td><td>Yes</td></tr>
+            <tr><td>Screenshot -> Existing chat</td><td>Screenshot</td><td>Existing chat</td><td>No</td></tr>
+            <tr><td>Screenshot -> New chat</td><td>Screenshot</td><td>New chat</td><td>No</td></tr>
+            <tr><td>Screenshot -> New chat + auto-submit</td><td>Screenshot</td><td>New chat</td><td>Yes</td></tr>
+          </tbody>
+        </table>
+        <p>Click the pencil icon to edit Compose. Prompt text, default auto-submit, and per-combination auto-submit overrides live in that editor.</p>
+      </section>
+
+      <section id="actions">
+        <h2>Custom Actions</h2>
+        <p>Use Custom Actions when one prompt needs its own triggers, delivery, destination, or background behavior.</p>
+        <ol>
+          <li>Open <strong>Settings -> Shortcuts</strong>.</li>
+          <li>Under <strong>Custom Actions</strong>, click <strong>Add</strong>.</li>
+          <li>Name action, pick delivery and destination, write prompt, then save.</li>
+          <li>Add one or more triggers under action row.</li>
+        </ol>
+        <pre><code>Summarize this for a follow-up message.
+
+Return:
+- Key points
+- Open questions
+- Suggested next step
+
+{selection}</code></pre>
+      </section>
+
+      <section id="background">
+        <h2>Background Actions</h2>
+        <p>Background delivery runs without opening Claude. Command renders prompt and sends it to <code>claude -p</code>. Runs appear under <strong>Command History -> Background</strong> with status, age, logs, retry, mark-failed, retention, and parsed result.</p>
+        <div class="callout">
+          If final non-empty output line matches <code>KEY=value</code>, Command shows it in notification and Command History.
+        </div>
+        <p>Legacy right-click Services are optional for source installs. If installed, <strong>Claude - To-Do</strong> is a background action: selected text wins when highlighted; otherwise Safari, Chrome, Brave, Chromium, and Arc send the current tab URL. Confirm the captured source, result, and log under <strong>Command History -> Background</strong>.</p>
+        <p>Only the last non-empty stdout line is parsed. The whole trimmed line must be <code>KEY=value</code>; prose containing <code>TASK_ID=abc123</code> does not count. Common contracts are <code>TASK_ID=&lt;id&gt;</code> and <code>ERROR=&lt;reason&gt;</code>. Result text appears in the completion notification, Command History row, and diagnostic summary. Command does not run follow-up actions from that value yet.</p>
+        <table>
+          <thead><tr><th>Status</th><th>Meaning</th><th>What to do</th></tr></thead>
+          <tbody>
+            <tr><td>Running</td><td>Local <code>claude -p</code> process has started.</td><td>Wait, or use Command History if it becomes stalled.</td></tr>
+            <tr><td>Succeeded</td><td>CLI exited with code 0.</td><td>Review result and log.</td></tr>
+            <tr><td>Failed</td><td>CLI failed, command was missing, or user marked the run failed.</td><td>Open log, fix prompt/settings, then Retry.</td></tr>
+            <tr><td>Stalled</td><td>Record stayed running after process likely died.</td><td>Mark failed, then Retry if the prompt is still valid.</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="context-rules">
+        <h2>Context Rules</h2>
+        <p>Context rules add source-aware instructions to prompts. Open <strong>Settings -> Context</strong> when Claude should know where captured content came from.</p>
+        <table>
+          <thead><tr><th>Match type</th><th>Example</th><th>Use</th></tr></thead>
+          <tbody>
+            <tr><td>App name</td><td>Slack</td><td>Add app-specific instruction.</td></tr>
+            <tr><td>Bundle ID</td><td>com.apple.mail</td><td>Target one macOS app exactly.</td></tr>
+            <tr><td>URL host</td><td>docs.google.com</td><td>Add site-specific guidance.</td></tr>
+            <tr><td>Path prefix</td><td>/document/</td><td>Split one host into several rules.</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="clipboard-history">
+        <h2>Clipboard History</h2>
+        <p>Open <strong>Settings -> Clipboard History</strong> to enable local clipboard history, set the shortcut, choose retention, pick a theme, or clear recent clips.</p>
+        <table>
+          <thead><tr><th>Key</th><th>Action</th></tr></thead>
+          <tbody>
+            <tr><td>Type</td><td>Search clips.</td></tr>
+            <tr><td>Up/Down</td><td>Move selection.</td></tr>
+            <tr><td>Return</td><td>Paste selected clip.</td></tr>
+            <tr><td>Command-Return</td><td>Paste and keep picker open.</td></tr>
+            <tr><td>Esc</td><td>Close picker.</td></tr>
+          </tbody>
+        </table>
+        <p>Clipboard history stays local. Secret-looking copies and copies from known password apps are skipped.</p>
+      </section>
+
+      <section id="dictation">
+        <h2>Dictation</h2>
+        <p>Dictation is local and on-device through Parakeet TDT. Built-in Dictate shortcuts live in <strong>Dictation Settings</strong>. Voice custom actions live in <strong>Shortcuts</strong>.</p>
+        <p>Use <strong>Dictation Settings</strong> for Dictate -&gt; Insert and Dictate -&gt; Claude shortcuts. Use <strong>Shortcuts</strong> for voice triggers tied to prompt actions. If final words are missing, compare <strong>Dictation History</strong> raw text, processed text, and the sent command before filing a bug.</p>
+        <table>
+          <thead><tr><th>Tab</th><th>Purpose</th></tr></thead>
+          <tbody>
+            <tr><td>History</td><td>Raw and processed dictation records.</td></tr>
+            <tr><td>Corrections</td><td>Misheard -> correct replacement rules.</td></tr>
+            <tr><td>Vocabulary</td><td>Proper nouns, product names, filler words.</td></tr>
+            <tr><td>Dictation Settings</td><td>Model, mic access, shortcuts, sounds.</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="command-history">
+        <h2>Command History</h2>
+        <p>Open <strong>Settings -> Command History</strong> to review recent sends and background runs. Retention defaults to seven days.</p>
+        <table>
+          <thead><tr><th>Section</th><th>Includes</th></tr></thead>
+          <tbody>
+            <tr><td>Foreground</td><td>Existing chat and New chat sends.</td></tr>
+            <tr><td>Background</td><td><code>claude -p</code> runs, logs, retry, and parsed result.</td></tr>
+          </tbody>
+        </table>
+        <p>Use filters for All, Running, Succeeded, and Failed.</p>
+      </section>
+
+      <section id="import-export">
+        <h2>Import And Export</h2>
+        <p>Open <strong>Settings -> About -> Import / Export</strong>. Export can include shortcuts, prompt settings, context rules, dictation vocabulary, background settings, and app preferences. Import previews sections and lets you keep, merge, or overwrite each section.</p>
+      </section>
+
+      <section id="privacy-local-files">
+        <h2>Privacy And Local Files</h2>
+        <p>Command stores its own settings and history on this Mac. Background actions are different from local clipboard and dictation history: they run the local Claude CLI, so network access, file access, and tool use depend on your Claude CLI setup.</p>
+        <table>
+          <thead><tr><th>Area</th><th>Location</th></tr></thead>
+          <tbody>
+            <tr><td>Shortcuts and prompt text</td><td><code>~/.claude/state/</code></td></tr>
+            <tr><td>Clipboard history</td><td><code>~/.claude/state/cliphistory/</code></td></tr>
+            <tr><td>Dictation history and vocabulary</td><td><code>~/Library/Application Support/DictationLab/</code></td></tr>
+            <tr><td>Command history</td><td><code>~/Library/Application Support/claude-command/command-history/</code></td></tr>
+            <tr><td>Background runs</td><td><code>~/Library/Application Support/claude-command/submissions/</code> and <code>logs/</code></td></tr>
+          </tbody>
+        </table>
+        <p>Review background prompts and CLI extra args before sharing exports. See <a href="privacy.html">Privacy</a> for more detail.</p>
+      </section>
+
+      <section id="updates">
+        <h2>Updating</h2>
+        <p>Open <strong>Settings -> About</strong> to pick Alpha or Beta, check for updates, install available releases, and export/import settings. Stable is visible but unavailable until the first stable release exists. See <a href="updates.html">Updates</a> for manual alpha installs, backups, failed updates, and rollback.</p>
+      </section>
+
+      <section id="troubleshooting">
+        <h2>Troubleshooting</h2>
+        <table>
+          <thead><tr><th>Problem</th><th>Fix</th></tr></thead>
+          <tbody>
+            <tr><td>Hotkeys do nothing</td><td>Grant Accessibility, then restart Command.</td></tr>
+            <tr><td>F5-F8 do system functions</td><td>Enable standard function keys, rebind prompt shortcuts in Shortcuts, or rebind dictation shortcuts in Dictation Settings.</td></tr>
+            <tr><td>Screenshot fails</td><td>Grant Screen Recording, then restart Command.</td></tr>
+            <tr><td>Dictation fails</td><td>Grant Microphone; download model in Dictation Settings.</td></tr>
+            <tr><td>Background run fails</td><td>Open Command History -> Background and inspect log.</td></tr>
+          </tbody>
+        </table>
+        <p class="source-link">Need every symptom and log path? Read <a href="troubleshooting.html">Troubleshooting</a>. Need to file a bug, request a feature, or ask for help? Read <a href="support.html">Support</a>. For vulnerabilities, exposed secrets, private logs, or sensitive diagnostics, read <a href="security.html">Security Policy</a>.</p>
+      </section>
+
+      <section id="uninstall">
+        <h2>Uninstall</h2>
+        <p>For full removal steps, local data choices, and verification commands, see <a href="uninstall.html">Uninstall</a>.</p>
+        <p>For a source checkout that installed Quick Actions and a LaunchAgent:</p>
+        <pre><code>./uninstall-quick-action.sh
+launchctl bootout "gui/$(id -u)/com.claudecommand" 2&gt;/dev/null || true
+rm -f ~/Library/LaunchAgents/com.claudecommand.plist</code></pre>
+        <p>Older alpha builds used a separate clipboard watcher LaunchAgent. Remove that legacy agent too if it exists.</p>
+        <pre><code>launchctl bootout "gui/$(id -u)/com.claudecommand.clipwatch" 2&gt;/dev/null || true
+rm -f ~/Library/LaunchAgents/com.claudecommand.clipwatch.plist</code></pre>
+        <p>Then remove <code>~/Applications/Command.app</code>.</p>
+      </section>
+    </main>
+  </div>
+</body>
+</html>

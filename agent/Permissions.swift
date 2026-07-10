@@ -1,5 +1,5 @@
 // Permissions.swift — live checks for the Set Up tab. Because these run *inside*
-// CommandAgent (the app that actually holds the grants), the results are real:
+// ClaudeCommand (the app that actually holds the grants), the results are real:
 // AXIsProcessTrusted / CGPreflightScreenCaptureAccess report this process's own
 // TCC status, which a plain shell script can't do accurately.
 
@@ -53,8 +53,7 @@ func runShell(_ launchPath: String, _ args: [String]) -> (out: String, code: Int
     return (String(data: data, encoding: .utf8) ?? "", p.terminationStatus)
 }
 
-let AGENT_LABEL    = "com.claudecommand.agent"
-let CLIPWATCH_LABEL = "com.claudecommand.clipwatch"
+let AGENT_LABEL = "com.claudecommand"
 
 func fileExists(_ p: String) -> Bool { FileManager.default.fileExists(atPath: p) }
 func home(_ rel: String) -> String { (NSHomeDirectory() as NSString).appendingPathComponent(rel) }
@@ -137,9 +136,68 @@ func serviceLoaded(_ label: String) -> Bool {
     runShell("/bin/launchctl", ["print", "gui/\(getuid())/\(label)"]).code == 0
 }
 
-// ---- launch at login (manage the existing LaunchAgent via enable/disable) ---
-// enable/disable (vs bootout) so toggling never kills the currently-running agent.
+// ---- launch at login ---------------------------------------------------------
+// Binary installs are just the .app bundle. Create the LaunchAgent from inside
+// the app when the user turns on Launch at login, so downloaded installs do not
+// need Terminal scripts for normal startup behavior.
+private func launchAgentPlistPath() -> String {
+    home("Library/LaunchAgents/\(AGENT_LABEL).plist")
+}
+
+private func launchAgentProgramPath() -> String {
+    Bundle.main.executablePath ?? home("Applications/Command.app/Contents/MacOS/Command")
+}
+
+@discardableResult
+func ensureLaunchAgentInstalled() -> Bool {
+    let plist = launchAgentPlistPath()
+    let program = launchAgentProgramPath()
+    guard FileManager.default.fileExists(atPath: program) else { return false }
+    let plistDir = (plist as NSString).deletingLastPathComponent
+    let logDir = home(".claude/logs")
+    let stateDir = home(".claude/state")
+    try? FileManager.default.createDirectory(atPath: plistDir, withIntermediateDirectories: true)
+    try? FileManager.default.createDirectory(atPath: logDir, withIntermediateDirectories: true)
+    try? FileManager.default.createDirectory(atPath: stateDir, withIntermediateDirectories: true)
+    let escapedProgram = program
+        .replacingOccurrences(of: "&", with: "&amp;")
+        .replacingOccurrences(of: "<", with: "&lt;")
+        .replacingOccurrences(of: ">", with: "&gt;")
+    let escapedErr = home(".claude/logs/command-agent.err")
+        .replacingOccurrences(of: "&", with: "&amp;")
+        .replacingOccurrences(of: "<", with: "&lt;")
+        .replacingOccurrences(of: ">", with: "&gt;")
+    let escapedOut = home(".claude/logs/command-agent.out")
+        .replacingOccurrences(of: "&", with: "&amp;")
+        .replacingOccurrences(of: "<", with: "&lt;")
+        .replacingOccurrences(of: ">", with: "&gt;")
+    let xml = """
+    <?xml version="1.0" encoding="UTF-8"?>
+    <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+    <plist version="1.0">
+    <dict>
+        <key>Label</key><string>\(AGENT_LABEL)</string>
+        <key>Program</key><string>\(escapedProgram)</string>
+        <key>RunAtLoad</key><true/>
+        <key>KeepAlive</key>
+        <dict><key>SuccessfulExit</key><false/></dict>
+        <key>ProcessType</key><string>Interactive</string>
+        <key>StandardErrorPath</key><string>\(escapedErr)</string>
+        <key>StandardOutPath</key><string>\(escapedOut)</string>
+    </dict>
+    </plist>
+    """
+    do {
+        try xml.write(toFile: plist, atomically: true, encoding: .utf8)
+        _ = runShell("/bin/launchctl", ["bootstrap", "gui/\(getuid())", plist])
+        return true
+    } catch {
+        return false
+    }
+}
+
 func launchAtLoginEnabled() -> Bool {
+    guard FileManager.default.fileExists(atPath: launchAgentPlistPath()) else { return false }
     let r = runShell("/bin/launchctl", ["print-disabled", "gui/\(getuid())"])
     for line in r.out.split(separator: "\n") where line.contains(AGENT_LABEL) {
         let l = line.lowercased()
@@ -148,14 +206,17 @@ func launchAtLoginEnabled() -> Bool {
     return true   // not listed as disabled → will start at login
 }
 func setLaunchAtLogin(_ on: Bool) {
-    runShell("/bin/launchctl", [on ? "enable" : "disable", "gui/\(getuid())/\(AGENT_LABEL)"])
+    if on, !FileManager.default.fileExists(atPath: launchAgentPlistPath()) {
+        guard ensureLaunchAgentInstalled() else { return }
+    }
+    _ = runShell("/bin/launchctl", [on ? "enable" : "disable", "gui/\(getuid())/\(AGENT_LABEL)"])
 }
 
 // ---- check groups for the Set Up tab ----------------------------------------
 func permissionChecks() -> [StatusCheck] {
     [
         StatusCheck(title: "Accessibility",
-                    detail: "Lets ClaudeCommand fire hotkeys and type ⌘C / ⌘V / Return. The one essential grant.",
+                    detail: "Lets Command fire hotkeys and type ⌘C / ⌘V / Return. The one essential grant.",
                     state: axTrusted() ? .ok : .missing),
         StatusCheck(title: "Screen Recording",
                     detail: "Required for the screenshot actions (macOS screencapture).",
@@ -181,18 +242,20 @@ func micPermissionDenied() -> Bool {
 
 func componentChecks() -> [StatusCheck] {
     [
-        StatusCheck(title: "Agent running",
-                    detail: "Background socket is up at ~/.claude/state/command-agent.sock.",
+        StatusCheck(title: "Background service",
+                    detail: "Local app dispatch socket is up at ~/.claude/state/command-agent.sock.",
                     state: fileExists(home(".claude/state/command-agent.sock")) ? .ok : .missing),
         StatusCheck(title: "Hotkeys configured",
                     detail: "command-hotkeys.json present. Edit bindings in the Shortcuts tab.",
                     state: fileExists(home(".claude/state/command-hotkeys.json")) ? .ok : .missing),
         StatusCheck(title: "Right-click actions",
-                    detail: "Quick Actions installed in ~/Library/Services (run ./install-quick-action.sh).",
-                    state: fileExists(home("Library/Services/Claude - Add.workflow")) ? .ok : .missing),
-        StatusCheck(title: "Clipboard daemon",
+                    detail: fileExists(home("Library/Services/Claude - Add.workflow"))
+                        ? "Optional Quick Actions installed in ~/Library/Services."
+                        : "Optional source-install Services are not installed. Global shortcuts do not need them.",
+                    state: fileExists(home("Library/Services/Claude - Add.workflow")) ? .ok : .unknown),
+        StatusCheck(title: "Clipboard History",
                     detail: UserDefaults.standard.bool(forKey: "cliphistoryEnabled")
-                        ? "Clipboard watcher running (bundled, starts with ClaudeCommand)."
+                        ? "Clipboard History running (bundled, starts with Command)."
                         : "Clipboard history is off — enable it in the Clipboard History tab.",
                     state: !UserDefaults.standard.bool(forKey: "cliphistoryEnabled") ? .unknown
                          : runShell("/usr/bin/pgrep", ["-f", "clipwatch.py"]).code == 0 ? .ok : .missing),

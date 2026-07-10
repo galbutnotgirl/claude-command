@@ -85,6 +85,40 @@ final class HandoffModelsTests: XCTestCase {
         XCTAssertFalse(isHandoffPruneEligible(status: "succeeded", createdAt: recent, cutoff: cutoff))
     }
 
+    func testForegroundCommandOlderThanCutoffIsPruneEligible() {
+        let cutoff = Date(timeIntervalSince1970: 10_000)
+        let old = Date(timeIntervalSince1970: 5_000)
+        XCTAssertTrue(isForegroundCommandPruneEligible(createdAt: old, cutoff: cutoff))
+    }
+
+    func testForegroundCommandNewerThanCutoffIsNotPruneEligible() {
+        let cutoff = Date(timeIntervalSince1970: 10_000)
+        let recent = Date(timeIntervalSince1970: 15_000)
+        XCTAssertFalse(isForegroundCommandPruneEligible(createdAt: recent, cutoff: cutoff))
+    }
+
+    func testForegroundCommandAgeUsesSameBuckets() {
+        let now = Date(timeIntervalSince1970: 100_000)
+        XCTAssertEqual(foregroundCommandAgeString(createdAt: now.addingTimeInterval(-7200), now: now), "2h ago")
+    }
+
+    func testForegroundCommandRecordCarriesPromptAndError() {
+        let record = ForegroundCommandRecord(
+            id: "abc",
+            createdAt: Date(timeIntervalSince1970: 1_000),
+            action: "custom",
+            source: "com.example.App",
+            destination: "code",
+            status: "failed",
+            prompt: "Fix this",
+            error: "launch failed"
+        )
+        XCTAssertEqual(record.id, "abc")
+        XCTAssertEqual(record.destination, "code")
+        XCTAssertEqual(record.prompt, "Fix this")
+        XCTAssertEqual(record.error, "launch failed")
+    }
+
     // ---- renderCustomActionHandoffPrompt ---------------------------------------
 
     // renderCustomActionHandoffPrompt only reads ca.prompt/ca.skill — the

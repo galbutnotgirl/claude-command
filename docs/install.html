@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Command install guide for alpha downloads, first launch, macOS permissions, setup checks, and source installs.">
+  <title>Command Install Guide</title>
+  <link rel="canonical" href="https://galbutnotgirl.github.io/command/install.html">
+  <meta property="og:site_name" content="Command">
+  <meta property="og:title" content="Command Install Guide">
+  <meta property="og:description" content="Command install guide for alpha downloads, first launch, macOS permissions, setup checks, and source installs.">
+  <meta property="og:type" content="website">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="Command Install Guide">
+  <meta name="twitter:description" content="Command install guide for alpha downloads, first launch, macOS permissions, setup checks, and source installs.">
+  <link rel="stylesheet" href="site.css">
+</head>
+<body>
+  <a class="skip-link" href="#content">Skip to content</a>
+  <div class="doc-wrap">
+    <nav class="toc" aria-label="Documentation sections">
+      <div class="toc-title">Install Guide</div>
+      <a href="index.html">Overview</a>
+      <a href="install.html">Install Guide</a>
+      <a href="uninstall.html">Uninstall</a>
+      <a href="guide.html">User Guide</a>
+      <a href="settings.html">Settings Reference</a>
+      <a href="quick-reference.html">Quick Reference</a>
+      <a href="examples.html">Examples</a>
+      <a href="faq.html">FAQ</a>
+      <a href="changelog.html">Changelog</a>
+      <a href="limitations.html">Alpha Limitations</a>
+      <a href="updates.html">Updates</a>
+      <a href="permissions.html">Permissions</a>
+      <a href="privacy.html">Privacy</a>
+      <a href="troubleshooting.html">Troubleshooting</a>
+      <a href="support.html">Support</a>
+      <a href="security.html">Security Policy</a>
+      <a href="icon-treatments.html">Icon Treatments</a>
+      <a href="background.html">Background Architecture</a>
+      <a href="release.html">Release Checklist</a>
+      <a href="#download">Download Alpha</a>
+      <a href="#existing-alpha">Existing Alpha Installs</a>
+      <a href="#first-run">First Run</a>
+      <a href="#verify">Verify Install</a>
+      <a href="#help">Help After Install</a>
+      <a href="#source">Install From Source</a>
+      <a href="#next">Next</a>
+      <a href="INSTALL.md">Markdown source</a>
+    </nav>
+    <main id="content" class="doc-main">
+      <header class="doc-hero">
+        <h1>Install Guide</h1>
+        <p class="lead">First-time alpha install, macOS permissions, setup checks, and source install.</p>
+      </header>
+
+      <section id="download">
+        <h2>Download Alpha</h2>
+        <p>Command requires macOS 14 or later.</p>
+        <ol>
+          <li>Open the <a href="https://github.com/galbutnotgirl/command/releases/latest">latest GitHub Release</a>.</li>
+          <li>Download the latest <code>Command-*.zip</code>.</li>
+          <li>Optional: download the matching <code>.zip.sha256</code> file into the same folder as the zip and verify the exact pair with <code>cd ~/Downloads</code>, then <code>shasum -a 256 -c Command-*.zip.sha256</code>.</li>
+          <li>Unzip it.</li>
+          <li>Move <code>Command.app</code> to <code>~/Applications</code>.</li>
+          <li>Launch Command.</li>
+        </ol>
+        <p>If macOS blocks first launch, open <strong>System Settings -> Privacy &amp; Security</strong> and allow Command. Then launch again.</p>
+        <p>Binary installs do not require Terminal scripts. Global shortcuts, screenshots, clipboard history, and dictation run from the app. Optional right-click Services are only for source installs that run <code>./install-quick-action.sh</code>.</p>
+      </section>
+
+      <section id="existing-alpha">
+        <h2>Existing Alpha Installs</h2>
+        <p>Command was previously named ClaudeCommand. New installers use <code>Command.app</code> and remove the old <code>~/Applications/ClaudeCommand.app</code> bundle during source installs. The bundle identifier and local support paths stay compatible (<code>com.claudecommand</code> and <code>~/Library/Application Support/claude-command/</code>) so macOS permissions, shortcuts, history, and exports keep working across the rename.</p>
+        <p>For permission details, optional items, and reset commands, see <a href="permissions.html">Permissions</a>.</p>
+      </section>
+
+      <section id="first-run">
+        <h2>First Run</h2>
+        <p>Open the menu-bar icon, then choose <strong>Settings -> Set Up</strong>.</p>
+        <table>
+          <thead><tr><th>Permission</th><th>Needed for</th></tr></thead>
+          <tbody>
+            <tr><td>Accessibility</td><td>Global shortcuts, copy, paste, submit, and focus restore.</td></tr>
+            <tr><td>Screen Recording</td><td>Screenshot triggers.</td></tr>
+            <tr><td>Microphone</td><td>Dictation and voice custom actions.</td></tr>
+          </tbody>
+        </table>
+        <p>After granting permissions, restart Command if a required Set Up item still shows red.</p>
+      </section>
+
+      <section id="verify">
+        <h2>Verify Install</h2>
+        <p>In <strong>Settings -> Set Up</strong>, confirm Accessibility, screenshot permission if needed, Microphone/model status if needed, and Clipboard History if enabled.</p>
+        <table>
+          <thead><tr><th>Test</th><th>Expected</th></tr></thead>
+          <tbody>
+            <tr><td>Select text and press <kbd>F8</kbd></td><td>Selected text sends to existing Claude chat.</td></tr>
+            <tr><td>Press <kbd>Option-F8</kbd></td><td>New Claude chat opens with captured text.</td></tr>
+            <tr><td>Press <kbd>F6</kbd></td><td>Clipboard History picker opens.</td></tr>
+          </tbody>
+        </table>
+        <p>If F-keys control brightness, media, or dictation instead of Command, enable standard function keys in macOS Keyboard settings, rebind prompt shortcuts in <strong>Settings -> Shortcuts</strong>, or rebind dictation shortcuts in <strong>Settings -> Dictation Settings</strong>.</p>
+      </section>
+
+      <section id="help">
+        <h2>Help After Install</h2>
+        <p>Open <strong>Settings -> About</strong>.</p>
+        <table>
+          <thead><tr><th>Button</th><th>Use</th></tr></thead>
+          <tbody>
+            <tr><td>Help &amp; Documentation</td><td>Repository link plus bundled docs buttons.</td></tr>
+            <tr><td>View on GitHub</td><td>Opens the project repository.</td></tr>
+            <tr><td>Documentation</td><td>Opens bundled docs first, GitHub Pages fallback if docs are missing.</td></tr>
+            <tr><td>User Guide / Install Guide / Uninstall</td><td>End-to-end setup, first install, and removal.</td></tr>
+            <tr><td>Settings Reference</td><td>Tab-by-tab Settings map.</td></tr>
+            <tr><td>Quick Reference</td><td>Shortcuts, variables, and common fixes.</td></tr>
+            <tr><td>Troubleshooting</td><td>Symptom-first fixes and log paths.</td></tr>
+            <tr><td>Permissions</td><td>Permission meanings, optional items, and reset commands.</td></tr>
+            <tr><td>Support</td><td>What to include in bug reports, feature requests, and help requests.</td></tr>
+            <tr><td>Security Policy</td><td>Private reporting path, supported alpha versions, redaction guidance, and privacy links.</td></tr>
+            <tr><td>Examples / FAQ / Updates / Privacy / Changelog / Alpha Limitations</td><td>Examples, common questions, update flow, local data, release notes, and alpha expectations.</td></tr>
+            <tr><td>Icon Treatments / Background Architecture / Release Checklist</td><td>Active-state visuals, background-run internals, and maintainer ship gates.</td></tr>
+            <tr><td>Support &amp; Reporting</td><td>Diagnostics, public bug/feature routes, and private security reporting.</td></tr>
+            <tr><td>Copy Diagnostic Info</td><td>App path, bundle ID, version, minimum macOS, update channel/check status, shortcut binding summary, Set Up status, log tails, recent command summaries, Clipboard History errors, and recent dictation previews.</td></tr>
+            <tr><td>Report a Bug</td><td>Prefilled GitHub issue template.</td></tr>
+            <tr><td>Request Feature</td><td>Prefilled GitHub feature request template.</td></tr>
+            <tr><td>Private Security Report</td><td>GitHub private advisory for vulnerabilities, exposed secrets, private logs, or sensitive diagnostics.</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="source">
+        <h2>Install From Source</h2>
+        <p>Source install is mainly for local development or testing unreleased changes.</p>
+        <p>It requires macOS 14 or later plus Xcode command-line tools.</p>
+        <pre><code>git clone https://github.com/galbutnotgirl/command
+cd command
+./build-agent.sh
+./install-agent.sh</code></pre>
+        <p>For local development, use:</p>
+        <pre><code>./script/build_and_run.sh</code></pre>
+        <p>That script stops any running app, builds <code>Command.app</code>, launches the fresh local bundle, pings the app dispatch socket, and checks bundled docs. Use <code>./script/build_and_run.sh --verify</code> to confirm runtime readiness.</p>
+        <p>Optional, if you want the legacy SendHelper keystroke fallback for source testing:</p>
+        <pre><code>./build-helper.sh</code></pre>
+        <p>Optional, if you want legacy right-click Services in macOS Services menus:</p>
+        <pre><code>./install-quick-action.sh
+./set-hotkeys.sh</code></pre>
+        <p>For downloaded app installs, use <strong>Settings -> About -> Copy Diagnostic Info</strong> and review it before sharing. From a repo checkout, maintainers can also run:</p>
+        <pre><code>./doctor.sh</code></pre>
+      </section>
+      <section id="next">
+        <h2>Next</h2>
+        <div class="grid">
+          <a class="card" href="guide.html"><strong>User Guide</strong><span class="muted">Prompt setup and custom actions.</span></a>
+          <a class="card" href="quick-reference.html"><strong>Quick Reference</strong><span class="muted">Shortcuts and common fixes.</span></a>
+          <a class="card" href="permissions.html"><strong>Permissions</strong><span class="muted">macOS permission details and reset commands.</span></a>
+          <a class="card" href="troubleshooting.html"><strong>Troubleshooting</strong><span class="muted">Fix permission, shortcut, screenshot, or dictation issues.</span></a>
+        </div>
+      </section>
+    </main>
+  </div>
+</body>
+</html>

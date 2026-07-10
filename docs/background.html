@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Command maintainer overview for background actions, local claude -p runs, settings, records, and result handling.">
+  <title>Command Background Architecture</title>
+  <link rel="canonical" href="https://galbutnotgirl.github.io/command/background.html">
+  <meta property="og:site_name" content="Command">
+  <meta property="og:title" content="Command Background Architecture">
+  <meta property="og:description" content="Command maintainer overview for background actions, local claude -p runs, settings, records, and result handling.">
+  <meta property="og:type" content="website">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="Command Background Architecture">
+  <meta name="twitter:description" content="Command maintainer overview for background actions, local claude -p runs, settings, records, and result handling.">
+  <link rel="stylesheet" href="site.css">
+</head>
+<body>
+  <a class="skip-link" href="#content">Skip to content</a>
+  <div class="doc-wrap">
+    <nav class="toc" aria-label="Documentation sections">
+      <div class="toc-title">Background Architecture</div>
+      <a href="index.html">Overview</a>
+      <a href="install.html">Install Guide</a>
+      <a href="uninstall.html">Uninstall</a>
+      <a href="guide.html">User Guide</a>
+      <a href="settings.html">Settings Reference</a>
+      <a href="quick-reference.html">Quick Reference</a>
+      <a href="examples.html">Examples</a>
+      <a href="faq.html">FAQ</a>
+      <a href="changelog.html">Changelog</a>
+      <a href="limitations.html">Alpha Limitations</a>
+      <a href="updates.html">Updates</a>
+      <a href="permissions.html">Permissions</a>
+      <a href="privacy.html">Privacy</a>
+      <a href="troubleshooting.html">Troubleshooting</a>
+      <a href="support.html">Support</a>
+      <a href="security.html">Security Policy</a>
+      <a href="icon-treatments.html">Icon Treatments</a>
+      <a href="background.html">Background Architecture</a>
+      <a href="release.html">Release Checklist</a>
+      <a href="#stack-decision">Stack decision</a>
+      <a href="#flow">Flow</a>
+      <a href="#new-pieces">New pieces</a>
+      <a href="#data-layout-contract">Data layout</a>
+      <a href="#source-mapping">Source mapping</a>
+      <a href="#using-it">Using it</a>
+      <a href="#settings">Settings</a>
+      <a href="#records">Records</a>
+      <a href="#native-ui">Native UI</a>
+      <a href="#result">Result contract</a>
+      <a href="BACKGROUND_TRIGGER_INTEGRATION.md">Markdown source</a>
+    </nav>
+    <main id="content" class="doc-main">
+      <header class="doc-hero">
+        <h1>Background Architecture</h1>
+        <p class="lead">Maintainer-oriented overview of how custom actions route captured content through local <code>claude -p</code> runs.</p>
+      </header>
+      <section id="stack-decision">
+        <h2>Stack decision</h2>
+        <p>Command is a native macOS menu-bar app, not Electron. The app keeps its native capture layer for hotkeys, selected text, screenshots, popup text, voice, clipboard attribution, and settings, then reuses the Electron-free Node core from the imported capture-and-handoff app.</p>
+        <table>
+          <thead><tr><th>Imported piece</th><th>Native equivalent</th></tr></thead>
+          <tbody>
+            <tr><td><code>src/main.js</code> tray and global shortcuts</td><td><code>agent/main.swift</code> Carbon hotkeys and menu bar.</td></tr>
+            <tr><td><code>src/capture/*</code> capture helpers</td><td><code>send-to-claude.sh</code> and native capture stages.</td></tr>
+            <tr><td>Electron settings and text-entry UI</td><td>Native Background Settings sheet and popup trigger panel.</td></tr>
+          </tbody>
+        </table>
+        <p>Kept core modules include <code>settings</code>, <code>prompt</code>, <code>runner</code>, <code>submit</code>, <code>submissions</code>, and <code>paths</code>. The preserved vendor contract lives at <code>vendor/claude-command-capture/docs/HANDOFF.md</code>.</p>
+      </section>
+      <section id="flow">
+        <h2>Architecture</h2>
+        <ol>
+          <li>Global hotkey fires for custom action trigger.</li>
+          <li>Native agent captures selected text, screenshot, popup text, or voice transcript.</li>
+          <li>Action prompt renders with <code>{selection}</code>, <code>{file}</code>, context, and source.</li>
+          <li>Vendored Node core submits rendered prompt to configured Claude CLI.</li>
+          <li>Submission record and logs are written locally.</li>
+        </ol>
+      </section>
+      <section id="new-pieces">
+        <h2>New pieces</h2>
+        <table>
+          <thead><tr><th>Piece</th><th>Role</th></tr></thead>
+          <tbody>
+            <tr><td><code>submit-cli.js</code></td><td>Headless entry point for first submission and retry of already-rendered prompts.</td></tr>
+            <tr><td><code>ClaudeCommandCore/ActionModels.swift</code></td><td>Shared custom action body plus many trigger rows with per-trigger overrides.</td></tr>
+            <tr><td><code>agent/Handoff.swift</code></td><td>Popup trigger panel, background prompt rendering, submit path, retry path.</td></tr>
+            <tr><td><code>agent/DictationOverlay.swift</code></td><td>Routes finished voice transcripts into voice custom actions.</td></tr>
+            <tr><td><code>build-agent.sh</code></td><td>Bundles capture scripts and vendored core into app resources.</td></tr>
+          </tbody>
+        </table>
+      </section>
+      <section id="data-layout-contract">
+        <h2>Data layout &amp; contract</h2>
+        <p>Base directory is <code>~/Library/Application Support/claude-command</code>. Override with <code>CLAUDE_CAPTURE_HOME</code>.</p>
+        <p><code>settings.json</code> keeps imported schema fields such as <code>skill</code>, compatibility prompt fields, <code>cli.command</code>, <code>cli.baseArgs</code>, <code>cli.extraArgs</code>, <code>cli.cwd</code>, and notifications. Electron <code>hotkeys</code> remain in the schema for compatibility but native hotkeys live in <code>~/.claude/state/command-hotkeys.json</code>.</p>
+      </section>
+      <section id="source-mapping">
+        <h2>Source mapping nuance</h2>
+        <p>Selected-text runs record <code>source: "selection"</code> even when fresh clipboard fallback supplies the text. Screenshots record <code>source: "screenshot"</code>. The imported core still accepts <code>text</code> and <code>clipboard</code> for other callers.</p>
+      </section>
+      <section id="using-it">
+        <h2>Using it</h2>
+        <p>Create a custom action in <strong>Settings -> Shortcuts -> Custom Actions</strong>, choose <strong>Background</strong> delivery, optionally set a skill, save, then add one or more triggers: Selected text, Screenshot, Popup, or Voice.</p>
+        <p>Shared CLI config lives in <strong>Settings -> Command History -> Background Settings</strong> and writes <code>~/Library/Application Support/claude-command/settings.json</code>.</p>
+      </section>
+      <section id="settings">
+        <h2>Settings</h2>
+        <p>Shared CLI settings live in <strong>Settings -> Command History -> Background Settings</strong>. Per-action behavior lives in <strong>Settings -> Shortcuts</strong>.</p>
+        <table>
+          <thead><tr><th>Surface</th><th>Owns</th></tr></thead>
+          <tbody>
+            <tr><td>Shortcuts</td><td>Action prompt, triggers, delivery, destination, skill.</td></tr>
+            <tr><td>Background Settings</td><td>CLI command, working directory, extra args, notifications.</td></tr>
+            <tr><td>Command History</td><td>Run records, retry, mark failed, retention.</td></tr>
+          </tbody>
+        </table>
+      </section>
+      <section id="records">
+        <h2>Records</h2>
+        <p>Submission records live under <code>~/Library/Application Support/claude-command/submissions/</code>. Command history retention defaults to 7 days.</p>
+      </section>
+      <section id="native-ui">
+        <h2>Native UI (agent/Handoff.swift + MenuBar.swift)</h2>
+        <ul>
+          <li><strong>Background Settings sheet</strong>: shared CLI command, working directory, extra args, and notifications.</li>
+          <li><strong>CustomActionTextEntryPanel</strong>: popup trigger panel; Command-Return submits, Esc closes.</li>
+          <li><strong>Command History tab</strong>: foreground commands plus background submissions, filters, retry, retention, and mark failed.</li>
+        </ul>
+      </section>
+      <section id="result">
+        <h2>Result Contract</h2>
+        <p>If last non-empty stdout line from background run is <code>KEY=value</code>, Command stores it as result and shows it in notification plus Command History.</p>
+        <pre><code>TASK_ID=abc123</code></pre>
+        <h2>Background Custom Actions — building a structured background-prompt flow</h2>
+        <p>A background Custom Action is a normal Custom Action with delivery set to <strong>Background</strong>. Instead of pasting the rendered prompt into Claude, Command pipes it to <code>claude -p</code> and leaves a submission record. This mirrors a Shortcuts automation that hands text to a shell script, except the trigger, prompt, history, retry, and retention live in Command.</p>
+        <ol>
+          <li>Add a Custom Action in <strong>Settings -> Shortcuts -> Custom Actions</strong>.</li>
+          <li>Set delivery to <strong>Background</strong>. Add selected-text, screenshot, popup, or voice triggers after saving.</li>
+          <li>Write an explicit prompt contract: parse the input, do the work, then emit one machine-readable final line.</li>
+          <li>Set shared CLI flags in <strong>Settings -> Command History -> Background Settings</strong> when a headless run needs allowed tools or noninteractive permission behavior.</li>
+          <li>Bind a hotkey or use the action from the menu. Check result, logs, retry, and retention in <strong>Command History</strong>.</li>
+        </ol>
+        <pre><code>Extract a task from this input and create it via the tracker API.
+
+&lt;input&gt;{selection}&lt;/input&gt;
+
+Parse title/notes/due date. POST to https://your-tracker/api/tasks with
+curl. Then output ONLY:
+  TASK_ID=&lt;id&gt;
+or, if it failed:
+  ERROR=&lt;reason&gt;</code></pre>
+        <p>Command displays a final-line <code>TASK_ID=</code> or <code>ERROR=</code> result, but does not run follow-up actions from that value yet. A line buried mid-output does not count; only the last non-empty line is parsed. See <a href="settings.html">Settings Reference</a> for the user-facing settings map.</p>
+      </section>
+    </main>
+  </div>
+</body>
+</html>

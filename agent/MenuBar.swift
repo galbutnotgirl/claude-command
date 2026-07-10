@@ -10,54 +10,70 @@ let menuBar = MenuBarController()
 
 final class MenuBarController: NSObject, NSMenuDelegate {
     private var statusItem: NSStatusItem?
-    private var handoffItem: NSMenuItem?
 
     func install() { if !UserDefaults.standard.bool(forKey: "hideMenuBarIcon") { showIcon() } }
 
     func setRecording(_ on: Bool) {
+        statusItem?.length = on ? activeIconWidth : NSStatusItem.variableLength
         statusItem?.button?.image = on ? waveformIcon(level: 0) : brandIcon()
     }
 
     // Called ~15fps by DictationOverlay while recording; drives the reactive waveform icon.
     func updateAudioLevel(_ level: Float) {
+        statusItem?.length = activeIconWidth
         statusItem?.button?.image = waveformIcon(level: level)
     }
 
-    // Reactive waveform icon:
-    //   silent (< 0.03) → single thin purple line
-    //   speaking → 4 purple bars scaled by audio level
-    // Non-template so purple shows in the menu bar.
+    private var activeIconWidth: CGFloat { max(30, NSStatusBar.system.thickness * 1.35) }
+
+    // Active recording state: compact solid-purple voice indicator.
+    // White animated bars carry the motion; the shape stays close to macOS mic/camera
+    // status icons without becoming a wide banner in the menu bar.
     private func waveformIcon(level: Float) -> NSImage {
         let h = NSStatusBar.system.thickness
-        let img = NSImage(size: NSSize(width: h, height: h), flipped: false) { rect in
-            let purple = NSColor(red: 0.44, green: 0.16, blue: 0.84, alpha: 1.0)
-            purple.setFill()
+        let w = activeIconWidth
+        let img = NSImage(size: NSSize(width: w, height: h), flipped: false) { rect in
+            let purple = NSColor(red: 0.44, green: 0.00, blue: 0.96, alpha: 1.0)
+            let phase = CGFloat(Date().timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 0.96) / 0.96)
+            let normalized = min(1, max(0, CGFloat(level)))
+            let visibleLevel = max(0.44, pow(normalized, 0.28))
+            let side = min(rect.height - 2.8, rect.width - 2.0)
+            let plate = NSRect(x: rect.midX - side / 2,
+                               y: rect.midY - side / 2,
+                               width: side,
+                               height: side)
+            let radius = side * 0.34
 
-            if level < 0.03 {
-                // Silence: thin horizontal line
-                let lh: CGFloat = 1.5
-                let lw = rect.width * 0.62
-                let x = (rect.width - lw) / 2
-                let y = rect.midY - lh / 2
-                NSBezierPath(roundedRect: NSRect(x: x, y: y, width: lw, height: lh),
-                             xRadius: lh / 2, yRadius: lh / 2).fill()
-            } else {
-                // Voice: 4 bars, heights proportional to level
-                let barW: CGFloat = 2.5
-                let gap:  CGFloat = 2.0
-                let count = 4
-                let totalW = CGFloat(count) * barW + CGFloat(count - 1) * gap
-                let startX = (rect.width - totalW) / 2
-                let maxH   = rect.height * 0.80
-                let midY   = rect.midY
-                let scales: [Float] = [0.60, 1.00, 0.82, 0.68]
-                for (i, sc) in scales.enumerated() {
-                    let x  = startX + CGFloat(i) * (barW + gap)
-                    let bh = max(2.0, maxH * CGFloat(level * sc))
-                    let by = midY - bh / 2
-                    NSBezierPath(roundedRect: NSRect(x: x, y: by, width: barW, height: bh),
-                                 xRadius: barW / 2, yRadius: barW / 2).fill()
-                }
+            NSGraphicsContext.saveGraphicsState()
+            let shadow = NSShadow()
+            shadow.shadowColor = purple.withAlphaComponent(0.42)
+            shadow.shadowOffset = NSSize(width: 0, height: -0.8)
+            shadow.shadowBlurRadius = 5.5
+            shadow.set()
+            let platePath = NSBezierPath(roundedRect: plate, xRadius: radius, yRadius: radius)
+            purple.setFill()
+            platePath.fill()
+            NSGraphicsContext.restoreGraphicsState()
+
+            NSColor.white.withAlphaComponent(0.18).setStroke()
+            platePath.lineWidth = 1.0
+            platePath.stroke()
+
+            let barW = max(2.2, side * 0.105)
+            let gap = side * 0.105
+            let scales: [CGFloat] = [0.62, 0.92, 1.0, 0.72]
+            let totalW = CGFloat(scales.count) * barW + CGFloat(scales.count - 1) * gap
+            let startX = plate.midX - totalW / 2
+            let maxH = side * 0.66
+            for (i, scale) in scales.enumerated() {
+                let x = startX + CGFloat(i) * (barW + gap)
+                let wave = (sin((phase * .pi * 2) + CGFloat(i) * 1.18) + 1) / 2
+                let bh = max(side * 0.20, maxH * min(1.0, visibleLevel * scale * (0.76 + wave * 0.34)))
+                let by = plate.midY - bh / 2
+                NSColor.white.withAlphaComponent(1.0).setFill()
+                NSBezierPath(roundedRect: NSRect(x: x, y: by, width: barW, height: bh),
+                             xRadius: barW / 2,
+                             yRadius: barW / 2).fill()
             }
             return true
         }
@@ -86,7 +102,6 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     // Injects Stop/Cancel at top when dictation is active.
     func menuWillOpen(_ menu: NSMenu) {
         updateActionItems(in: menu)
-        updateHandoffSubmenu()
         if DictationOverlay.shared.isVisible {
             let stopIt = NSMenuItem(title: "Stop Dictation", action: #selector(stopFromMenu), keyEquivalent: "")
             stopIt.target = self
@@ -102,25 +117,23 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     @objc private func cancelFromMenu() { Task { @MainActor in DictationOverlay.shared.stopRecording() } }
 
     private func updateActionItems(in menu: NSMenu) {
-        // Structure: [0..N-1]=actions | sep | Handoffs | Settings | Quit
-        // Remove all action items (everything before the last 4 items).
-        while menu.numberOfItems > 4 {
+        // Structure: [0..N-1]=enabled bound actions | sep | Settings | Quit
+        // Remove all action items (everything before the last 3 static items).
+        while menu.numberOfItems > 3 {
             menu.removeItem(at: 0)
         }
-        let bindings = loadBindings()
+        let bindings = loadBindings().filter { $0.enabled && $0.keycode != 0 }
         for (i, b) in bindings.enumerated() {
             let it = NSMenuItem()
             it.title = b.name
             it.representedObject = b.action
-            let hasKey = b.keycode != 0
-            it.isEnabled = hasKey && b.enabled
-            it.target = it.isEnabled ? self : nil
-            it.action = it.isEnabled ? #selector(runAction(_:)) : nil
-            if hasKey, let kc = nsKeyChar(for: b.keycode) {
+            it.isEnabled = true
+            it.target = self
+            it.action = #selector(runAction(_:))
+            if let kc = nsKeyChar(for: b.keycode) {
                 it.keyEquivalent = kc
                 it.keyEquivalentModifierMask = nsModifiers(from: b.mods)
             }
-            if !b.enabled { it.state = .off }
             menu.insertItem(it, at: i)
         }
     }
@@ -173,24 +186,36 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         m.showsStateColumn = false
         // Action items inserted at top by menuWillOpen.
         m.addItem(.separator())
-        // Background skill handoffs: recent runs + text entry + config.
-        let ho = NSMenuItem(title: "Handoffs", action: nil, keyEquivalent: "")
-        ho.submenu = NSMenu(title: "Handoffs")
-        m.addItem(ho)
-        handoffItem = ho
-        // Empty title + attributedTitle breaks the string-based auto-gear check.
-        // Blank 1×1 NSImage (not nil) prevents macOS from filling the image slot.
-        let settingsItem = NSMenuItem(title: "", action: #selector(openSettings), keyEquivalent: "")
-        settingsItem.attributedTitle = NSAttributedString(
-            string: "Settings",
-            attributes: [.font: NSFont.menuFont(ofSize: 0)]
-        )
-        settingsItem.target = self
-        settingsItem.indentationLevel = 0
+        let settingsItem = plainSettingsItem()
         m.addItem(settingsItem)
-        let quitItem = add(m, "Quit ClaudeCommand", #selector(quit), key: "q")
-        quitItem.indentationLevel = 0
+        m.addItem(plainQuitItem())
         return m
+    }
+
+    private func plainSettingsItem() -> NSMenuItem {
+        let item = NSMenuItem()
+        item.target = self
+        item.action = #selector(openSettings)
+        item.keyEquivalent = ","
+        item.keyEquivalentModifierMask = [.command]
+        let row = NSMenuItemPlainView(title: "Settings", shortcut: "⌘,") { [weak self] in
+            self?.openSettings()
+        }
+        item.view = row
+        return item
+    }
+
+    private func plainQuitItem() -> NSMenuItem {
+        let item = NSMenuItem()
+        item.target = self
+        item.action = #selector(quit)
+        item.keyEquivalent = "q"
+        item.keyEquivalentModifierMask = [.command]
+        let row = NSMenuItemPlainView(title: "Quit Command", shortcut: "⌘Q") { [weak self] in
+            self?.quit()
+        }
+        item.view = row
+        return item
     }
 
     @discardableResult
@@ -200,34 +225,110 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         return it
     }
 
-    // Rebuild the Handoffs submenu on each menu open: last runs (✓/✗/… like the
-    // imported tray), quick text entry, and the config window.
-    private func updateHandoffSubmenu() {
-        guard let sub = handoffItem?.submenu else { return }
-        sub.removeAllItems()
-        let recent = loadHandoffSubmissions()
-        if recent.isEmpty {
-            let none = sub.addItem(withTitle: "No handoffs yet", action: nil, keyEquivalent: "")
-            none.isEnabled = false
-        } else {
-            for r in recent {
-                let it = sub.addItem(withTitle: r.menuTitle, action: #selector(openHandoffLog(_:)), keyEquivalent: "")
-                it.target = self
-                it.representedObject = r.logFile
-                it.isEnabled = r.logFile != nil
-            }
-        }
-        sub.addItem(.separator())
-        add(sub, "Handoff Settings…", #selector(showHandoffSettings))
-    }
-
-    @objc private func openHandoffLog(_ sender: NSMenuItem) {
-        guard let path = sender.representedObject as? String,
-              FileManager.default.fileExists(atPath: path) else { NSSound.beep(); return }
-        NSWorkspace.shared.open(URL(fileURLWithPath: path))
-    }
-    @objc private func showHandoffSettings() { HandoffSettingsWindowController.shared.show() }
-
     @objc private func openSettings() { settingsWindow.show(tab: .shortcuts) }
     @objc private func quit() { NSApp.terminate(nil) }
+}
+
+private final class NSMenuItemPlainView: NSView {
+    private let action: () -> Void
+    private let label: NSTextField
+    private let shortcutLabel: NSTextField?
+    private var tracking: NSTrackingArea?
+    private var highlighted = false {
+        didSet {
+            label.textColor = highlighted ? .selectedMenuItemTextColor : .labelColor
+            shortcutLabel?.textColor = highlighted ? .selectedMenuItemTextColor : .secondaryLabelColor
+            needsDisplay = true
+        }
+    }
+
+    private enum Layout {
+        static let width: CGFloat = 238
+        static let height: CGFloat = 24
+        static let horizontalInset: CGFloat = 14
+        static let shortcutGap: CGFloat = 18
+        static let highlightInsetX: CGFloat = 4
+        static let highlightInsetY: CGFloat = 2
+    }
+
+    init(title: String, shortcut: String? = nil, action: @escaping () -> Void) {
+        self.action = action
+        self.label = NSTextField(labelWithString: title)
+        if let shortcut {
+            self.shortcutLabel = NSTextField(labelWithString: shortcut)
+        } else {
+            self.shortcutLabel = nil
+        }
+        super.init(frame: NSRect(x: 0, y: 0, width: Layout.width, height: Layout.height))
+        wantsLayer = true
+        setAccessibilityElement(true)
+        setAccessibilityRole(.menuItem)
+        setAccessibilityLabel(title)
+        if let shortcut { setAccessibilityValue(shortcut) }
+
+        label.translatesAutoresizingMaskIntoConstraints = false
+        label.font = NSFont.menuFont(ofSize: 0)
+        label.textColor = .labelColor
+        addSubview(label)
+
+        var constraints = [
+            label.leadingAnchor.constraint(equalTo: leadingAnchor, constant: Layout.horizontalInset),
+            label.centerYAnchor.constraint(equalTo: centerYAnchor),
+        ]
+
+        if let shortcutLabel {
+            shortcutLabel.translatesAutoresizingMaskIntoConstraints = false
+            shortcutLabel.font = NSFont.menuFont(ofSize: 0)
+            shortcutLabel.textColor = .secondaryLabelColor
+            addSubview(shortcutLabel)
+            constraints.append(contentsOf: [
+                shortcutLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -Layout.horizontalInset),
+                shortcutLabel.centerYAnchor.constraint(equalTo: centerYAnchor),
+                label.trailingAnchor.constraint(lessThanOrEqualTo: shortcutLabel.leadingAnchor, constant: -Layout.shortcutGap),
+            ])
+        } else {
+            constraints.append(label.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -Layout.horizontalInset))
+        }
+
+        NSLayoutConstraint.activate(constraints)
+    }
+
+    required init?(coder: NSCoder) { nil }
+
+    override var intrinsicContentSize: NSSize {
+        NSSize(width: Layout.width, height: Layout.height)
+    }
+
+    override func updateTrackingAreas() {
+        if let tracking { removeTrackingArea(tracking) }
+        let area = NSTrackingArea(rect: bounds,
+                                  options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+                                  owner: self,
+                                  userInfo: nil)
+        addTrackingArea(area)
+        tracking = area
+        super.updateTrackingAreas()
+    }
+
+    override func mouseEntered(with event: NSEvent) { highlighted = true }
+    override func mouseExited(with event: NSEvent) { highlighted = false }
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+        guard highlighted else { return }
+        let rect = bounds.insetBy(dx: Layout.highlightInsetX, dy: Layout.highlightInsetY)
+        NSColor.controlAccentColor.withAlphaComponent(0.88).setFill()
+        NSBezierPath(roundedRect: rect, xRadius: 5, yRadius: 5).fill()
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        action()
+        enclosingMenuItem?.menu?.cancelTracking()
+    }
+
+    override func accessibilityPerformPress() -> Bool {
+        action()
+        enclosingMenuItem?.menu?.cancelTracking()
+        return true
+    }
 }

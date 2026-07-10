@@ -74,6 +74,8 @@ enum TranscriptProcessor {
         ["first","second","third","fourth","fifth","sixth","seventh","eighth","ninth","tenth"],
         ["one","two","three","four","five","six","seven","eight","nine","ten"],
     ]
+    private static let cardinalListCuePattern =
+        "\\b(?:list|items?|things?|options?|steps?|reasons?|questions?|points?|ways?|tasks?|to-?dos?|following|here are|there are|these are|i have|we have)\\b"
 
     @MainActor
     static func process(
@@ -136,6 +138,7 @@ enum TranscriptProcessor {
     private static func detectList(_ text: String) -> String {
         let ns = text as NSString
         for seq in listSeqs {
+            let isCardinalSeq = seq.first == "one"
             var positions: [(loc: Int, len: Int)] = []
             var searchFrom = 0
             for word in seq {
@@ -148,15 +151,24 @@ enum TranscriptProcessor {
             guard positions.count >= 2 else { continue }
             let preamble = positions[0].loc > 0
                 ? ns.substring(to: positions[0].loc).trimmingCharacters(in: .whitespacesAndNewlines) : ""
+            if isCardinalSeq && !looksLikeCardinalListPreamble(preamble) {
+                continue
+            }
             var items: [String] = []
+            var rejected = false
             for i in 0..<positions.count {
                 let start = positions[i].loc + positions[i].len
                 let end   = i + 1 < positions.count ? positions[i + 1].loc : ns.length
                 guard start < end else { continue }
                 let item = ns.substring(with: NSRange(location: start, length: end - start))
                     .trimmingCharacters(in: CharacterSet(charactersIn: " ,;:"))
+                if isCardinalSeq && startsLikeInlineNumberPhrase(item) {
+                    rejected = true
+                    break
+                }
                 if !item.isEmpty { items.append(item) }
             }
+            if rejected { continue }
             guard items.count >= 2 else { continue }
             var result = ""
             if !preamble.isEmpty {
@@ -172,6 +184,27 @@ enum TranscriptProcessor {
             return result.trimmingCharacters(in: .whitespacesAndNewlines)
         }
         return text
+    }
+
+    private static func looksLikeCardinalListPreamble(_ preamble: String) -> Bool {
+        guard !preamble.isEmpty,
+              let re = try? NSRegularExpression(pattern: cardinalListCuePattern, options: .caseInsensitive) else {
+            return false
+        }
+        let range = NSRange(preamble.startIndex..., in: preamble)
+        return re.firstMatch(in: preamble, range: range) != nil
+    }
+
+    private static func startsLikeInlineNumberPhrase(_ item: String) -> Bool {
+        let trimmed = item.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !trimmed.isEmpty else { return true }
+        let disallowedPrefixes = [
+            "or", "and", "to", "too", "then", "than", "second", "seconds",
+            "minute", "minutes", "hour", "hours", "day", "days"
+        ]
+        return disallowedPrefixes.contains { prefix in
+            trimmed == prefix || trimmed.hasPrefix(prefix + " ")
+        }
     }
 
     @MainActor

@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Command uninstall guide for removing the app, LaunchAgent, legacy clipboard watcher, local data, logs, and reinstall checks.">
+  <title>Command Uninstall</title>
+  <link rel="canonical" href="https://galbutnotgirl.github.io/command/uninstall.html">
+  <meta property="og:site_name" content="Command">
+  <meta property="og:title" content="Command Uninstall">
+  <meta property="og:description" content="Command uninstall guide for removing the app, LaunchAgent, legacy clipboard watcher, local data, logs, and reinstall checks.">
+  <meta property="og:type" content="website">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="Command Uninstall">
+  <meta name="twitter:description" content="Command uninstall guide for removing the app, LaunchAgent, legacy clipboard watcher, local data, logs, and reinstall checks.">
+  <link rel="stylesheet" href="site.css">
+</head>
+<body>
+  <a class="skip-link" href="#content">Skip to content</a>
+  <div class="doc-wrap">
+    <nav class="toc" aria-label="Documentation sections">
+      <div class="toc-title">Uninstall</div>
+      <a href="index.html">Overview</a>
+      <a href="install.html">Install Guide</a>
+      <a href="uninstall.html">Uninstall</a>
+      <a href="guide.html">User Guide</a>
+      <a href="settings.html">Settings Reference</a>
+      <a href="quick-reference.html">Quick Reference</a>
+      <a href="examples.html">Examples</a>
+      <a href="faq.html">FAQ</a>
+      <a href="changelog.html">Changelog</a>
+      <a href="limitations.html">Alpha Limitations</a>
+      <a href="updates.html">Updates</a>
+      <a href="permissions.html">Permissions</a>
+      <a href="privacy.html">Privacy</a>
+      <a href="troubleshooting.html">Troubleshooting</a>
+      <a href="support.html">Support</a>
+      <a href="security.html">Security Policy</a>
+      <a href="icon-treatments.html">Icon Treatments</a>
+      <a href="background.html">Background Architecture</a>
+      <a href="release.html">Release Checklist</a>
+      <a href="#standard">Standard Uninstall</a>
+      <a href="#legacy">Legacy Clipboard Watcher</a>
+      <a href="#data">Optional Data Removal</a>
+      <a href="#verify">Verify Removal</a>
+      <a href="#reinstall">Reinstall Later</a>
+      <a href="UNINSTALL.md">Markdown source</a>
+    </nav>
+    <main id="content" class="doc-main">
+      <header class="doc-hero">
+        <h1>Uninstall</h1>
+        <p class="lead">Remove Command, LaunchAgent files, legacy watcher entries, local data, and logs.</p>
+      </header>
+
+      <section id="standard">
+        <h2>Standard Uninstall</h2>
+        <p>For a downloaded app install:</p>
+        <pre><code>osascript -e 'quit app "Command"' 2&gt;/dev/null || true
+launchctl bootout "gui/$(id -u)/com.claudecommand" 2&gt;/dev/null || true
+rm -f ~/Library/LaunchAgents/com.claudecommand.plist
+rm -rf ~/Applications/Command.app</code></pre>
+        <p>If you installed source-only Quick Actions from a repo checkout, remove those too:</p>
+        <pre><code>./uninstall-quick-action.sh</code></pre>
+      </section>
+
+      <section id="legacy">
+        <h2>Legacy Clipboard Watcher</h2>
+        <p>Older alpha builds used a separate clipboard watcher LaunchAgent. Remove that legacy agent too if it exists.</p>
+        <pre><code>launchctl bootout "gui/$(id -u)/com.claudecommand.clipwatch" 2&gt;/dev/null || true
+rm -f ~/Library/LaunchAgents/com.claudecommand.clipwatch.plist</code></pre>
+        <p>Current builds launch Clipboard History from inside Command, so there is no separate clipboard watcher LaunchAgent to keep.</p>
+      </section>
+
+      <section id="data">
+        <h2>Optional Data Removal</h2>
+        <p>Settings, histories, and logs are local. Remove only if you do not want to keep them for reinstall or debugging.</p>
+        <table>
+          <thead><tr><th>Data</th><th>Path</th></tr></thead>
+          <tbody>
+            <tr><td>Shortcuts, prompts, context, preferences</td><td><code>~/.claude/state/</code></td></tr>
+            <tr><td>Clipboard History</td><td><code>~/.claude/state/cliphistory/</code></td></tr>
+            <tr><td>Dictation History / vocabulary</td><td><code>~/Library/Application Support/DictationLab/</code></td></tr>
+            <tr><td>Command History / background logs</td><td><code>~/Library/Application Support/claude-command/</code></td></tr>
+            <tr><td>App logs</td><td><code>~/Library/Logs/claude-command.log</code> and <code>~/.claude/logs/</code></td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="verify">
+        <h2>Verify Removal</h2>
+        <pre><code>launchctl print gui/$(id -u)/com.claudecommand
+pgrep -fl Command
+pgrep -fl clipwatch.py</code></pre>
+        <p><code>launchctl</code> should report no service. <code>pgrep</code> should return no Command or bundled <code>clipwatch.py</code> process.</p>
+      </section>
+
+      <section id="reinstall">
+        <h2>Reinstall Later</h2>
+        <p>Use <a href="install.html">Install Guide</a>. If you kept local data, Command should reuse existing settings on next launch.</p>
+      </section>
+    </main>
+  </div>
+</body>
+</html>

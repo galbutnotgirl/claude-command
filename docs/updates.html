@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Command updates guide for Alpha, Beta, and Stable channels, manual alpha installs, backups, failed updates, and rollback.">
+  <title>Command Updates</title>
+  <link rel="canonical" href="https://galbutnotgirl.github.io/command/updates.html">
+  <meta property="og:site_name" content="Command">
+  <meta property="og:title" content="Command Updates">
+  <meta property="og:description" content="Command updates guide for Alpha, Beta, and Stable channels, manual alpha installs, backups, failed updates, and rollback.">
+  <meta property="og:type" content="website">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="Command Updates">
+  <meta name="twitter:description" content="Command updates guide for Alpha, Beta, and Stable channels, manual alpha installs, backups, failed updates, and rollback.">
+  <link rel="stylesheet" href="site.css">
+</head>
+<body>
+  <a class="skip-link" href="#content">Skip to content</a>
+  <div class="doc-wrap">
+    <nav class="toc" aria-label="Documentation sections">
+      <div class="toc-title">Updates</div>
+      <a href="index.html">Overview</a>
+      <a href="install.html">Install Guide</a>
+      <a href="uninstall.html">Uninstall</a>
+      <a href="guide.html">User Guide</a>
+      <a href="settings.html">Settings Reference</a>
+      <a href="quick-reference.html">Quick Reference</a>
+      <a href="examples.html">Examples</a>
+      <a href="faq.html">FAQ</a>
+      <a href="changelog.html">Changelog</a>
+      <a href="limitations.html">Alpha Limitations</a>
+      <a href="updates.html">Updates</a>
+      <a href="permissions.html">Permissions</a>
+      <a href="privacy.html">Privacy</a>
+      <a href="troubleshooting.html">Troubleshooting</a>
+      <a href="support.html">Support</a>
+      <a href="security.html">Security Policy</a>
+      <a href="icon-treatments.html">Icon Treatments</a>
+      <a href="background.html">Background Architecture</a>
+      <a href="release.html">Release Checklist</a>
+      <a href="#app">Update From App</a>
+      <a href="#rename-compatibility">Rename Compatibility</a>
+      <a href="#manual">Manual Install</a>
+      <a href="#backup">Before Updating</a>
+      <a href="#troubleshooting">If Update Fails</a>
+      <a href="#rollback">Roll Back</a>
+      <a href="UPDATES.md">Markdown source</a>
+    </nav>
+    <main id="content" class="doc-main">
+      <header class="doc-hero">
+        <h1>Updates</h1>
+        <p class="lead">How to use update channels, back up settings, install alpha builds manually, and roll back safely.</p>
+      </header>
+
+      <section id="app">
+        <h2>Update From The App</h2>
+        <ol>
+          <li>Open <strong>Settings -> About</strong>.</li>
+          <li>Choose update channel:
+            <ul>
+              <li><strong>Alpha</strong>: earliest builds, most frequent changes.</li>
+              <li><strong>Beta</strong>: pre-release builds intended for broader testing.</li>
+              <li><strong>Stable</strong>: stable builds only; visible but unavailable until the first stable release exists.</li>
+            </ul>
+          </li>
+          <li>Click <strong>Check for Updates</strong>.</li>
+          <li>If a version appears, click <strong>Update Now</strong>.</li>
+        </ol>
+        <p>Command checks GitHub Releases for the newest build accepted by your channel. Alpha accepts alpha, beta, and stable tags; Beta accepts beta and stable tags; Stable accepts stable tags only once stable is enabled. The updater downloads the attached <code>Command-*.zip</code> asset, ignores checksum sidecar files, replaces <code>~/Applications/Command.app</code>, clears quarantine, and restarts. Launch at login is not required for the updater to reopen Command. Accessibility, Screen Recording, and Microphone grants should stay attached to the app.</p>
+        <p>If a release has no downloadable app zip attached, Command opens the release page for manual install.</p>
+      </section>
+
+      <section id="rename-compatibility">
+        <h2>Rename Compatibility</h2>
+        <p>Command was previously named ClaudeCommand. Updates now install <code>Command.app</code> and release assets named <code>Command-*.zip</code>. The bundle identifier and local support paths intentionally remain <code>com.claudecommand</code> and <code>~/Library/Application Support/claude-command/</code> so macOS permission grants, shortcuts, command history, background records, and exported settings survive the rename.</p>
+      </section>
+
+      <section id="manual">
+        <h2>Install Alpha Manually</h2>
+        <p>For first-time details, see <a href="install.html">Install Guide</a>.</p>
+        <ol>
+          <li>Open the <a href="https://github.com/galbutnotgirl/command/releases/latest">latest GitHub Release</a>.</li>
+          <li>Download the latest <code>Command-*.zip</code>.</li>
+          <li>Optional: download the matching <code>.zip.sha256</code> file into the same folder as the zip, then run <code>cd ~/Downloads &amp;&amp; shasum -a 256 -c Command-*.zip.sha256</code>.</li>
+          <li>Quit Command if it is running.</li>
+          <li>Unzip and move <code>Command.app</code> to <code>~/Applications</code>.</li>
+          <li>Launch it and open <strong>Settings -> Set Up</strong> to confirm permissions/components.</li>
+        </ol>
+      </section>
+
+      <section id="backup">
+        <h2>Before Updating</h2>
+        <p>Export settings if you are testing many alpha builds: open <strong>Settings -> About -> Import / Export</strong>, click <strong>Export</strong>, keep all sections checked, and save the JSON somewhere you can find again.</p>
+        <p>Export includes shortcuts, prompt settings, context rules, dictation vocabulary, background settings, and app preferences.</p>
+      </section>
+
+      <section id="troubleshooting">
+        <h2>If Update Fails</h2>
+        <table>
+          <thead><tr><th>Symptom</th><th>Fix</th></tr></thead>
+          <tbody>
+            <tr><td>Update check says no releases</td><td>Confirm channel. Alpha sees alpha/beta/stable; Beta sees beta/stable; Stable stays unavailable until a stable release exists.</td></tr>
+            <tr><td>Download fails</td><td>Check network, then try manual install from <a href="install.html">Install Guide</a>.</td></tr>
+            <tr><td>App opens but shortcuts fail</td><td>Open <strong>Settings -> Set Up</strong>, confirm Accessibility, then restart Command.</td></tr>
+            <tr><td>Screenshot fails after update</td><td>Confirm Screen Recording permission, then restart Command.</td></tr>
+            <tr><td>Dictation fails after update</td><td>Confirm Microphone permission and model status in <strong>Dictation Settings</strong>.</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="rollback">
+        <h2>Roll Back</h2>
+        <ol>
+          <li>Download older <code>Command-*.zip</code> from GitHub Releases.</li>
+          <li>Optional: verify it with the matching <code>.zip.sha256</code> file in the same folder.</li>
+          <li>Quit Command.</li>
+          <li>Replace <code>~/Applications/Command.app</code>.</li>
+          <li>Launch Command and open <strong>Settings -> Set Up</strong>.</li>
+        </ol>
+        <p>Use <strong>Settings -> About -> Import / Export</strong>, then click <strong>Import</strong>, if you need to restore an exported settings JSON.</p>
+      </section>
+    </main>
+  </div>
+</body>
+</html>

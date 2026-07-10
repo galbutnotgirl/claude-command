@@ -29,6 +29,8 @@ final class Recorder: ObservableObject {
 
     var onFinal:   ((String, DictMode) -> Void)?
     var onPartial: ((String) -> Void)?
+    var onFinishedWithoutText: ((DictMode) -> Void)?
+    var onFailure: ((String, DictMode) -> Void)?
 
     private(set) var currentMode: DictMode = .insert
     var prevBundle = ""
@@ -39,9 +41,12 @@ final class Recorder: ObservableObject {
     private var silenceTimer: DispatchSourceTimer?
     private var lastTranscript = ""
     private var sessionID = 0
+    private var stopRequestedDuringStart = false
     private var streamTask: Task<Void, Never>?
     private var audioContinuation: AsyncStream<AVAudioPCMBuffer>.Continuation?
     private var bufferFeederTask: Task<Void, Never>?
+    private let quietStopTailNanoseconds: UInt64 = 250_000_000
+    private let activeStopTailNanoseconds: UInt64 = 850_000_000
 
     private func log(_ s: String) { DebugLog.shared.append(s) }
 
@@ -117,7 +122,7 @@ final class Recorder: ObservableObject {
             DispatchQueue.main.async {
                 let alert = NSAlert()
                 alert.messageText = "Model not downloaded"
-                alert.informativeText = "Open Claude Command > Settings > Dictation and click Download to get the Parakeet model (~650 MB), then try again."
+                alert.informativeText = "Open Settings -> Dictation Settings and click Download to get the Parakeet model (~650 MB), then try again."
                 alert.alertStyle = .warning
                 alert.addButton(withTitle: "Open Settings")
                 alert.addButton(withTitle: "Cancel")
@@ -130,6 +135,7 @@ final class Recorder: ObservableObject {
         sessionID += 1
         let mySession = sessionID
         currentMode = mode
+        stopRequestedDuringStart = false
         lastTranscript = ""; liveTranscript = ""
         state = .starting
         log("▶ session \(mySession) start mode=\(mode)")
@@ -196,6 +202,12 @@ final class Recorder: ObservableObject {
                 }
                 self.state = .listening
                 self.log("🎙 listening")
+                if self.stopRequestedDuringStart {
+                    self.stopRequestedDuringStart = false
+                    self.log("stop was requested during startup — stopping now that audio is live")
+                    self.stop()
+                    return
+                }
                 self.resetSilenceTimer()
 
                 for await update in await mgr.transcriptionUpdates {
@@ -220,19 +232,19 @@ final class Recorder: ObservableObject {
         guard state == .listening || state == .starting else { return }
         let mode = currentMode
         let wasListening = state == .listening
-        let mgr = currentMgr; currentMgr = nil
         log("■ stop wasListening=\(wasListening)")
         cancelSilenceTimer()
-        state = .idle
-        guard wasListening else {
-            audioEngine?.inputNode.removeTap(onBus: 0)
-            audioEngine?.stop(); audioEngine = nil
-            streamTask?.cancel(); streamTask = nil
+        if !wasListening {
+            stopRequestedDuringStart = true
+            log("stop requested while startup still in flight")
             return
         }
+        let mgr = currentMgr; currentMgr = nil
+        state = .idle
 
         let capturedStreamTask = streamTask
         streamTask = nil
+        let stopTailNanoseconds = audioLevel > 0.035 ? activeStopTailNanoseconds : quietStopTailNanoseconds
         // Don't tear the tap/engine down synchronously here — that was the actual
         // source of dropped tail words, not the flush step below. People keep
         // talking through the last syllable as they release the key/hotkey;
@@ -246,7 +258,7 @@ final class Recorder: ObservableObject {
         bufferFeederTask = nil
 
         Task {
-            try? await Task.sleep(nanoseconds: 220_000_000)   // capture the trailing syllable
+            try? await Task.sleep(nanoseconds: stopTailNanoseconds)
             engineToStop?.inputNode.removeTap(onBus: 0)
             engineToStop?.stop()
 
@@ -270,17 +282,22 @@ final class Recorder: ObservableObject {
                     self.onFinal?(best, mode)
                 } else {
                     self.log("⚠ finish empty — nothing to dispatch")
-                    DispatchQueue.main.async { playUISound(settingsModel.stopSound) }
+                    self.onFinishedWithoutText?(mode)
                 }
             } catch {
                 self.log("finish() threw: \(error)")
-                if !self.lastTranscript.isEmpty { self.onFinal?(self.lastTranscript, mode) }
+                if !self.lastTranscript.isEmpty {
+                    self.onFinal?(self.lastTranscript, mode)
+                } else {
+                    self.onFinishedWithoutText?(mode)
+                }
             }
         }
     }
 
     func cancel() {
         log("cancel")
+        stopRequestedDuringStart = false
         audioEngine?.inputNode.removeTap(onBus: 0)
         audioEngine?.stop(); audioEngine = nil
         streamTask?.cancel(); streamTask = nil
@@ -310,7 +327,9 @@ final class Recorder: ObservableObject {
 
     private func fail(_ msg: String) {
         log("ERROR: \(msg)")
+        stopRequestedDuringStart = false
         streamTask?.cancel(); streamTask = nil
         audioLevel = 0; state = .error
+        onFailure?(msg, currentMode)
     }
 }

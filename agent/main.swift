@@ -1,6 +1,6 @@
-// CommandAgent — the one persistent piece of ClaudeCommand. A single
+// ClaudeCommand — the one persistent app process. A single
 // always-running, LSUIElement background app with its OWN stable TCC identity
-// (com.claudecommand.agent), granted Accessibility once. It does everything
+// (com.claudecommand), granted Accessibility once. It does everything
 // the short-lived Service/helper processes couldn't do reliably:
 //
 //   1. GLOBAL HOTKEYS — Carbon RegisterEventHotKey for every action, so they
@@ -113,32 +113,34 @@ func captureOrClipboard() -> String {
 }
 
 func runWorker(_ action: String, source: String, captured: String = "", customPrompt: String = "",
-               customSubmit: Bool = false, customSession: String = "new", customIncludeSource: Bool = true) {
+               customSubmit: Bool = false, customSession: String = "new", customIncludeSource: Bool = true,
+               claudeDestination: String? = nil, builtInAutoSubmit: Bool? = nil) {
     // Screenshot actions need Screen Recording. Without it, `screencapture` fails
     // ("could not create image from rect") and the user just re-prompts forever.
     // Gate it: fire the system prompt + open Set Up, and skip the doomed capture.
     // The grant only takes effect once this process relaunches (TCC reads it at
-    // launch), so point the user at "Restart Agent".
+    // launch), so point the user at the current product restart action.
     if (action.hasPrefix("shot") || action == "customshot") && !screenRecordingOK() {
         DispatchQueue.main.async {
             requestScreenRecording()
             openPrivacyPane("Privacy_ScreenCapture")
             settingsWindow.show(tab: .setup)
             notify("Screen Recording needed",
-                   "Enable ClaudeCommand, then menu-bar icon ▸ Restart Agent to apply it.")
+                   "Enable Command, then restart Command to apply it.")
         }
         return
     }
     guard FileManager.default.fileExists(atPath: WORKER) else {
         let msg = "[runWorker] WORKER not found at \(WORKER) — reinstall the app"
         appendLog(msg)
-        notify("ClaudeCommand broken", "send-to-claude.sh missing. Run install-agent.sh.")
+        notify("Command broken", "send-to-claude.sh missing. Reinstall from the Install Guide.")
         return
     }
     let p = Process()
     p.executableURL = URL(fileURLWithPath: "/bin/zsh")
     p.arguments = [WORKER]
     var env = ProcessInfo.processInfo.environment
+    env["PATH"] = "/opt/homebrew/bin:\(HOME)/.claude/local:\(HOME)/.local/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
     env["ACTION"] = action
     env["SOURCE_BUNDLE"] = source
     env["AGENT_SOCK"] = SOCK
@@ -147,7 +149,9 @@ func runWorker(_ action: String, source: String, captured: String = "", customPr
     if customSubmit { env["CUSTOM_SUBMIT"] = "go" }
     if customSession == "add" { env["CUSTOM_SESSION"] = "add" }
     if !customIncludeSource { env["CUSTOM_INCLUDE_SOURCE"] = "0" }
-    env["CLAUDE_DESTINATION"] = settingsModel.claudeDestination
+    if let builtInAutoSubmit { env["BUILTIN_AUTO_SUBMIT"] = builtInAutoSubmit ? "1" : "0" }
+    let effectiveClaudeDestination = claudeDestination ?? settingsModel.claudeDestination
+    env["CLAUDE_DESTINATION"] = effectiveClaudeDestination
     p.environment = env
     let errPipe = Pipe()
     p.standardError = errPipe
@@ -158,11 +162,25 @@ func runWorker(_ action: String, source: String, captured: String = "", customPr
             if p.terminationStatus != 0 {
                 let out = String(data: errPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
                 appendLog("[runWorker] action=\(action) exit=\(p.terminationStatus) stderr=\(out.prefix(400))")
+                appendForegroundCommandHistory(action: action, source: source, destination: effectiveClaudeDestination,
+                                               status: "failed", prompt: customPrompt.isEmpty ? nil : customPrompt,
+                                               error: String(out.prefix(400)))
+            } else {
+                appendForegroundCommandHistory(action: action, source: source, destination: effectiveClaudeDestination,
+                                               status: "succeeded", prompt: customPrompt.isEmpty ? nil : customPrompt,
+                                               error: nil)
             }
         }
     } catch {
         appendLog("[runWorker] launch failed: \(error)")
+        appendForegroundCommandHistory(action: action, source: source, destination: effectiveClaudeDestination,
+                                       status: "failed", prompt: customPrompt.isEmpty ? nil : customPrompt,
+                                       error: String(describing: error))
     }
+}
+
+func dispatchBuiltInAction(_ action: String, source: String, captured: String) {
+    runWorker(action, source: source, captured: captured, builtInAutoSubmit: builtInComposeAutoSubmit(action))
 }
 
 func appendLog(_ msg: String) {
@@ -232,7 +250,7 @@ func appIcon(bundle: String) -> NSImage? {
     guard !bundle.isEmpty else { return nil }
     if let cached = iconCache[bundle] { return cached }
     // Dictation rows get the same waveform mark as the "Dictated" filter pill — it's
-    // a voice transcript, not a copy Claude Command routed through. Everything else
+    // a voice transcript, not a copy ClaudeCommand routed through. Everything else
     // ClaudeCommand itself wrote (the "sent"/wrapped-prompt case, and the plain
     // internal sentinel) gets the brand mark, matching the "Sent" pill and the menu bar.
     if bundle == "com.claudecommand.dictation" {
@@ -407,7 +425,7 @@ final class ClipPicker: NSObject, NSWindowDelegate {
             case .images:   msg = "No images in history."
             case .text:     msg = query.isEmpty ? "No text clips." : "No matches."
             case .dictated: msg = query.isEmpty ? "Nothing dictated yet." : "No matches."
-            case .sent:     msg = query.isEmpty ? "Nothing sent via Claude Command yet." : "No matches."
+            case .sent:     msg = query.isEmpty ? "Nothing sent via Command yet." : "No matches."
             case .all:      msg = query.isEmpty ? "History empty." : "No matches."
             }
             let e = NSTextField(labelWithString: msg)
@@ -691,7 +709,7 @@ final class ClipPicker: NSObject, NSWindowDelegate {
         appIV.widthAnchor.constraint(equalToConstant: 18).isActive = true
         appIV.heightAnchor.constraint(equalToConstant: 18).isActive = true
 
-        // A row can be "from Chrome" AND "sent via Claude Command" at once (the
+        // A row can be "from Chrome" AND "sent via ClaudeCommand" at once (the
         // common Add/custom-Add case) — the row icon stays the source app's so you
         // still know where it came from, but a small brand badge peeking out past
         // its trailing edge flags the "also sent" part without switching filters.
@@ -984,6 +1002,7 @@ let picker = ClipPicker()
 struct HK { let action: String; let keycode: UInt32; let mods: UInt32 }
 
 func loadHotkeys() -> [HK] {
+    let validActions = Set(COMMAND_ACTIONS.map(\.id))
     guard let data = FileManager.default.contents(atPath: CFG),
           let arr = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
         // No user file — fall back to built-in defaults.
@@ -993,7 +1012,7 @@ func loadHotkeys() -> [HK] {
         guard let a = d["action"] as? String,
               let k = d["keycode"] as? Int, let m = d["mods"] as? Int else { return nil }
         let enabled = (d["enabled"] as? Bool) ?? true
-        guard enabled else { return nil }
+        guard enabled, validActions.contains(a) else { return nil }
         return HK(action: a, keycode: UInt32(k), mods: UInt32(m))
     }
 }
@@ -1047,9 +1066,8 @@ let hotKeyHandler: EventHandlerUPP = { (_, event, _) -> OSStatus in
             // Only act on the first press; kEventHotKeyReleased clears the held state.
             if _carbonDictHeld.contains(hkID.id) { return noErr }
             _carbonDictHeld.insert(hkID.id)
-            let kc = CGKeyCode(hotkeyKeycodes[hkID.id] ?? 0)
             let m: DictMode = action == "dictate" ? .insert : .claude
-            Task { @MainActor in triggerDictation(mode: m, keycode: kc) }
+            Task { @MainActor in triggerDictation(mode: m, keycode: nil, pollForRelease: false) }
         } else if let (ca, trig) = resolveTrigger(action) {
             if trig.kind == .voice {
                 // Same press/hold/double-tap trigger as the built-in Dictate actions,
@@ -1057,8 +1075,11 @@ let hotKeyHandler: EventHandlerUPP = { (_, event, _) -> OSStatus in
                 // pasting/sending it directly (see DictationOverlay.dispatchCustomAction).
                 if _carbonDictHeld.contains(hkID.id) { return noErr }
                 _carbonDictHeld.insert(hkID.id)
-                let kc = CGKeyCode(hotkeyKeycodes[hkID.id] ?? 0)
-                Task { @MainActor in triggerDictation(mode: .customAction(actionID: ca.id, triggerID: trig.id), keycode: kc) }
+                Task { @MainActor in
+                    triggerDictation(mode: .customAction(actionID: ca.id, triggerID: trig.id),
+                                     keycode: nil,
+                                     pollForRelease: false)
+                }
                 return noErr
             }
             if trig.kind == .popup {
@@ -1066,20 +1087,23 @@ let hotKeyHandler: EventHandlerUPP = { (_, event, _) -> OSStatus in
                 return noErr
             }
             let sel = trig.kind == .screenshot ? "" : captureOrClipboard()
-            if ca.isHandoff {
+            let delivery = ca.effectiveDelivery(for: trig)
+            if delivery == .background {
                 DispatchQueue.global().async { runCustomHandoff(ca, trigger: trig, capturedText: sel) }
             } else {
+                let dest = ca.effectiveDestination(for: trig).envValue
                 DispatchQueue.global().async {
                     runWorker(trig.kind == .screenshot ? "customshot" : "custom", source: front, captured: sel,
                               customPrompt: ca.prompt, customSubmit: ca.autoSubmit(for: trig),
-                              customSession: ca.effectiveSessionMode(for: trig), customIncludeSource: ca.shouldIncludeSource(for: trig))
+                              customSession: delivery.sessionMode, customIncludeSource: ca.shouldIncludeSource(for: trig),
+                              claudeDestination: dest)
                 }
             }
         } else {
             // Capture selection NOW (main thread, source app still focused)
             // before async dispatch; worker uses CAPTURED_TEXT, skips socket roundtrip.
             let sel = action.hasPrefix("shot") ? "" : captureSelectionSync()
-            DispatchQueue.global().async { runWorker(action, source: front, captured: sel) }
+            DispatchQueue.global().async { dispatchBuiltInAction(action, source: front, captured: sel) }
         }
     }
     return noErr
@@ -1109,8 +1133,14 @@ func registerFromConfig() {
         hotkeyActions[hkID] = hk.action
         hotkeyKeycodes[hkID] = hk.keycode
         var ref: EventHotKeyRef?
-        RegisterEventHotKey(hk.keycode, hk.mods, id, GetApplicationEventTarget(), 0, &ref)
-        hotkeyRefs.append(ref)
+        let status = RegisterEventHotKey(hk.keycode, hk.mods, id, GetApplicationEventTarget(), 0, &ref)
+        if status == noErr {
+            hotkeyRefs.append(ref)
+        } else {
+            appendLog("[hotkeys] RegisterEventHotKey failed action=\(hk.action) keycode=\(hk.keycode) mods=\(hk.mods) status=\(status)")
+            hotkeyActions.removeValue(forKey: hkID)
+            hotkeyKeycodes.removeValue(forKey: hkID)
+        }
     }
     // Custom action hotkeys (stored in custom-actions.json) — one registration
     // per enabled trigger, not per action, since one action can have several.
@@ -1124,8 +1154,14 @@ func registerFromConfig() {
             hotkeyActions[hkID] = ca.actionID(for: trig)
             hotkeyKeycodes[hkID] = trig.keycode
             var ref: EventHotKeyRef?
-            RegisterEventHotKey(trig.keycode, trig.mods, id, GetApplicationEventTarget(), 0, &ref)
-            hotkeyRefs.append(ref)
+            let status = RegisterEventHotKey(trig.keycode, trig.mods, id, GetApplicationEventTarget(), 0, &ref)
+            if status == noErr {
+                hotkeyRefs.append(ref)
+            } else {
+                appendLog("[hotkeys] RegisterEventHotKey failed custom=\(ca.name) trigger=\(trig.kind.rawValue) keycode=\(trig.keycode) mods=\(trig.mods) status=\(status)")
+                hotkeyActions.removeValue(forKey: hkID)
+                hotkeyKeycodes.removeValue(forKey: hkID)
+            }
         }
     }
 }
@@ -1159,6 +1195,32 @@ private var _mediaEventTap: CFMachPort?
 // Track held state per keyCode to swallow repeats without breaking double-tap detection.
 private var _nxHeld: [Int: Bool] = [:]
 
+private func physicalModifierMask(fallback flags: NSEvent.ModifierFlags = []) -> UInt32 {
+    var cm: UInt32 = 0
+    if flags.contains(.command) ||
+        CGEventSource.keyState(.hidSystemState, key: 55) ||
+        CGEventSource.keyState(.hidSystemState, key: 54) { cm |= 256 }
+    if flags.contains(.shift) ||
+        CGEventSource.keyState(.hidSystemState, key: 56) ||
+        CGEventSource.keyState(.hidSystemState, key: 60) { cm |= 512 }
+    if flags.contains(.option) ||
+        CGEventSource.keyState(.hidSystemState, key: 58) ||
+        CGEventSource.keyState(.hidSystemState, key: 61) { cm |= 2048 }
+    if flags.contains(.control) ||
+        CGEventSource.keyState(.hidSystemState, key: 59) ||
+        CGEventSource.keyState(.hidSystemState, key: 62) { cm |= 4096 }
+    return cm
+}
+
+private func physicalModifierMask(cgFlags f: CGEventFlags) -> UInt32 {
+    var cm = physicalModifierMask()
+    if f.contains(.maskCommand) { cm |= 256 }
+    if f.contains(.maskShift) { cm |= 512 }
+    if f.contains(.maskAlternate) { cm |= 2048 }
+    if f.contains(.maskControl) { cm |= 4096 }
+    return cm
+}
+
 // ---- Dictation trigger state machine (matches DictationLab v2) ----------------
 // Single tap → PTT (hold to talk; CGEventSource poll releases on key-up)
 // Tap while PTT → lock (hands-free; keep recording until next tap)
@@ -1178,7 +1240,7 @@ func resetDictTrigMode() {
 }
 
 @MainActor
-func triggerDictation(mode: DictMode, keycode: CGKeyCode) {
+func triggerDictation(mode: DictMode, keycode: CGKeyCode?, pollForRelease: Bool = true) {
     switch _dictTrigMode {
     case .lock:
         resetDictTrigMode()
@@ -1202,6 +1264,7 @@ func triggerDictation(mode: DictMode, keycode: CGKeyCode) {
             _dictTrigMode = .lock
         } else {
             _dictTrigMode = .pushToTalk
+            guard pollForRelease, let keycode else { return }
             _dictPTTimer?.invalidate()
             _dictPTTimer = Timer.scheduledTimer(withTimeInterval: 0.04, repeats: true) { t in
                 MainActor.assumeIsolated {
@@ -1235,7 +1298,7 @@ func fireMediaAction(_ carbon: UInt32, mods: UInt32 = 0) {
             Task { @MainActor in triggerDictation(mode: .claude, keycode: CGKeyCode(carbon)) }
         } else {
             let sel = hk.action.hasPrefix("shot") ? "" : captureSelectionSync()
-            DispatchQueue.global().async { runWorker(hk.action, source: front, captured: sel) }
+            DispatchQueue.global().async { dispatchBuiltInAction(hk.action, source: front, captured: sel) }
         }
     } else if let (ca, trig) = triggerMatching(keycode: carbon, mods: mods) {
         if trig.kind == .screenshot {
@@ -1251,13 +1314,16 @@ func fireMediaAction(_ carbon: UInt32, mods: UInt32 = 0) {
             return
         }
         let sel = trig.kind == .screenshot ? "" : captureOrClipboard()
-        if ca.isHandoff {
+        let delivery = ca.effectiveDelivery(for: trig)
+        if delivery == .background {
             DispatchQueue.global().async { runCustomHandoff(ca, trigger: trig, capturedText: sel) }
         } else {
+            let dest = ca.effectiveDestination(for: trig).envValue
             DispatchQueue.global().async {
                 runWorker(trig.kind == .screenshot ? "customshot" : "custom", source: front, captured: sel,
                           customPrompt: ca.prompt, customSubmit: ca.autoSubmit(for: trig),
-                          customSession: ca.effectiveSessionMode(for: trig), customIncludeSource: ca.shouldIncludeSource(for: trig))
+                          customSession: delivery.sessionMode, customIncludeSource: ca.shouldIncludeSource(for: trig),
+                          claudeDestination: dest)
             }
         }
     }
@@ -1293,6 +1359,7 @@ func startMediaKeyHook() {
                let ns = NSEvent(cgEvent: event), ns.subtype.rawValue == 8 {
                 let keyCode = Int((ns.data1 & 0xFFFF0000) >> 16)
                 let isDown  = ((Int(ns.data1) & 0xFF00) >> 8) == 0xA
+                let cm = physicalModifierMask(fallback: ns.modifierFlags)
                 appendLog("[eventTap] NX_SYSDEFINED keyCode=\(keyCode) isDown=\(isDown) carbon=\(MEDIA_TO_CARBON[keyCode] ?? 0)")
                 if !isDown {
                     _nxHeld[keyCode] = false   // key released — next isDown is a genuine press
@@ -1303,11 +1370,11 @@ func startMediaKeyHook() {
                 if _nxHeld[keyCode] == true { return nil }
                 _nxHeld[keyCode] = true
                 guard let carbon = MEDIA_TO_CARBON[keyCode] else { return passthrough }
-                let bound = loadHotkeys().contains { $0.keycode == carbon && $0.mods == 0 }
-                    || triggerMatching(keycode: carbon, mods: 0) != nil
-                appendLog("[eventTap] NX bound=\(bound) carbon=\(carbon)")
+                let bound = loadHotkeys().contains { $0.keycode == carbon && $0.mods == cm }
+                    || triggerMatching(keycode: carbon, mods: cm) != nil
+                appendLog("[eventTap] NX bound=\(bound) carbon=\(carbon) mods=\(cm)")
                 guard bound else { return passthrough }
-                DispatchQueue.main.async { fireMediaAction(carbon) }
+                DispatchQueue.main.async { fireMediaAction(carbon, mods: cm) }
                 return nil
             }
 
@@ -1341,11 +1408,7 @@ func startMediaKeyHook() {
                 // Without this, holding a bound key fires start→stop→start... rapidly.
                 let isRepeat = event.getIntegerValueField(.keyboardEventAutorepeat) != 0
                 guard !isRepeat else { return nil }  // swallow repeat but don't act
-                var cm: UInt32 = 0
-                if f.contains(.maskCommand)   { cm |= 256 }
-                if f.contains(.maskShift)     { cm |= 512 }
-                if f.contains(.maskAlternate) { cm |= 2048 }
-                if f.contains(.maskControl)   { cm |= 4096 }
+                let cm = physicalModifierMask(cgFlags: f)
                 let bound = loadHotkeys().contains { $0.keycode == kc && $0.mods == cm }
                     || triggerMatching(keycode: kc, mods: cm) != nil
                 appendLog("[eventTap] keyDown kc=\(kc) mods=\(cm) bound=\(bound)")
@@ -1395,7 +1458,7 @@ func handle(_ line: String) -> String {
     case "hide":   // hide an app's windows (used to clear Claude before a screenshot)
         if parts.count > 1 { let b = parts[1]
             DispatchQueue.main.sync {   // sync: reply only once it's actually hidden
-                NSRunningApplication.runningApplications(withBundleIdentifier: b).first?.hide()
+                _ = NSRunningApplication.runningApplications(withBundleIdentifier: b).first?.hide()
             } }
         return "ok"
     case "reloadhotkeys": DispatchQueue.main.async { reregisterHotkeys() }; return "ok"
@@ -1491,15 +1554,42 @@ func anotherInstanceRunning() -> Bool {
 }
 if anotherInstanceRunning() { exit(0) }
 
-// Restart: remove socket so the fresh launchd instance passes anotherInstanceRunning,
-// kickstart the LaunchAgent (launchd-owned, so KeepAlive works), then exit.
+private func shellSingleQuote(_ value: String) -> String {
+    "'" + value.replacingOccurrences(of: "'", with: "'\\''") + "'"
+}
+
+private func reopenAfterExit(appPath: String, pid: Int32) {
+    let script = """
+    #!/bin/zsh
+    PID=\(pid)
+    APP=\(shellSingleQuote(appPath))
+    for i in {1..75}; do /bin/kill -0 $PID 2>/dev/null || break; sleep 0.2; done
+    /usr/bin/open "$APP"
+    """
+    let path = NSTemporaryDirectory() + "claudecommand-reopen.sh"
+    guard (try? script.write(toFile: path, atomically: true, encoding: .utf8)) != nil else {
+        appendLog("[restart] could not write reopen helper")
+        return
+    }
+    chmod(path, 0o700)
+    let p = Process()
+    p.executableURL = URL(fileURLWithPath: "/bin/zsh")
+    p.arguments = [path]
+    do { try p.run() } catch { appendLog("[restart] could not launch reopen helper: \(error)") }
+}
+
+// Restart: prefer the LaunchAgent so login/restart state stays durable. Downloaded
+// app installs may not have a LaunchAgent yet, so create it on demand and also
+// hand off a detached reopen fallback before exiting.
 func restartApp() {
     DispatchQueue.global().async {
         try? FileManager.default.removeItem(atPath: SOCK)
+        reopenAfterExit(appPath: Bundle.main.bundlePath, pid: ProcessInfo.processInfo.processIdentifier)
+        _ = ensureLaunchAgentInstalled()
         let uid = getuid()
         _ = runShell("/bin/launchctl", ["kickstart", "gui/\(uid)/com.claudecommand"])
         Thread.sleep(forTimeInterval: 0.15)
-        exit(1)  // fallback: if kickstart failed, non-zero exit triggers KeepAlive
+        exit(1)  // if launchd owns us, non-zero exit triggers KeepAlive; detached open covers manual launches
     }
 }
 
@@ -1510,7 +1600,7 @@ func validateInstall() {
     ]
     for (path, msg) in checks where !path.isEmpty && !FileManager.default.fileExists(atPath: path) {
         appendLog("[startup] \(msg): \(path)")
-        notify("ClaudeCommand install broken", msg)
+        notify("Command install broken", msg)
     }
 }
 
@@ -1579,7 +1669,7 @@ func installMainMenu() {
     mainMenu.addItem(appMenuItem)
     let appMenu = NSMenu()
     appMenuItem.submenu = appMenu
-    appMenu.addItem(withTitle: "Quit ClaudeCommand", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+    appMenu.addItem(withTitle: "Quit Command", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
 
     let editMenuItem = NSMenuItem()
     mainMenu.addItem(editMenuItem)

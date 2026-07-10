@@ -1,0 +1,283 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Command quick reference for default shortcuts, prompt layers, variables, local data, and common fixes.">
+  <title>Command Quick Reference</title>
+  <link rel="canonical" href="https://galbutnotgirl.github.io/command/quick-reference.html">
+  <meta property="og:site_name" content="Command">
+  <meta property="og:title" content="Command Quick Reference">
+  <meta property="og:description" content="Command quick reference for default shortcuts, prompt layers, variables, local data, and common fixes.">
+  <meta property="og:type" content="website">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="Command Quick Reference">
+  <meta name="twitter:description" content="Command quick reference for default shortcuts, prompt layers, variables, local data, and common fixes.">
+  <link rel="stylesheet" href="site.css">
+</head>
+<body>
+  <a class="skip-link" href="#content">Skip to content</a>
+  <div class="doc-wrap">
+    <nav class="toc" aria-label="Documentation sections">
+      <div class="toc-title">Quick Reference</div>
+      <a href="index.html">Overview</a>
+      <a href="install.html">Install Guide</a>
+      <a href="uninstall.html">Uninstall</a>
+      <a href="guide.html">User Guide</a>
+      <a href="settings.html">Settings Reference</a>
+      <a href="quick-reference.html">Quick Reference</a>
+      <a href="examples.html">Examples</a>
+      <a href="faq.html">FAQ</a>
+      <a href="changelog.html">Changelog</a>
+      <a href="limitations.html">Alpha Limitations</a>
+      <a href="updates.html">Updates</a>
+      <a href="permissions.html">Permissions</a>
+      <a href="privacy.html">Privacy</a>
+      <a href="troubleshooting.html">Troubleshooting</a>
+      <a href="support.html">Support</a>
+      <a href="security.html">Security Policy</a>
+      <a href="icon-treatments.html">Icon Treatments</a>
+      <a href="background.html">Background Architecture</a>
+      <a href="release.html">Release Checklist</a>
+      <a href="#shortcuts">Shortcuts</a>
+      <a href="#shortcut-capture">Shortcut Capture</a>
+      <a href="#menu-bar">Menu Bar</a>
+      <a href="#glossary">Glossary</a>
+      <a href="#prompt-model">Prompt Model</a>
+      <a href="#built-in-compose">Built-In Compose</a>
+      <a href="#variables">Variables</a>
+      <a href="#clipboard-picker">Clipboard Picker</a>
+      <a href="#background-result">Background Results</a>
+      <a href="#import-export">Import / Export</a>
+      <a href="#local-data">Local Data</a>
+      <a href="#fixes">Fixes</a>
+      <a href="#help">Help</a>
+      <a href="#full-docs">Full Docs</a>
+      <a href="QUICK_REFERENCE.md">Markdown source</a>
+    </nav>
+    <main id="content" class="doc-main">
+      <header class="doc-hero">
+        <h1>Quick Reference</h1>
+        <p class="lead">Shortcut table, prompt inheritance, variables, local data, and common fixes.</p>
+      </header>
+      <section id="shortcuts">
+        <h2>Default Shortcuts</h2>
+        <table>
+          <thead><tr><th>Built-in combination</th><th>Default</th><th>Result</th></tr></thead>
+          <tbody>
+            <tr><td>Selected text -> Existing chat</td><td><kbd>F8</kbd></td><td>Send selected text into current Claude chat.</td></tr>
+            <tr><td>Selected text -> New chat</td><td><kbd>Option-F8</kbd></td><td>Open new Claude chat and wait.</td></tr>
+            <tr><td>Selected text -> New chat + auto-submit</td><td>Unbound</td><td>Open new Claude chat, submit, restore focus.</td></tr>
+            <tr><td>Screenshot -> Existing chat</td><td><kbd>F7</kbd></td><td>Capture screenshot and add to current chat.</td></tr>
+            <tr><td>Screenshot -> New chat</td><td><kbd>Option-F7</kbd></td><td>Capture screenshot and open new chat.</td></tr>
+            <tr><td>Screenshot -> New chat + auto-submit</td><td>Unbound</td><td>Capture screenshot, open new chat, submit.</td></tr>
+            <tr><td>Clipboard History</td><td><kbd>F6</kbd></td><td>Open searchable clipboard picker.</td></tr>
+            <tr><td>Dictate -> Insert</td><td><kbd>F5</kbd></td><td>Speak and paste transcript at cursor.</td></tr>
+            <tr><td>Dictate -> Claude</td><td><kbd>Option-F5</kbd></td><td>Speak and send transcript to Claude.</td></tr>
+          </tbody>
+        </table>
+      </section>
+      <section id="shortcut-capture">
+        <h2>Shortcut Capture</h2>
+        <p>Change prompt/action shortcuts in <strong>Settings -> Shortcuts</strong>. Dictation shortcuts live in <strong>Settings -> Dictation Settings</strong>. Open the relevant editor or trigger row, click a key field, press a combo. Delete clears. Esc cancels.</p>
+        <p>The menu-bar menu only shows prompt/action shortcuts that are enabled and bound to a key. Unbound combinations such as Go stay editable in Settings but do not appear in the menu.</p>
+        <table>
+          <thead><tr><th>Case</th><th>Guidance</th></tr></thead>
+          <tbody>
+            <tr><td>Home, End, PgUp, PgDn</td><td>Good choices for press-and-hold dictation because they avoid F-key media behavior on many keyboards. Rebind in <strong>Dictation Settings</strong>.</td></tr>
+            <tr><td>F5-F8</td><td>Default alpha choices, but macOS or hardware keyboards may treat them as media/brightness keys unless standard function keys are enabled.</td></tr>
+            <tr><td>Press-and-hold voice</td><td>Hold to record, release after the last word. The stop sound confirms release; the active menu-bar chip can stay visible while tail capture, transcription, cleanup, and dispatch finish.</td></tr>
+            <tr><td>Double-tap voice</td><td>Double-tap to lock recording on when holding is awkward; stop from the menu or dictation control.</td></tr>
+          </tbody>
+        </table>
+      </section>
+      <section id="menu-bar">
+        <h2>Menu Bar</h2>
+        <table>
+          <thead><tr><th>Item</th><th>Shows when</th></tr></thead>
+          <tbody>
+            <tr><td>Bound prompt/action shortcut</td><td>Trigger is enabled and has a key binding.</td></tr>
+            <tr><td>Stop Dictation / Cancel Dictation</td><td>Dictation is recording.</td></tr>
+            <tr><td>Settings</td><td>Always; shortcut is Command-,.</td></tr>
+            <tr><td>Quit Command</td><td>Always; shortcut is Command-Q.</td></tr>
+          </tbody>
+        </table>
+        <p>Unbound combinations, disabled triggers, and auto-submit combinations with no shortcut stay in Settings and do not appear in the menu.</p>
+      </section>
+      <section id="glossary">
+        <h2>Glossary</h2>
+        <table>
+          <thead><tr><th>Term</th><th>Meaning</th></tr></thead>
+          <tbody>
+            <tr><td>Prompt</td><td>The instruction text Command sends to Claude.</td></tr>
+            <tr><td>Action</td><td>A named prompt setup, with defaults and one or more triggers.</td></tr>
+            <tr><td>Trigger</td><td>The way content is captured: selected text, screenshot, popup, or voice.</td></tr>
+            <tr><td>Delivery</td><td>Where the rendered prompt goes: existing chat, new chat, or background.</td></tr>
+            <tr><td>Destination</td><td>Which Claude surface opens: Default, Chat, Cowork, or Code.</td></tr>
+            <tr><td>Auto-submit</td><td>Whether Command presses Return after filling a new chat.</td></tr>
+            <tr><td>Background</td><td>A local <code>claude -p</code> run with no Claude window.</td></tr>
+          </tbody>
+        </table>
+      </section>
+      <section id="prompt-model">
+        <h2>Prompt Model</h2>
+        <table>
+          <thead><tr><th>Layer</th><th>Choices</th></tr></thead>
+          <tbody>
+            <tr><td>Trigger</td><td>Selected text, Screenshot, Popup, Voice</td></tr>
+            <tr><td>Delivery</td><td>Existing chat, New chat, Background</td></tr>
+            <tr><td>Destination</td><td>Default, Chat, Cowork, Code</td></tr>
+          </tbody>
+        </table>
+        <p><code>—</code> means inherit from prompt/action.</p>
+        <p>Destination resolves global setting first, then prompt/action default, then trigger override.</p>
+      </section>
+      <section id="built-in-compose">
+        <h2>Built-In Compose</h2>
+        <p>One shared Compose prompt powers six built-in combinations.</p>
+        <table>
+          <thead><tr><th>Combination</th><th>Input</th><th>Delivery</th><th>Default submit</th></tr></thead>
+          <tbody>
+            <tr><td>Selected text -> Existing chat</td><td>Selected text</td><td>Existing chat</td><td>No</td></tr>
+            <tr><td>Selected text -> New chat</td><td>Selected text</td><td>New chat</td><td>No</td></tr>
+            <tr><td>Selected text -> New chat + auto-submit</td><td>Selected text</td><td>New chat</td><td>Yes</td></tr>
+            <tr><td>Screenshot -> Existing chat</td><td>Screenshot</td><td>Existing chat</td><td>No</td></tr>
+            <tr><td>Screenshot -> New chat</td><td>Screenshot</td><td>New chat</td><td>No</td></tr>
+            <tr><td>Screenshot -> New chat + auto-submit</td><td>Screenshot</td><td>New chat</td><td>Yes</td></tr>
+          </tbody>
+        </table>
+        <p>Pencil opens Compose editor for shared prompt text and default/per-row auto-submit. Auto-submit is on by default only for the two "New chat + auto-submit" combinations.</p>
+      </section>
+      <section id="variables">
+        <h2>Prompt Variables</h2>
+        <table>
+          <thead><tr><th>Variable</th><th>Meaning</th></tr></thead>
+          <tbody>
+            <tr><td><code>{selection}</code></td><td>Captured text, typed popup text, spoken text, or selected text.</td></tr>
+            <tr><td><code>{context}</code></td><td>Matching Context rule text.</td></tr>
+            <tr><td><code>{source}</code></td><td>Source app/site line.</td></tr>
+            <tr><td><code>{url}</code></td><td>Source URL when available.</td></tr>
+            <tr><td><code>{file}</code></td><td>Screenshot file path for background delivery.</td></tr>
+          </tbody>
+        </table>
+        <p>If <code>{selection}</code> is missing, captured content is appended below prompt.</p>
+      </section>
+      <section id="clipboard-picker">
+        <h2>Clipboard Picker</h2>
+        <table>
+          <thead><tr><th>Key</th><th>Action</th></tr></thead>
+          <tbody>
+            <tr><td>Type</td><td>Search.</td></tr>
+            <tr><td>Up/Down</td><td>Select.</td></tr>
+            <tr><td>Return</td><td>Paste.</td></tr>
+            <tr><td>Command-Return</td><td>Paste and keep open.</td></tr>
+            <tr><td>Esc</td><td>Close.</td></tr>
+          </tbody>
+        </table>
+      </section>
+      <section id="background-result">
+        <h2>Background Result Contract</h2>
+        <p>Background actions run through <code>claude -p</code>.</p>
+        <p>If final non-empty stdout line is <code>KEY=value</code>, Command displays it in notification, Command History, and diagnostic summary.</p>
+        <pre><code>TASK_ID=abc123</code></pre>
+        <p>Only final line is parsed. Prose containing <code>TASK_ID=abc123</code> does not count. No follow-up action runs from that value yet.</p>
+      </section>
+      <section id="import-export">
+        <h2>Import / Export</h2>
+        <p>Open <strong>Settings -> About -> Import / Export</strong>.</p>
+        <table>
+          <thead><tr><th>Button</th><th>Use</th></tr></thead>
+          <tbody>
+            <tr><td>Export</td><td>Save selected settings sections to JSON.</td></tr>
+            <tr><td>Import</td><td>Preview a saved JSON file, then choose per-section handling.</td></tr>
+          </tbody>
+        </table>
+        <table>
+          <thead><tr><th>Import mode</th><th>Result</th></tr></thead>
+          <tbody>
+            <tr><td>Keep current</td><td>Skip section.</td></tr>
+            <tr><td>Merge</td><td>Current plus incoming; incoming wins conflicts.</td></tr>
+            <tr><td>Overwrite</td><td>Replace section.</td></tr>
+          </tbody>
+        </table>
+      </section>
+      <section id="local-data">
+        <h2>Local Data</h2>
+        <table>
+          <thead><tr><th>Area</th><th>Location</th></tr></thead>
+          <tbody>
+            <tr><td>Shortcuts, prompts, context</td><td><code>~/.claude/state/</code></td></tr>
+            <tr><td>Clipboard history</td><td><code>~/.claude/state/cliphistory/</code></td></tr>
+            <tr><td>Dictation data</td><td><code>~/Library/Application Support/DictationLab/</code></td></tr>
+            <tr><td>Command/background history</td><td><code>~/Library/Application Support/claude-command/</code></td></tr>
+          </tbody>
+        </table>
+        <p>Background actions run local Claude CLI. Review prompts and CLI extra args before sharing exports.</p>
+      </section>
+      <section id="fixes">
+        <h2>Common Fixes</h2>
+        <table>
+          <thead><tr><th>Problem</th><th>Fix</th></tr></thead>
+          <tbody>
+            <tr><td>Hotkeys do nothing</td><td>Grant Accessibility, then restart Command.</td></tr>
+            <tr><td>F-keys control media</td><td>Enable standard function keys, rebind prompt shortcuts in Shortcuts, or rebind dictation shortcuts in Dictation Settings.</td></tr>
+            <tr><td>Screenshot fails</td><td>Grant Screen Recording, then restart Command.</td></tr>
+            <tr><td>Dictation fails</td><td>Grant Microphone; download model in Dictation Settings.</td></tr>
+            <tr><td>Claude opens wrong mode</td><td>Check global destination, action destination, trigger override.</td></tr>
+            <tr><td>To-Do URL not captured</td><td>Select no text, use <code>Claude - To-Do</code> from Safari, Chrome, Brave, Chromium, or Arc, then check Command History -> Background.</td></tr>
+            <tr><td>Background run fails</td><td>Open Command History -> Background and inspect log.</td></tr>
+          </tbody>
+        </table>
+        <p>For permission details and reset commands, see <a href="permissions.html">Permissions</a>.</p>
+      </section>
+      <section id="help">
+        <h2>Help From The App</h2>
+        <p>Open <strong>Settings -> About</strong>.</p>
+        <table>
+          <thead><tr><th>Button</th><th>Use</th></tr></thead>
+          <tbody>
+            <tr><td>Help &amp; Documentation</td><td>Repository link plus bundled docs buttons.</td></tr>
+            <tr><td>View on GitHub</td><td>Opens the project repository.</td></tr>
+            <tr><td>Documentation</td><td>Full bundled docs, with GitHub Pages fallback.</td></tr>
+            <tr><td>User Guide / Install Guide / Uninstall</td><td>End-to-end setup, first install, and removal.</td></tr>
+            <tr><td>Settings Reference</td><td>Tab-by-tab Settings map.</td></tr>
+            <tr><td>Quick Reference</td><td>Default shortcuts, prompt variables, common fixes, and local data paths.</td></tr>
+            <tr><td>Troubleshooting</td><td>Symptom-first fixes and log paths.</td></tr>
+            <tr><td>Permissions</td><td>Permission meanings, optional items, and reset commands.</td></tr>
+            <tr><td>Support</td><td>What to include in bug reports, feature requests, and help requests.</td></tr>
+            <tr><td>Security Policy</td><td>Private reporting path, supported alpha versions, redaction guidance, and privacy links.</td></tr>
+            <tr><td>Examples / FAQ / Updates / Privacy / Changelog / Alpha Limitations</td><td>Examples, common questions, update flow, local data, release notes, and alpha expectations.</td></tr>
+            <tr><td>Icon Treatments / Background Architecture / Release Checklist</td><td>Active-state visuals, background-run internals, and maintainer ship gates.</td></tr>
+            <tr><td>Support &amp; Reporting</td><td>Diagnostics, public bug/feature routes, and private security reporting.</td></tr>
+            <tr><td>Copy Diagnostic Info</td><td>App path, bundle ID, version, minimum macOS, update channel/check status, shortcut binding summary, Set Up status, log tails, recent command summaries, Clipboard History errors, and recent dictation previews.</td></tr>
+            <tr><td>Report a Bug</td><td>Prefilled GitHub issue template.</td></tr>
+            <tr><td>Request Feature</td><td>Prefilled GitHub feature request template.</td></tr>
+            <tr><td>Private Security Report</td><td>GitHub private advisory for vulnerabilities, exposed secrets, private logs, or sensitive diagnostics.</td></tr>
+          </tbody>
+        </table>
+      </section>
+      <section id="full-docs">
+        <h2>Full Docs</h2>
+        <div class="grid">
+          <a class="card" href="install.html"><strong>Install Guide</strong><span class="muted">First launch, permissions, and source install.</span></a>
+          <a class="card" href="uninstall.html"><strong>Uninstall</strong><span class="muted">Remove app, LaunchAgent, and optional local data.</span></a>
+          <a class="card" href="guide.html"><strong>User Guide</strong><span class="muted">End-to-end setup, prompt model, custom actions, and updates.</span></a>
+          <a class="card" href="settings.html"><strong>Settings Reference</strong><span class="muted">Tab-by-tab map of every setting.</span></a>
+          <a class="card" href="updates.html"><strong>Updates</strong><span class="muted">Channels, manual install, rollback, and recovery.</span></a>
+          <a class="card" href="permissions.html"><strong>Permissions</strong><span class="muted">macOS prompts, optional items, and reset commands.</span></a>
+          <a class="card" href="privacy.html"><strong>Privacy</strong><span class="muted">Local files, diagnostics, and data handling.</span></a>
+          <a class="card" href="troubleshooting.html"><strong>Troubleshooting</strong><span class="muted">Symptom-first fixes and command checks.</span></a>
+          <a class="card" href="support.html"><strong>Support</strong><span class="muted">Bug reports, feature requests, help requests, and diagnostics.</span></a>
+          <a class="card" href="examples.html"><strong>Examples</strong><span class="muted">Copyable workflow patterns.</span></a>
+          <a class="card" href="faq.html"><strong>FAQ</strong><span class="muted">Common setup, workflow, and data questions.</span></a>
+          <a class="card" href="changelog.html"><strong>Changelog</strong><span class="muted">Current alpha defaults and release notes.</span></a>
+          <a class="card" href="limitations.html"><strong>Alpha Limitations</strong><span class="muted">Current alpha expectations and known sharp edges.</span></a>
+          <a class="card" href="icon-treatments.html"><strong>Icon Treatments</strong><span class="muted">Active-state visual references.</span></a>
+          <a class="card" href="background.html"><strong>Background Architecture</strong><span class="muted">Maintainer notes for local <code>claude -p</code> delivery.</span></a>
+          <a class="card" href="release.html"><strong>Release Checklist</strong><span class="muted">Maintainer ship gates and Pages checks.</span></a>
+        </div>
+      </section>
+    </main>
+  </div>
+</body>
+</html>

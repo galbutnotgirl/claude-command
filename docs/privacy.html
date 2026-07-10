@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Command privacy and local data guide covering settings, clipboard history, dictation data, command history, background logs, and exports.">
+  <title>Command Privacy</title>
+  <link rel="canonical" href="https://galbutnotgirl.github.io/command/privacy.html">
+  <meta property="og:site_name" content="Command">
+  <meta property="og:title" content="Command Privacy">
+  <meta property="og:description" content="Command privacy and local data guide covering settings, clipboard history, dictation data, command history, background logs, and exports.">
+  <meta property="og:type" content="website">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="Command Privacy">
+  <meta name="twitter:description" content="Command privacy and local data guide covering settings, clipboard history, dictation data, command history, background logs, and exports.">
+  <link rel="stylesheet" href="site.css">
+</head>
+<body>
+  <a class="skip-link" href="#content">Skip to content</a>
+  <div class="doc-wrap">
+    <nav class="toc" aria-label="Documentation sections">
+      <div class="toc-title">Privacy</div>
+      <a href="index.html">Overview</a>
+      <a href="install.html">Install Guide</a>
+      <a href="uninstall.html">Uninstall</a>
+      <a href="guide.html">User Guide</a>
+      <a href="settings.html">Settings Reference</a>
+      <a href="quick-reference.html">Quick Reference</a>
+      <a href="examples.html">Examples</a>
+      <a href="faq.html">FAQ</a>
+      <a href="changelog.html">Changelog</a>
+      <a href="limitations.html">Alpha Limitations</a>
+      <a href="updates.html">Updates</a>
+      <a href="permissions.html">Permissions</a>
+      <a href="privacy.html">Privacy</a>
+      <a href="troubleshooting.html">Troubleshooting</a>
+      <a href="support.html">Support</a>
+      <a href="security.html">Security Policy</a>
+      <a href="icon-treatments.html">Icon Treatments</a>
+      <a href="background.html">Background Architecture</a>
+      <a href="release.html">Release Checklist</a>
+      <a href="#summary">Summary</a>
+      <a href="#locations">Local files</a>
+      <a href="#background">Background actions</a>
+      <a href="#exports">Exports</a>
+      <a href="#diagnostics">Diagnostics</a>
+      <a href="PRIVACY.md">Markdown source</a>
+    </nav>
+    <main id="content" class="doc-main">
+      <header class="doc-hero">
+        <h1>Privacy</h1>
+        <p class="lead">Command stores settings and history on this Mac. Clipboard and dictation history do not leave through Command; background actions use your local Claude CLI setup.</p>
+      </header>
+
+      <section id="summary">
+        <h2>Short Version</h2>
+        <div class="grid">
+          <div class="card"><strong>Local by default</strong><span class="muted">Settings, shortcuts, history, vocabulary, and logs are local files.</span></div>
+          <div class="card"><strong>Clipboard safeguards</strong><span class="muted">Secret-looking copies and known password-app copies are skipped.</span></div>
+          <div class="card"><strong>On-device dictation</strong><span class="muted">Dictation history and vocabulary live under DictationLab local storage.</span></div>
+          <div class="card"><strong>Background runs differ</strong><span class="muted">Background actions call local <code>claude -p</code>; access depends on Claude CLI setup and prompt.</span></div>
+        </div>
+      </section>
+
+      <section id="locations">
+        <h2>Local File Locations</h2>
+        <table>
+          <thead><tr><th>Area</th><th>Location</th><th>Notes</th></tr></thead>
+          <tbody>
+            <tr><td>Shortcuts and prompt text</td><td><code>~/.claude/state/</code></td><td>Hotkeys, compose prompt text, custom actions, context rules, command config, and clipboard metadata.</td></tr>
+            <tr><td>Clipboard history</td><td><code>~/.claude/state/cliphistory/</code></td><td>Local searchable history; password-app and secret-looking copies are skipped.</td></tr>
+            <tr><td>Dictation data</td><td><code>~/Library/Application Support/DictationLab/</code></td><td>Transcripts, corrections, vocabulary, and processing settings.</td></tr>
+            <tr><td>Command history</td><td><code>~/Library/Application Support/claude-command/command-history/</code></td><td>Foreground shortcut send records.</td></tr>
+            <tr><td>Background runs</td><td><code>~/Library/Application Support/claude-command/submissions/</code></td><td><code>claude -p</code> submission records.</td></tr>
+            <tr><td>Background captures</td><td><code>~/Library/Application Support/claude-command/captures/</code></td><td>Temporary captured files used by background image actions.</td></tr>
+            <tr><td>Background logs</td><td><code>~/Library/Application Support/claude-command/logs/</code></td><td>Run logs for background actions.</td></tr>
+            <tr><td>Background CLI settings</td><td><code>~/Library/Application Support/claude-command/settings.json</code></td><td>Command, working directory, extra args, and notification settings.</td></tr>
+            <tr><td>App preferences</td><td><code>~/Library/Preferences/com.claudecommand.plist</code></td><td>Update channel, launch options, picker theme, sound preferences, and app toggles.</td></tr>
+            <tr><td>App logs</td><td><code>~/Library/Logs/claude-command.log</code> and <code>~/.claude/logs/</code></td><td>Shortcut actions, app dispatch, Clipboard History, and attribution logs.</td></tr>
+            <tr><td>LaunchAgent</td><td><code>~/Library/LaunchAgents/com.claudecommand.plist</code></td><td>Starts Command at login when Launch at login is enabled; source installs may create it during install.</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="background">
+        <h2>Background Actions</h2>
+        <p>Background delivery sends rendered prompts to local <code>claude -p</code>. Command does not decide what Claude CLI can access. Network access, file access, MCP/tool use, and account behavior depend on Claude CLI configuration and allowed tools.</p>
+        <div class="callout">
+          Review background prompts and CLI extra args before enabling a shortcut or sharing an export.
+        </div>
+      </section>
+
+      <section id="exports">
+        <h2>Import And Export Safety</h2>
+        <p>Exports can include shortcuts, prompt settings, context rules, vocabulary, background settings, and app preferences. Import previews sections before changes apply.</p>
+        <table>
+          <thead><tr><th>Import mode</th><th>Result</th></tr></thead>
+          <tbody>
+            <tr><td>Keep current</td><td>Skip section entirely.</td></tr>
+            <tr><td>Merge</td><td>Keep current items; incoming items win matching keys.</td></tr>
+            <tr><td>Overwrite</td><td>Replace current section with imported section.</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="diagnostics">
+        <h2>Diagnostics</h2>
+        <p><strong>Settings -> About -> Copy Diagnostic Info</strong> copies app path, bundle ID, version, minimum macOS, update channel/check status, shortcut binding summary, Set Up status, log tails, recent command summaries, and recent dictation previews. Review copied diagnostics before sharing if logs or recent text may include sensitive content.</p>
+        <p>If diagnostics, logs, clipboard text, dictation text, screenshots, or exports reveal a vulnerability, exposed secret, private log, or sensitive data path, do not file a public issue. Use <a href="https://github.com/galbutnotgirl/command/security/advisories/new">private vulnerability reporting</a>.</p>
+      </section>
+    </main>
+  </div>
+</body>
+</html>

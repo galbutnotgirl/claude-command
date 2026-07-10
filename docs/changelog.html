@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Command changelog with alpha notes, current defaults, user-facing changes, and current limitations.">
+  <title>Command Changelog</title>
+  <link rel="canonical" href="https://galbutnotgirl.github.io/command/changelog.html">
+  <meta property="og:site_name" content="Command">
+  <meta property="og:title" content="Command Changelog">
+  <meta property="og:description" content="Command changelog with alpha notes, current defaults, user-facing changes, and current limitations.">
+  <meta property="og:type" content="website">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="Command Changelog">
+  <meta name="twitter:description" content="Command changelog with alpha notes, current defaults, user-facing changes, and current limitations.">
+  <link rel="stylesheet" href="site.css">
+</head>
+<body>
+  <a class="skip-link" href="#content">Skip to content</a>
+  <div class="doc-wrap">
+    <nav class="toc" aria-label="Documentation sections">
+      <div class="toc-title">Changelog</div>
+      <a href="index.html">Overview</a>
+      <a href="install.html">Install Guide</a>
+      <a href="uninstall.html">Uninstall</a>
+      <a href="guide.html">User Guide</a>
+      <a href="settings.html">Settings Reference</a>
+      <a href="quick-reference.html">Quick Reference</a>
+      <a href="examples.html">Examples</a>
+      <a href="faq.html">FAQ</a>
+      <a href="changelog.html">Changelog</a>
+      <a href="limitations.html">Alpha Limitations</a>
+      <a href="updates.html">Updates</a>
+      <a href="permissions.html">Permissions</a>
+      <a href="privacy.html">Privacy</a>
+      <a href="troubleshooting.html">Troubleshooting</a>
+      <a href="support.html">Support</a>
+      <a href="security.html">Security Policy</a>
+      <a href="icon-treatments.html">Icon Treatments</a>
+      <a href="background.html">Background Architecture</a>
+      <a href="release.html">Release Checklist</a>
+      <a href="#alpha6">1.2.0-alpha.6</a>
+      <a href="#defaults">Defaults</a>
+      <a href="#notes">Alpha notes</a>
+      <a href="CHANGELOG.md">Markdown source</a>
+    </nav>
+    <main id="content" class="doc-main">
+      <header class="doc-hero">
+        <h1>Changelog</h1>
+        <p class="lead">User-facing release notes for alpha builds.</p>
+      </header>
+      <section id="alpha6">
+        <h2>1.2.0-alpha.6</h2>
+        <ul>
+          <li>Prompt-centered Shortcuts UI with compose prompts, custom actions, multiple triggers, delivery, destination, and trigger overrides.</li>
+          <li>Compose groups selected-text and screenshot combinations under one shared prompt.</li>
+          <li>Custom Actions support selected text, screenshot, popup, and voice triggers from one prompt.</li>
+          <li>Background actions run through local <code>claude -p</code> and show results in Command History.</li>
+          <li>Command History includes foreground sends plus background runs, logs, retry, retention, and stalled-run recovery.</li>
+          <li>Import / Export moved to About with section preview and keep/merge/overwrite choices.</li>
+          <li>Dictation got history, corrections, vocabulary, settings, and voice custom action routing.</li>
+          <li>Active dictation now uses a compact solid-purple voice-lines menu-bar icon with animated white bars for stronger visibility without the earlier wide badge.</li>
+          <li>Copy Diagnostic Info includes app path, bundle ID, update channel/check status, shortcut binding summary, Set Up status, log tails, recent command summaries, Clipboard History errors, and recent dictation previews for faster install/update/support triage.</li>
+          <li>About includes View on GitHub, Report a Bug, Request Feature, Security Policy, and Private Security Report routes so repository links, public issues, feature requests, and sensitive reports go to the right place.</li>
+          <li>App and repository are now named Command. Release assets use <code>Command-*.zip</code>, GitHub Pages lives under <code>/command/</code>, and compatibility IDs/paths stay stable so existing alpha permissions and local history continue working.</li>
+          <li>Docs site now includes install, uninstall, user guide, settings reference, quick reference, examples, FAQ, alpha limitations, updates, permissions, troubleshooting, privacy, support, security policy, icon treatments, background architecture, release checklist, and 404 fallback.</li>
+          <li>App bundle includes offline HTML/CSS/SVG/Markdown docs.</li>
+          <li>Release packaging verifies zip shape, bundled docs/README source parity, and required runtime resources; CI runs a release-asset smoke test.</li>
+        </ul>
+      </section>
+      <section id="defaults">
+        <h2>Defaults In This Alpha</h2>
+        <table>
+          <thead><tr><th>Built-in combination</th><th>Default</th></tr></thead>
+          <tbody>
+            <tr><td>Selected text -> Existing chat</td><td><kbd>F8</kbd></td></tr>
+            <tr><td>Selected text -> New chat</td><td><kbd>Option-F8</kbd></td></tr>
+            <tr><td>Selected text -> New chat + auto-submit</td><td>Unbound</td></tr>
+            <tr><td>Screenshot -> Existing chat</td><td><kbd>F7</kbd></td></tr>
+            <tr><td>Screenshot -> New chat</td><td><kbd>Option-F7</kbd></td></tr>
+            <tr><td>Screenshot -> New chat + auto-submit</td><td>Unbound</td></tr>
+            <tr><td>Clipboard History</td><td><kbd>F6</kbd></td></tr>
+            <tr><td>Dictate -> Insert</td><td><kbd>F5</kbd></td></tr>
+            <tr><td>Dictate -> Claude</td><td><kbd>Option-F5</kbd></td></tr>
+          </tbody>
+        </table>
+      </section>
+      <section id="notes">
+        <h2>Alpha Notes</h2>
+        <ul>
+          <li>Structured <code>KEY=value</code> results are displayed in notifications and Command History, but do not run follow-up actions yet.</li>
+          <li>Background actions use local <code>claude -p</code>; file/network/tool access depends on your Claude CLI setup and prompt.</li>
+          <li>Some default F-key shortcuts may conflict with macOS keyboard settings or other apps. Rebind prompt shortcuts in Shortcuts, or rebind dictation shortcuts in Dictation Settings.</li>
+        </ul>
+      </section>
+    </main>
+  </div>
+</body>
+</html>

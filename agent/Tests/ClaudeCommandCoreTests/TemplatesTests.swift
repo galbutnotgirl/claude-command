@@ -3,8 +3,24 @@ import XCTest
 
 // Mirrors test/test-shell.sh's expand_template cases one-for-one — the shell
 // and Swift implementations must stay behaviorally identical (send-to-claude.sh
-// vs Settings ▸ Templates preview). If you change one, change both.
+// vs Settings ▸ Context preview). If you change one, change both.
 final class TemplatesTests: XCTestCase {
+    func testBuiltInComposeTemplateActionsIncludeScreenshotRows() {
+        XCTAssertEqual(BUILT_IN_COMPOSE_TEMPLATE_ACTIONS, ["add", "comment", "go", "shotadd", "shotcomment", "shotgo"])
+    }
+
+    func testDefaultCommandTemplatesCoverEveryBuiltInComposeAction() {
+        let actions = DEFAULT_COMMAND_TEMPLATES.map(\.action)
+        XCTAssertEqual(actions, BUILT_IN_COMPOSE_TEMPLATE_ACTIONS)
+    }
+
+    func testScreenshotComposeDefaultsMirrorSelectedTextDefaults() {
+        let byAction = Dictionary(uniqueKeysWithValues: DEFAULT_COMMAND_TEMPLATES.map { ($0.action, $0.template) })
+        XCTAssertEqual(byAction["shotadd"], byAction["add"])
+        XCTAssertEqual(byAction["shotcomment"], byAction["comment"])
+        XCTAssertEqual(byAction["shotgo"], byAction["go"])
+    }
+
     func testBareTemplateAppendsSelection() {
         let out = expandTemplate("do the thing", selection: "SEL", source: "", url: "", contextLine: "ctx")
         XCTAssertEqual(out, "do the thing\n\nSEL")

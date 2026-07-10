@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Command support guide for diagnostics, bug reports, feature requests, logs, repro details, shortcuts, and update issues.">
+  <title>Command Support</title>
+  <link rel="canonical" href="https://galbutnotgirl.github.io/command/support.html">
+  <meta property="og:site_name" content="Command">
+  <meta property="og:title" content="Command Support">
+  <meta property="og:description" content="Command support guide for diagnostics, bug reports, feature requests, logs, repro details, shortcuts, and update issues.">
+  <meta property="og:type" content="website">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="Command Support">
+  <meta name="twitter:description" content="Command support guide for diagnostics, bug reports, feature requests, logs, repro details, shortcuts, and update issues.">
+  <link rel="stylesheet" href="site.css">
+</head>
+<body>
+  <a class="skip-link" href="#content">Skip to content</a>
+  <div class="doc-wrap">
+    <nav class="toc" aria-label="Documentation sections">
+      <div class="toc-title">Support</div>
+      <a href="index.html">Overview</a>
+      <a href="install.html">Install Guide</a>
+      <a href="uninstall.html">Uninstall</a>
+      <a href="guide.html">User Guide</a>
+      <a href="settings.html">Settings Reference</a>
+      <a href="quick-reference.html">Quick Reference</a>
+      <a href="examples.html">Examples</a>
+      <a href="faq.html">FAQ</a>
+      <a href="changelog.html">Changelog</a>
+      <a href="limitations.html">Alpha Limitations</a>
+      <a href="updates.html">Updates</a>
+      <a href="permissions.html">Permissions</a>
+      <a href="privacy.html">Privacy</a>
+      <a href="troubleshooting.html">Troubleshooting</a>
+      <a href="support.html">Support</a>
+      <a href="security.html">Security Policy</a>
+      <a href="icon-treatments.html">Icon Treatments</a>
+      <a href="background.html">Background Architecture</a>
+      <a href="release.html">Release Checklist</a>
+      <a href="#fast-path">Fast Path</a>
+      <a href="#feature-requests">Feature Requests</a>
+      <a href="#include">What to include</a>
+      <a href="#workflow-details">Workflow details</a>
+      <a href="#logs">Logs</a>
+      <a href="#checks">Checks</a>
+      <a href="SUPPORT.md">Markdown source</a>
+    </nav>
+    <main id="content" class="doc-main">
+      <header class="doc-hero">
+        <h1>Support</h1>
+        <p class="lead">What to include when filing bugs, requesting features, or asking for help.</p>
+      </header>
+      <section id="fast-path">
+        <h2>Fast Path</h2>
+        <ol>
+          <li>Open <strong>Settings -> Set Up</strong> and confirm required items are OK. Optional items only need to be OK if you use that workflow.</li>
+          <li>Open <strong>Settings -> About -> Copy Diagnostic Info</strong>. It includes app path, bundle ID, version, minimum macOS, update channel/check status, shortcut binding summary, Set Up permission/component status, recent log tails, recent command summaries, Clipboard History errors, and the last three dictation raw/processed previews.</li>
+          <li>For bugs, open <strong>Settings -> About -> Report a Bug</strong>.</li>
+          <li>For non-bug requests, open <strong>Settings -> About -> Request Feature</strong>.</li>
+          <li>For vulnerabilities, exposed secrets, private logs, or sensitive diagnostic output, open <strong>Settings -> About -> Private Security Report</strong> instead of a public issue.</li>
+          <li>Review copied diagnostics for sensitive log or recent-text content, then paste only relevant lines into the GitHub issue or private advisory.</li>
+        </ol>
+        <p>If the report involves a vulnerability, exposed secret, private log, or sensitive diagnostic output, do not use a public issue. Use <strong>Settings -> About -> Private Security Report</strong> or <a href="https://github.com/galbutnotgirl/command/security/advisories/new">private vulnerability reporting</a> instead.</p>
+      </section>
+      <section id="feature-requests">
+        <h2>Feature Requests</h2>
+        <p>Use <strong>Settings -> About -> Request Feature</strong> or the <a href="https://github.com/galbutnotgirl/command/issues/new?template=feature_request.md">Feature request template</a> for non-bug workflow, trigger, destination, docs, or release improvements.</p>
+        <p>Good feature requests include the workflow, trigger type, delivery mode, destination, auto-submit preference, current workaround, and whether the request needs Settings UI, menu-bar behavior, docs/examples, import/export support, or release-note coverage.</p>
+      </section>
+      <section id="include">
+        <h2>What To Include</h2>
+        <table>
+          <thead><tr><th>Field</th><th>Example</th></tr></thead>
+          <tbody>
+            <tr><td>Version, bundle ID, minimum macOS, and app path</td><td>Version, <code>Bundle ID</code>, <code>Minimum macOS</code>, and <code>App path</code> shown in <strong>Copy Diagnostic Info</strong>.</td></tr>
+            <tr><td>macOS</td><td><code>15.5</code></td></tr>
+            <tr><td>Trigger</td><td>Selected text, Screenshot, Popup, Voice, Dictation, Clipboard History, Background.</td></tr>
+            <tr><td>Expected result</td><td>What should have happened.</td></tr>
+            <tr><td>Actual result</td><td>What happened instead.</td></tr>
+            <tr><td>Repro steps</td><td>Exact shortcut/action and app where it happened.</td></tr>
+          </tbody>
+        </table>
+      </section>
+      <section id="workflow-details">
+        <h2>Workflow Details</h2>
+        <p>Add the detail that matches the failure.</p>
+        <table>
+          <thead><tr><th>Workflow</th><th>Include</th></tr></thead>
+          <tbody>
+            <tr><td>Shortcut / trigger</td><td>Whether the row is enabled and bound in <strong>Settings -> Shortcuts</strong> or <strong>Dictation Settings</strong>, and whether macOS or another app already uses the shortcut.</td></tr>
+            <tr><td>Dictation / Voice</td><td>Whether <strong>Dictation History</strong> raw text or processed text lost words; whether it was press-and-hold or locked recording.</td></tr>
+            <tr><td>Screenshot</td><td>Whether Screen Recording is green in <strong>Set Up</strong>; whether selection capture or window capture failed.</td></tr>
+            <tr><td>Clipboard History</td><td>Whether <code>~/.claude/logs/clipwatch.err</code> has recent errors; source app copied from.</td></tr>
+            <tr><td>Background action</td><td>Failed run status, parsed result if shown, and relevant log from Command History.</td></tr>
+            <tr><td>Claude - To-Do URL capture</td><td>Whether text was highlighted, which browser was frontmost, current tab URL if safe to share, captured source/result in <strong>Command History -> Background</strong>.</td></tr>
+            <tr><td>Update</td><td>Update channel, target version, and whether manual install from <a href="install.html">Install Guide</a> worked.</td></tr>
+          </tbody>
+        </table>
+      </section>
+      <section id="logs">
+        <h2>Logs</h2>
+        <table>
+          <thead><tr><th>Log</th><th>Purpose</th></tr></thead>
+          <tbody>
+            <tr><td><code>~/Library/Logs/claude-command.log</code></td><td>Shortcut actions and paste/open flow.</td></tr>
+            <tr><td><code>~/.claude/logs/command-agent.err</code></td><td>App dispatch, hotkey, and startup errors.</td></tr>
+            <tr><td><code>~/.claude/logs/clipwatch.err</code></td><td>Clipboard History errors.</td></tr>
+            <tr><td><code>~/.claude/logs/attribution.log</code></td><td>Clipboard/source attribution.</td></tr>
+            <tr><td><code>~/Library/Application Support/claude-command/logs/</code></td><td>Background run logs.</td></tr>
+          </tbody>
+        </table>
+      </section>
+      <section id="checks">
+        <h2>Before Filing</h2>
+        <p>Binary install checks:</p>
+        <ul>
+          <li>Restart Command.</li>
+          <li>Open <strong>Settings -> Set Up</strong> and confirm required items are OK; optional items only matter for workflows you use.</li>
+          <li>Open <strong>Settings -> About -> Copy Diagnostic Info</strong> and review copied diagnostics before sharing. It includes app path, bundle ID, minimum macOS, update-check status, and shortcut binding summary; background run summaries include status/result/error/log path; full background log text still comes from <strong>Command History</strong>.</li>
+        </ul>
+        <p>From a repo checkout, maintainers can also run:</p>
+        <pre><code>./doctor.sh
+python3 ./test/test-docs.py
+./test/test-shell.sh</code></pre>
+        <p><code>./doctor.sh</code> checks source and installed app metadata, including version, bundle ID, minimum macOS <code>14.0</code>, bundled docs, executable presence, LaunchAgent Program path/socket, Clipboard History, Background runner, and dictation state files.</p>
+        <p>If a specific shortcut fails, include whether that shortcut is shown in <strong>Settings -> Shortcuts</strong> and whether another app already uses it.</p>
+        <p>For dictation tail-cutoff bugs, say whether the missing words are absent from <strong>raw text</strong>, absent only from <strong>processed text</strong>, or present in both but missing from the sent command. That separates recording/model timing from text cleanup and dispatch.</p>
+        <p>If an update failed, include update channel, target version, and whether manual install from <a href="install.html">Install Guide</a> worked.</p>
+        <p>For vulnerabilities, exposed secrets, private logs, or sensitive diagnostic output, use <strong>Settings -> About -> Private Security Report</strong> or <a href="https://github.com/galbutnotgirl/command/security/advisories/new">private vulnerability reporting</a> instead of a public issue.</p>
+        <p>For tab-by-tab Settings help, see <a href="settings.html">Settings Reference</a>. For symptom-first fixes before filing, see <a href="troubleshooting.html">Troubleshooting</a>.</p>
+      </section>
+    </main>
+  </div>
+</body>
+</html>

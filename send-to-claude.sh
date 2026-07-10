@@ -11,6 +11,8 @@
 #   comment   Open a NEW Claude Code session, pre-filled. Stays foreground so you
 #             add a note and send. No auto-submit.
 #   add       Paste the selection into the ALREADY-OPEN Claude Code chat.
+#   handoff   Submit captured content to the background runner.
+#   todo      Legacy Quick Action alias for handoff.
 #
 # Selection: $@ args (testing) › stdin (Service) › auto-⌘C via the signed helper.
 #   - Fresh selection (clipboard changed on ⌘C) is always used.
@@ -29,6 +31,7 @@ DO_LOG="${HOME}/.claude/logs/claude-command-bg.log"
 STATE="${HOME}/.claude/state/clipboard.json"
 COPY_SOURCE="${HOME}/.claude/state/last_copy.json"
 ACTION="${ACTION:-comment}"
+if [ "$ACTION" = "todo" ]; then ACTION="handoff"; fi
 CLIP_TTL="${CLIP_TTL:-60}"
 INCLUDE_CONTEXT="${INCLUDE_CONTEXT:-1}"
 DRY_RUN="${DRY_RUN:-0}"
@@ -36,8 +39,11 @@ SCRIPT_DIR="${0:A:h}"
 HELPER_APP="${SCRIPT_DIR}/SendHelper.app"
 HELPER="${HELPER_APP}/Contents/MacOS/sendhelper"
 AGENT_SOCK="${AGENT_SOCK:-${HOME}/.claude/state/command-agent.sock}"
-SOURCE_BUNDLE="${SOURCE_BUNDLE:-}"   # set by CommandAgent when a hotkey fires
+SOURCE_BUNDLE="${SOURCE_BUNDLE:-}"   # set by Command when a hotkey fires
+SOURCE_APP_NAME="${SOURCE_APP_NAME:-}"
+SKIP_SELECTION_CAPTURE="${SKIP_SELECTION_CAPTURE:-0}"   # tests only: jump straight to URL fallback
 CLAUDE_DESTINATION="${CLAUDE_DESTINATION:-code}"
+BUILTIN_AUTO_SUBMIT="${BUILTIN_AUTO_SUBMIT:-}"
 CLAUDE_BUNDLE="com.anthropic.claudefordesktop"   # chat/cowork/code are all this one app
 CLAUDE_BIN="${CLAUDE_BIN:-$(command -v claude 2>/dev/null)}"
 
@@ -51,7 +57,7 @@ BLOCK_BUNDLES=(com.apple.keychainaccess com.apple.SecurityAgent com.1password.1p
 
 mkdir -p "$(dirname "$DO_LOG")" 2>/dev/null
 log()    { print -r -- "$(date '+%Y-%m-%d %H:%M:%S') [s2c] $*" >> "$LOG_FILE" 2>/dev/null; }
-notify() { osascript -e "display notification \"$1\" with title \"${2:-Claude Command}\"" 2>/dev/null; }
+notify() { osascript -e "display notification \"$1\" with title \"${2:-Command}\"" 2>/dev/null; }
 urlencode() { printf '%s' "$1" | /usr/bin/python3 -c 'import sys,urllib.parse; sys.stdout.write(urllib.parse.quote(sys.stdin.read()))'; }
 pb_cc()  { /usr/bin/python3 -c 'from AppKit import NSPasteboard; print(NSPasteboard.generalPasteboard().changeCount())' 2>/dev/null; }
 clipboard_has_image() {
@@ -65,7 +71,7 @@ clipboard_has_image() {
 }
 front_bundle() { local a; a="$(lsappinfo front 2>/dev/null)"; [ -n "$a" ] && lsappinfo info -only bundleid "$a" 2>/dev/null | awk -F'"' '{print $4}'; }
 front_name()   { local a; a="$(lsappinfo front 2>/dev/null)"; [ -n "$a" ] && lsappinfo info -only name "$a" 2>/dev/null | awk -F'"' '{print $4}'; }
-# Keystroke synthesis: prefer the always-running CommandAgent (its own TCC
+# Keystroke synthesis: prefer the always-running Command app (its own TCC
 # identity, granted once; instant — no launch latency, so submit/paste land in
 # the right field). Fall back to launching SendHelper via `open -gW` (own
 # process too, but slower) if the agent socket isn't up. No osascript/System
@@ -99,7 +105,7 @@ wait_for_claude(){ [ -z "$CLAUDE_BUNDLE" ] && return 1; local i=0; while (( i < 
 # not a timing guess, so it deterministically tags this as our own "send" write instead
 # of racing to attribute it to whichever app happens to be frontmost a moment later.
 # Tagged com.claudecommand.send (not the plain-blocked com.claudecommand) so it shows
-# up — once, correctly tagged — under the picker's "Claude Command" filter, unless
+# up — once, correctly tagged — under the picker's "Command" filter, unless
 # add_history() finds it's byte-identical to the item it'd dupe, in which case it merges
 # instead of inserting.
 copy_for_send() {  # $1 = text, $2 = stamp path
@@ -127,14 +133,14 @@ clip_fresh_ok() {  # 0 if existing clipboard is fresh AND not blocked
 log "start ACTION=$ACTION DRY_RUN=$DRY_RUN args=$#"
 
 # --- source app + blocklist guard -------------------------------------------
-# CommandAgent passes the app that was frontmost when the hotkey fired; prefer
+# Command passes the app that was frontmost when the hotkey fired; prefer
 # it over live detection (which can drift once the worker starts).
-APP_NAME="$(front_name)"; BUNDLE_ID="${SOURCE_BUNDLE:-$(front_bundle)}"
+APP_NAME="${SOURCE_APP_NAME:-$(front_name)}"; BUNDLE_ID="${SOURCE_BUNDLE:-$(front_bundle)}"
 for b in "${BLOCK_BUNDLES[@]}"; do
   if [ "$BUNDLE_ID" = "$b" ]; then log "BLOCKED source app $BUNDLE_ID — refusing"; notify "Won't capture from ${APP_NAME}." ; exit 1; fi
 done
 
-# --- cliphistory: ask CommandAgent to show its built-in picker ----------------
+# --- cliphistory: ask Command to show its built-in picker ----------------
 # The picker lives in the agent now (one app, one grant) — it sets the clipboard
 # and pastes in-process. We just tell it which app to paste back into.
 if [ "$ACTION" = "cliphistory" ]; then
@@ -198,6 +204,8 @@ else
   [ ! -t 0 ] && STDIN_DATA="$(cat)"
   if [ -n "${STDIN_DATA//[[:space:]]/}" ]; then
     SEL="$STDIN_DATA"; log "input=stdin bytes=${#SEL}"
+  elif [ "$SKIP_SELECTION_CAPTURE" = "1" ]; then
+    log "selection capture skipped"
   else
     BEFORE="$(pbpaste 2>/dev/null)"; CC0="$(pb_cc)"
     NEW="$(helper_copy)"; CC1="$(pb_cc)"
@@ -218,22 +226,19 @@ else
   fi
 fi
 
-if [ "$IMG" = "0" ] && [ -z "${SEL//[[:space:]]/}" ] && \
-   [ "$ACTION" != "comment" ] && [ "$ACTION" != "go" ] && [ "$ACTION" != "custom" ]; then
-  log "nothing captured for $ACTION — aborting"; notify "Nothing selected."; exit 1
-fi
-
 # --- 2. context + always-on enrichment --------------------------------------
-URL=""
-case "$BUNDLE_ID" in
-  com.apple.Safari) URL="$(osascript -e 'tell application "Safari" to get URL of front document' 2>/dev/null)" ;;
-  com.google.Chrome|com.brave.Browser|com.microsoft.edgemac|org.chromium.Chromium) URL="$(osascript -e "tell application \"$APP_NAME\" to get URL of active tab of front window" 2>/dev/null)" ;;
-  company.thebrowser.Browser) URL="$(osascript -e 'tell application "Arc" to get URL of active tab of front window' 2>/dev/null)" ;;
-esac
+URL="${SOURCE_URL:-}"
+if [ -z "$URL" ]; then
+  case "$BUNDLE_ID" in
+    com.apple.Safari) URL="$(osascript -e 'tell application "Safari" to get URL of front document' 2>/dev/null)" ;;
+    com.google.Chrome|com.brave.Browser|org.chromium.Chromium) URL="$(osascript -e "tell application \"$APP_NAME\" to get URL of active tab of front window" 2>/dev/null)" ;;
+    company.thebrowser.Browser) URL="$(osascript -e 'tell application "Arc" to get URL of active tab of front window' 2>/dev/null)" ;;
+  esac
+fi
 HOST="$(printf '%s' "$URL" | sed -n 's#^[a-z][a-z]*://\([^/]*\).*#\1#p')"
 log "src app=$APP_NAME bundle=$BUNDLE_ID host=${HOST:-none} img=$IMG"
 
-# Context rules: user-editable in Settings ▸ Templates ▸ Context
+# Context rules: user-editable in Settings ▸ Context
 # (~/.claude/state/enrichment-rules.json). If that file doesn't exist, fall back
 # to the built-in defaults below unchanged — editing Templates is opt-in.
 ENRICH_RULES_PATH="${HOME}/.claude/state/enrichment-rules.json"
@@ -285,6 +290,18 @@ if [ "$INCLUDE_CONTEXT" = "1" ]; then
   [ -n "$ENRICH" ] && SOURCE_LINE="${SOURCE_LINE}"$'\n'"${ENRICH}"
 fi
 
+URL_FALLBACK=0
+if [ "$IMG" = "0" ] && [ -z "${SEL//[[:space:]]/}" ] && [ -n "${URL//[[:space:]]/}" ]; then
+  SEL="$URL"
+  URL_FALLBACK=1
+  log "input=url fallback bytes=${#SEL}"
+fi
+
+if [ "$IMG" = "0" ] && [ -z "${SEL//[[:space:]]/}" ] && \
+   [ "$ACTION" != "comment" ] && [ "$ACTION" != "go" ] && [ "$ACTION" != "custom" ]; then
+  log "nothing captured for $ACTION — aborting"; notify "Nothing selected."; exit 1
+fi
+
 # One template per built-in command (go/comment/add): user-editable in Settings ▸
 # Templates (~/.claude/state/command-templates.json), single string with
 # placeholders instead of separate before/after fields — same {selection}-or-
@@ -313,43 +330,72 @@ open_new() {  # $1 = q text (may be empty)
   open "$link" 2>/dev/null
 }
 
+builtin_should_submit() {
+  if [ -n "$BUILTIN_AUTO_SUBMIT" ]; then
+    [ "$BUILTIN_AUTO_SUBMIT" = "1" ]
+    return
+  fi
+  [ "$ACTION" = "go" ]
+}
+
 # --- 3. dispatch -------------------------------------------------------------
 case "$ACTION" in
   go)
     PRIOR="$BUNDLE_ID"
+    SHOULD_SUBMIT=0; builtin_should_submit && SHOULD_SUBMIT=1
     GO_Q="$(expand_template "$GO_RAW" "$([ "$IMG" = "1" ] && echo "(image attached below)" || printf '%s' "$SEL")")"
     open_new "$GO_Q" || { notify "Could not open Claude."; exit 1; }
-    if [ "$DRY_RUN" = "1" ]; then [ "$IMG" = "1" ] && print -r -- "DRY_RUN would paste image"; print -r -- "DRY_RUN would submit + restore focus to $PRIOR"; exit 0; fi
+    if [ "$DRY_RUN" = "1" ]; then
+      [ "$IMG" = "1" ] && print -r -- "DRY_RUN would paste image"
+      if [ "$SHOULD_SUBMIT" = "1" ]; then
+        print -r -- "DRY_RUN would submit + restore focus to $PRIOR"
+      else
+        print -r -- "DRY_RUN would leave new session open"
+      fi
+      exit 0
+    fi
     wait_for_claude || log "WARN Claude not frontmost"
-    sleep 0.8   # let input field populate + focus before submit
+    sleep 0.8   # let input field populate + focus before follow-up action
     [ "$IMG" = "1" ] && { helper_paste; sleep 0.4; }
-    helper_return
-    sleep 0.25
-    case "$PRIOR" in
-      ""|"$CLAUDE_BUNDLE"|com.claudecommand.*) log "submitted (prior=${PRIOR:-none}; no restore)" ;;
-      *) helper_activate "$PRIOR"; log "submitted + restored focus to $PRIOR" ;;
-    esac
+    if [ "$SHOULD_SUBMIT" = "1" ]; then
+      helper_return
+      sleep 0.25
+      case "$PRIOR" in
+        ""|"$CLAUDE_BUNDLE"|com.claudecommand.*) log "submitted (prior=${PRIOR:-none}; no restore)" ;;
+        *) helper_activate "$PRIOR"; log "submitted + restored focus to $PRIOR" ;;
+      esac
+    else
+      log "opened new session without auto-submit"
+    fi
     ;;
 
   comment)
+    SHOULD_SUBMIT=0; builtin_should_submit && SHOULD_SUBMIT=1
     if [ "$IMG" = "1" ]; then
       open_new "$(expand_template "$COMMENT_RAW" "")" || { notify "Could not open Claude."; exit 1; }
       [ "$DRY_RUN" = "1" ] && { print -r -- "DRY_RUN would paste image into new session"; exit 0; }
       wait_for_claude || log "WARN not frontmost"; sleep 0.3; helper_paste
+      [ "$SHOULD_SUBMIT" = "1" ] && { sleep 0.1; helper_return; }
     else
       open_new "$(expand_template "$COMMENT_RAW" "$SEL")"$'\n\n'
+      if [ "$SHOULD_SUBMIT" = "1" ] && [ "$DRY_RUN" != "1" ]; then
+        wait_for_claude || log "WARN not frontmost"; sleep 0.3; helper_return
+      fi
     fi
     ;;
 
   add)
+    SHOULD_SUBMIT=0; builtin_should_submit && SHOULD_SUBMIT=1
     if [ "$IMG" = "1" ]; then
       [ "$DRY_RUN" = "1" ] && { print -r -- "DRY_RUN would activate Claude + paste image into open chat"; exit 0; }
       helper_activate "$CLAUDE_BUNDLE"; wait_for_claude || true; sleep 0.3; helper_paste
+      [ "$SHOULD_SUBMIT" = "1" ] && { sleep 0.1; helper_return; }
     else
       PAYLOAD="$(expand_template "$ADD_RAW" "$SEL")"
       if [ "$DRY_RUN" = "1" ]; then print -r -- "DRY_RUN would copy payload + paste into open Claude chat"; exit 0; fi
       copy_for_send "$PAYLOAD" "$COPY_SOURCE"
       helper_activate "$CLAUDE_BUNDLE"; wait_for_claude || true; sleep 0.3; helper_paste
+      [ "$SHOULD_SUBMIT" = "1" ] && { sleep 0.1; helper_return; }
     fi
     log "pasted into open Claude chat"
     ;;
@@ -408,12 +454,18 @@ case "$ACTION" in
     ;;
 
   handoff)
-    # Background skill handoff — no Claude window. The vendored Electron-free
+    # Compatibility Background path — no Claude window. The vendored Electron-free
     # pipeline renders the settings template and pipes it to `claude -p` in the
     # background; contract: vendor/claude-command-capture/docs/HANDOFF.md.
     HANDOFF_SH="${SCRIPT_DIR}/capture-handoff.sh"
-    [ -f "$HANDOFF_SH" ] || { log "capture-handoff.sh missing at $HANDOFF_SH"; notify "Handoff worker missing — rebuild the agent."; exit 1; }
-    [ "$SHOT" = "1" ] && SRC="screenshot" || SRC="selection"
+    [ -f "$HANDOFF_SH" ] || { log "capture-handoff.sh missing at $HANDOFF_SH"; notify "Background runner missing — reinstall from the Install Guide."; exit 1; }
+    if [ "$SHOT" = "1" ]; then
+      SRC="screenshot"
+    elif [ "$URL_FALLBACK" = "1" ]; then
+      SRC="url"
+    else
+      SRC="selection"
+    fi
     if [ "$DRY_RUN" = "1" ]; then print -r -- "DRY_RUN handoff src=$SRC img=$IMG sel_bytes=${#SEL}"; exit 0; fi
     export HANDOFF_IMG="$IMG" HANDOFF_SOURCE="$SRC" HANDOFF_CONTEXT="$SOURCE_LINE"
     if [ "$IMG" = "1" ]; then

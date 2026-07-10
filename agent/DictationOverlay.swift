@@ -11,6 +11,7 @@ final class DictationOverlay: NSObject {
     private(set) var isVisible: Bool = false  // true = recording in progress
     var prevBundle: String = ""
     private var levelTask: Task<Void, Never>?
+    private var isFinishing: Bool = false
 
     private override init() {
         super.init()
@@ -22,8 +23,13 @@ final class DictationOverlay: NSObject {
     func show(mode: DictMode) {
         prevBundle = NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? ""
         isVisible = true
+        isFinishing = false
         menuBar.setRecording(true)
         recorder.start(mode: mode)
+        if case .error = recorder.state {
+            hide()
+            return
+        }
         startLevelUpdates()
     }
 
@@ -31,11 +37,15 @@ final class DictationOverlay: NSObject {
         levelTask?.cancel(); levelTask = nil
         menuBar.setRecording(false)
         isVisible = false
+        isFinishing = false
         resetDictTrigMode()
     }
 
     func stopRecording() {
-        hide()
+        guard isVisible, !isFinishing else { return }
+        isFinishing = true
+        resetDictTrigMode()
+        playStopSound()
         recorder.stop()
     }
 
@@ -66,9 +76,20 @@ final class DictationOverlay: NSObject {
                     log: { DebugLog.shared.append($0) }
                 )
                 HistoryStore.shared.add(raw: rawText, processed: processed, mode: mode)
-                self.playStopSound()
                 self.hide()
                 self.dispatch(text: processed, mode: mode)
+            }
+        }
+
+        recorder.onFinishedWithoutText = { [weak self] _ in
+            Task { @MainActor in
+                self?.hide()
+            }
+        }
+
+        recorder.onFailure = { [weak self] _, _ in
+            Task { @MainActor in
+                self?.hide()
             }
         }
     }
@@ -110,13 +131,16 @@ final class DictationOverlay: NSObject {
             return
         }
         let front = NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? ""
-        if ca.isHandoff {
+        let delivery = ca.effectiveDelivery(for: trig)
+        if delivery == .background {
             DispatchQueue.global().async { runCustomHandoff(ca, trigger: trig, capturedText: text) }
         } else {
+            let dest = ca.effectiveDestination(for: trig).envValue
             DispatchQueue.global().async {
                 runWorker("custom", source: front, captured: text,
                           customPrompt: ca.prompt, customSubmit: ca.autoSubmit(for: trig),
-                          customSession: ca.effectiveSessionMode(for: trig), customIncludeSource: ca.shouldIncludeSource(for: trig))
+                          customSession: delivery.sessionMode, customIncludeSource: ca.shouldIncludeSource(for: trig),
+                          claudeDestination: dest)
             }
         }
     }

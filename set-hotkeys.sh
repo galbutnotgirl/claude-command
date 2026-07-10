@@ -1,9 +1,9 @@
 #!/bin/zsh
-# set-hotkeys.sh — configure Claude Command's GLOBAL hotkeys.
+# set-hotkeys.sh — configure Command global hotkeys.
 #
-# Hotkeys are owned by CommandAgent (Carbon RegisterEventHotKey), NOT by macOS
+# Hotkeys are owned by Command (Carbon RegisterEventHotKey), NOT by macOS
 # Services — Service shortcuts don't fire for no-input actions (screenshot,
-# clipboard history). This writes the agent's config and restarts it. It also
+# clipboard history). This writes Command hotkey config and restarts it. It also
 # CLEARS any leftover pbs Service shortcuts so nothing double-binds.
 #
 # HOTKEYS table format:  "action | <tokens>"
@@ -16,22 +16,20 @@ set -uo pipefail
 # Tip: you can also rebind these visually in the menu-bar window (Shortcuts tab).
 HOTKEYS=(
   "add|Claude - Add|F8"
-  "go|Claude - Go|cmd F8"
-  "comment|Claude - Comment|opt F8"
+  "comment|Claude - New|opt F8"
   "shotadd|Claude - Screenshot Add|F7"
-  "shotgo|Claude - Screenshot Go|cmd F7"
-  "shotcomment|Claude - Screenshot Comment|opt F7"
+  "shotcomment|Claude - Screenshot New|opt F7"
   "cliphistory|Claude - Clipboard History|F6"
-  # handofftext opens the quick-entry panel (claude -p pipeline, no Claude window).
-  # "handofftext|Claude - Text Handoff|F9"
-  # Per-skill background handoffs (kind/skill/template each configurable) live in
-  # Settings → Shortcuts → Custom Handoffs — not bindable from this table.
+  # Go and Screenshot Go default to unbound in the app to avoid F-key conflicts.
+  # Bind them visually in Settings → Shortcuts if you want one-key submit.
+  # Custom prompt actions (selected text, screenshot, popup, voice) also live in
+  # Settings → Shortcuts; this bootstrap script only seeds built-in shortcuts.
 )
 
 CFG="${HOME}/.claude/state/command-hotkeys.json"
 mkdir -p "${HOME}/.claude/state"
 
-# 1) Write the agent's hotkey config (action -> Carbon keycode + modifier mask).
+# 1) Write Command hotkey config (action -> Carbon keycode + modifier mask).
 /usr/bin/python3 - "$CFG" "${HOTKEYS[@]}" <<'PY'
 import json, sys
 cfg, rows = sys.argv[1], sys.argv[2:]
@@ -68,7 +66,7 @@ with open(cfg, 'w') as f:
     json.dump(out, f, indent=2)
 PY
 
-# 2) Clear any leftover pbs Service shortcuts (agent owns hotkeys now → no dupes).
+# 2) Clear any leftover pbs Service shortcuts (Command owns hotkeys now → no dupes).
 NAMES=()
 for r in "${HOTKEYS[@]}"; do NAMES+=("${${r#*|}%|*}"); done   # middle field = menu name
 TMP="$(mktemp -t pbs_export)"
@@ -90,10 +88,10 @@ PY
 fi
 rm -f "$TMP"
 
-# 3) Restart the agent so it re-reads the config and re-registers hotkeys.
+# 3) Restart Command so it re-reads the config and re-registers hotkeys.
 UID_NUM="$(id -u)"
 launchctl kickstart -k "gui/${UID_NUM}/com.claudecommand" 2>/dev/null \
-  && print -- "[hotkeys] agent restarted with new config." \
-  || print -- "[hotkeys] agent not running — start it with ./install-agent.sh"
+  && print -- "[hotkeys] Command restarted with new config." \
+  || print -- "[hotkeys] Command not running — start it with ./install-agent.sh"
 
 print -- "[hotkeys] wrote $CFG ; cleared pbs Service shortcuts."

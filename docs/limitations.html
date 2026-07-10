@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Command alpha limitations covering shortcut conflicts, permissions, dictation timing, background actions, updates, and reporting.">
+  <title>Command Alpha Limitations</title>
+  <link rel="canonical" href="https://galbutnotgirl.github.io/command/limitations.html">
+  <meta property="og:site_name" content="Command">
+  <meta property="og:title" content="Command Alpha Limitations">
+  <meta property="og:description" content="Command alpha limitations covering shortcut conflicts, permissions, dictation timing, background actions, updates, and reporting.">
+  <meta property="og:type" content="website">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="Command Alpha Limitations">
+  <meta name="twitter:description" content="Command alpha limitations covering shortcut conflicts, permissions, dictation timing, background actions, updates, and reporting.">
+  <link rel="stylesheet" href="site.css">
+</head>
+<body>
+  <a class="skip-link" href="#content">Skip to content</a>
+  <div class="doc-wrap">
+    <nav class="toc" aria-label="Documentation sections">
+      <div class="toc-title">Alpha Limitations</div>
+      <a href="index.html">Overview</a>
+      <a href="install.html">Install Guide</a>
+      <a href="uninstall.html">Uninstall</a>
+      <a href="guide.html">User Guide</a>
+      <a href="settings.html">Settings Reference</a>
+      <a href="quick-reference.html">Quick Reference</a>
+      <a href="examples.html">Examples</a>
+      <a href="faq.html">FAQ</a>
+      <a href="changelog.html">Changelog</a>
+      <a href="limitations.html">Alpha Limitations</a>
+      <a href="updates.html">Updates</a>
+      <a href="permissions.html">Permissions</a>
+      <a href="privacy.html">Privacy</a>
+      <a href="troubleshooting.html">Troubleshooting</a>
+      <a href="support.html">Support</a>
+      <a href="security.html">Security Policy</a>
+      <a href="icon-treatments.html">Icon Treatments</a>
+      <a href="background.html">Background Architecture</a>
+      <a href="release.html">Release Checklist</a>
+      <a href="#alpha-expectations">Alpha Expectations</a>
+      <a href="#permissions">Permissions</a>
+      <a href="#dictation-voice">Dictation And Voice</a>
+      <a href="#background-actions">Background Actions</a>
+      <a href="#updates">Updates</a>
+      <a href="#reporting">Reporting</a>
+      <a href="LIMITATIONS.md">Markdown source</a>
+    </nav>
+    <main id="content" class="doc-main">
+      <header class="doc-hero">
+        <h1>Alpha Limitations</h1>
+        <p class="lead">Current alpha expectations for shortcuts, permissions, dictation, background actions, updates, and reporting.</p>
+      </header>
+      <section id="alpha-expectations">
+        <h2>Alpha Expectations</h2>
+        <ul>
+          <li>Alpha builds can change shortcuts, Settings layout, storage format, and import/export sections.</li>
+          <li>Export settings before updating if a workflow matters.</li>
+          <li>Use the latest Alpha release before reporting a bug unless the update path itself is broken.</li>
+          <li>New chat + auto-submit combinations are unbound by default because they submit immediately and restore focus.</li>
+          <li>F5-F8 may conflict with macOS keyboard behavior or other apps; Home, End, PgUp, and PgDn can be better dictation choices on some keyboards. Rebind shortcuts in <strong>Settings -> Shortcuts</strong> and <strong>Settings -> Dictation Settings</strong>.</li>
+        </ul>
+      </section>
+      <section id="permissions">
+        <h2>Permissions</h2>
+        <ul>
+          <li>Accessibility is required for global shortcuts, copy/paste, and focus restore.</li>
+          <li>Screen Recording is only required for screenshot triggers.</li>
+          <li>Microphone is only required for dictation and voice triggers.</li>
+          <li>Quick Actions are optional source-install Services; global shortcuts do not need them.</li>
+        </ul>
+        <p>See <a href="permissions.html">Permissions</a>.</p>
+      </section>
+      <section id="dictation-voice">
+        <h2>Dictation And Voice</h2>
+        <p>Dictation runs on-device, but finalization timing still matters. If final words are missing:</p>
+        <ol>
+          <li>Release the key after the last word.</li>
+          <li>Open <strong>Dictation History</strong>.</li>
+          <li>Compare raw text, processed text, and the sent command.</li>
+          <li>Report whether words are missing from raw text, only processed text, or only dispatch.</li>
+        </ol>
+        <p>That separates recording/model timing from text cleanup and paste/dispatch.</p>
+      </section>
+      <section id="background-actions">
+        <h2>Background Actions</h2>
+        <p>Background actions run local <code>claude -p</code>. Command does not control Claude CLI account, network, tool, or file access behavior.</p>
+        <p>Structured <code>KEY=value</code> output is displayed in notifications and Command History. It does not run follow-up actions yet.</p>
+        <p>See <a href="background.html">Background Architecture</a> for maintainer details.</p>
+      </section>
+      <section id="updates">
+        <h2>Updates</h2>
+        <p>Alpha, Beta, and Stable channels are visible in Settings. Stable stays unavailable until a stable release exists.</p>
+        <p>If update install fails, use <a href="install.html">Install Guide</a> for manual reinstall and <a href="updates.html">Updates</a> for rollback.</p>
+      </section>
+      <section id="reporting">
+        <h2>Reporting</h2>
+        <p>Use <a href="support.html">Support</a> for normal bugs. Include Copy Diagnostic Info only after reviewing it for sensitive content.</p>
+        <p>Use <a href="https://github.com/galbutnotgirl/command/security/advisories/new">private vulnerability reporting</a> for vulnerabilities, exposed secrets, private logs, or sensitive diagnostics.</p>
+      </section>
+    </main>
+  </div>
+</body>
+</html>

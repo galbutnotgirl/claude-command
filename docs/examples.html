@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Command workflow examples for selected text, screenshots, voice notes, background tasks, context rules, and imports.">
+  <title>Command Examples</title>
+  <link rel="canonical" href="https://galbutnotgirl.github.io/command/examples.html">
+  <meta property="og:site_name" content="Command">
+  <meta property="og:title" content="Command Examples">
+  <meta property="og:description" content="Command workflow examples for selected text, screenshots, voice notes, background tasks, context rules, and imports.">
+  <meta property="og:type" content="website">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="Command Examples">
+  <meta name="twitter:description" content="Command workflow examples for selected text, screenshots, voice notes, background tasks, context rules, and imports.">
+  <link rel="stylesheet" href="site.css">
+</head>
+<body>
+  <a class="skip-link" href="#content">Skip to content</a>
+  <div class="doc-wrap">
+    <nav class="toc" aria-label="Documentation sections">
+      <div class="toc-title">Examples</div>
+      <a href="index.html">Overview</a>
+      <a href="install.html">Install Guide</a>
+      <a href="uninstall.html">Uninstall</a>
+      <a href="guide.html">User Guide</a>
+      <a href="settings.html">Settings Reference</a>
+      <a href="quick-reference.html">Quick Reference</a>
+      <a href="examples.html">Examples</a>
+      <a href="faq.html">FAQ</a>
+      <a href="changelog.html">Changelog</a>
+      <a href="limitations.html">Alpha Limitations</a>
+      <a href="updates.html">Updates</a>
+      <a href="permissions.html">Permissions</a>
+      <a href="privacy.html">Privacy</a>
+      <a href="troubleshooting.html">Troubleshooting</a>
+      <a href="support.html">Support</a>
+      <a href="security.html">Security Policy</a>
+      <a href="icon-treatments.html">Icon Treatments</a>
+      <a href="background.html">Background Architecture</a>
+      <a href="release.html">Release Checklist</a>
+      <a href="#review">Review</a>
+      <a href="#rewrite">Rewrite</a>
+      <a href="#screenshot">Screenshot</a>
+      <a href="#voice">Voice</a>
+      <a href="#background">Background</a>
+      <a href="#context">Context</a>
+      <a href="#import">Import</a>
+      <a href="#more-detail">More Detail</a>
+      <a href="EXAMPLES.md">Markdown source</a>
+    </nav>
+    <main id="content" class="doc-main">
+      <header class="doc-hero">
+        <h1>Examples</h1>
+        <p class="lead">Copyable setups for common prompt/action flows.</p>
+      </header>
+      <section id="review">
+        <h2>Review Selected Text In Current Chat</h2>
+        <table><tbody>
+          <tr><th>Prompt</th><td>Built-in Selected text -> Existing chat combination</td></tr>
+          <tr><th>Trigger</th><td>Selected text</td></tr>
+          <tr><th>Delivery</th><td>Existing chat</td></tr>
+          <tr><th>Shortcut</th><td><kbd>F8</kbd></td></tr>
+        </tbody></table>
+        <pre><code>Review this and call out the most important issue first.
+
+{selection}</code></pre>
+      </section>
+      <section id="rewrite">
+        <h2>Start A Fresh Rewrite Thread</h2>
+        <table><tbody>
+          <tr><th>Prompt</th><td>Built-in Selected text -> New chat combination</td></tr>
+          <tr><th>Trigger</th><td>Selected text</td></tr>
+          <tr><th>Delivery</th><td>New chat</td></tr>
+          <tr><th>Shortcut</th><td><kbd>Option-F8</kbd></td></tr>
+        </tbody></table>
+        <pre><code>Rewrite this for clarity. Preserve meaning, remove filler, and keep tone direct.
+
+{selection}</code></pre>
+      </section>
+      <section id="screenshot">
+        <h2>Screenshot Design Review</h2>
+        <table><tbody>
+          <tr><th>Prompt</th><td>Built-in Screenshot -> New chat combination or custom action</td></tr>
+          <tr><th>Trigger</th><td>Screenshot</td></tr>
+          <tr><th>Delivery</th><td>New chat</td></tr>
+          <tr><th>Destination</th><td>Chat</td></tr>
+          <tr><th>Shortcut</th><td><kbd>Option-F7</kbd></td></tr>
+        </tbody></table>
+        <pre><code>Review this interface. Focus on layout, hierarchy, contrast, and what feels confusing.
+Return the top five improvements.</code></pre>
+      </section>
+      <section id="voice">
+        <h2>Voice Note Into Claude Code</h2>
+        <table><tbody>
+          <tr><th>Action name</th><td>Voice to Code</td></tr>
+          <tr><th>Trigger</th><td>Voice</td></tr>
+          <tr><th>Delivery</th><td>New chat</td></tr>
+          <tr><th>Destination</th><td>Code</td></tr>
+        </tbody></table>
+        <pre><code>Turn this spoken note into a clear implementation brief.
+Keep requirements, assumptions, and next steps separate.
+
+{selection}</code></pre>
+      </section>
+      <section id="background">
+        <h2>Background Task Capture</h2>
+        <table><tbody>
+          <tr><th>Action name</th><td>Post To Do</td></tr>
+          <tr><th>Trigger</th><td>Selected text or Popup</td></tr>
+          <tr><th>Delivery</th><td>Background</td></tr>
+          <tr><th>Destination</th><td>Default</td></tr>
+          <tr><th>Skill</th><td>Optional</td></tr>
+          <tr><th>Result</th><td>Final line <code>TASK_ID=&lt;id&gt;</code></td></tr>
+        </tbody></table>
+        <pre><code>Create one task from this input.
+
+Rules:
+1. Write a short action-oriented title.
+2. Include source context if present.
+3. Output only TASK_ID=&lt;id&gt; on the final line.
+
+{selection}</code></pre>
+        <p>The last line follows the background result convention. Command shows <code>TASK_ID=&lt;id&gt;</code> in the notification and Command History.</p>
+        <h3>Source-only right-click variant</h3>
+        <table><tbody>
+          <tr><th>Service</th><td>Claude - To-Do</td></tr>
+          <tr><th>Text selected</th><td>Sends selected text to the background action.</td></tr>
+          <tr><th>No text selected in supported browser</th><td>Sends current tab URL from Safari, Chrome, Brave, Chromium, or Arc.</td></tr>
+          <tr><th>Result check</th><td>Open Command History -> Background.</td></tr>
+        </tbody></table>
+      </section>
+      <section id="context">
+        <h2>Google Docs Context Rule</h2>
+        <table><tbody>
+          <tr><th>Tab</th><td>Context</td></tr>
+          <tr><th>Match type</th><td>URL host</td></tr>
+          <tr><th>Pattern</th><td><code>docs.google.com</code></td></tr>
+          <tr><th>Path prefix</th><td><code>/document/</code></td></tr>
+          <tr><th>Display name</th><td>Google Docs</td></tr>
+        </tbody></table>
+        <pre><code>This came from Google Docs. Preserve document structure and suggest edits clearly.</code></pre>
+      </section>
+      <section id="import">
+        <h2>Import Settings On A New Mac</h2>
+        <ol>
+          <li>On old Mac, open <strong>Settings -> About -> Import / Export</strong>.</li>
+          <li>Click <strong>Export</strong> and keep every section checked unless you intentionally want a partial export.</li>
+          <li>On new Mac, install Command and open <strong>Settings -> About -> Import / Export</strong>.</li>
+          <li>Click <strong>Import</strong>, choose export file, preview available sections, then use <strong>Merge</strong> for most sections.</li>
+        </ol>
+      </section>
+      <section id="more-detail">
+        <h2>More Detail</h2>
+        <div class="grid">
+          <a class="card" href="guide.html"><strong>User Guide</strong><span class="muted">End-to-end setup and workflows.</span></a>
+          <a class="card" href="settings.html"><strong>Settings Reference</strong><span class="muted">Tab-by-tab Settings map.</span></a>
+          <a class="card" href="quick-reference.html"><strong>Quick Reference</strong><span class="muted">Default shortcuts and variables.</span></a>
+          <a class="card" href="background.html"><strong>Background Architecture</strong><span class="muted">Maintainer details for <code>claude -p</code> actions.</span></a>
+        </div>
+      </section>
+    </main>
+  </div>
+</body>
+</html>

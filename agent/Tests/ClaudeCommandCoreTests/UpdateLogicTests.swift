@@ -41,21 +41,51 @@ final class UpdateLogicTests: XCTestCase {
     func testChannelOfTagDetection() {
         XCTAssertEqual(UpdateChannel.of(tag: "v1.2.0-alpha.2"), .alpha)
         XCTAssertEqual(UpdateChannel.of(tag: "v1.2.0-beta.1"), .beta)
-        XCTAssertEqual(UpdateChannel.of(tag: "v1.2.0"), .prod)
+        XCTAssertEqual(UpdateChannel.of(tag: "v1.2.0"), .stable)
         XCTAssertEqual(UpdateChannel.of(tag: "V1.2.0-ALPHA.2"), .alpha) // case-insensitive
     }
 
-    func testAlphaChannelAcceptsEverything() {
-        XCTAssertEqual(UpdateChannel.alpha.accepts, Set([.alpha, .beta, .prod]))
+    func testChannelLabelsMatchUserFacingNames() {
+        XCTAssertEqual(UpdateChannel.alpha.label, "Alpha")
+        XCTAssertEqual(UpdateChannel.beta.label, "Beta")
+        XCTAssertEqual(UpdateChannel.stable.label, "Stable")
     }
 
-    func testProdChannelAcceptsOnlyProd() {
-        XCTAssertEqual(UpdateChannel.prod.accepts, Set([.prod]))
+    func testAlphaChannelAcceptsEverything() {
+        XCTAssertEqual(UpdateChannel.alpha.accepts, Set([.alpha, .beta, .stable]))
+    }
+
+    func testStableChannelAcceptsOnlyStable() {
+        XCTAssertEqual(UpdateChannel.stable.accepts, Set([.stable]))
     }
 
     func testBetaChannelDoesNotAcceptAlpha() {
         XCTAssertFalse(UpdateChannel.beta.accepts.contains(.alpha))
         XCTAssertTrue(UpdateChannel.beta.accepts.contains(.beta))
-        XCTAssertTrue(UpdateChannel.beta.accepts.contains(.prod))
+        XCTAssertTrue(UpdateChannel.beta.accepts.contains(.stable))
+    }
+
+    // ---- Release assets --------------------------------------------------------
+
+    func testDownloadableZipAssetSkipsChecksumAndChoosesAppZip() {
+        let checksum = ReleaseAssetInfo(
+            name: "Command-1.2.0-alpha.6.zip.sha256",
+            browserDownloadURL: "https://example.com/Command-1.2.0-alpha.6.zip.sha256")
+        let appZip = ReleaseAssetInfo(
+            name: "Command-1.2.0-alpha.6.zip",
+            browserDownloadURL: "https://example.com/Command-1.2.0-alpha.6.zip")
+
+        XCTAssertEqual(downloadableZipAsset(from: [checksum, appZip]), appZip)
+    }
+
+    func testDownloadableZipAssetRequiresZipNameAndURL() {
+        let renamedZip = ReleaseAssetInfo(
+            name: "Command-1.2.0-alpha.6.zip",
+            browserDownloadURL: "https://example.com/download")
+        let misleadingURL = ReleaseAssetInfo(
+            name: "checksum.txt",
+            browserDownloadURL: "https://example.com/Command-1.2.0-alpha.6.zip")
+
+        XCTAssertNil(downloadableZipAsset(from: [renamedZip, misleadingURL]))
     }
 }

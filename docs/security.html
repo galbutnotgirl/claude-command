@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Command security policy for private vulnerability reports, sensitive diagnostics, supported alpha versions, and privacy references.">
+  <title>Command Security Policy</title>
+  <link rel="canonical" href="https://galbutnotgirl.github.io/command/security.html">
+  <meta property="og:site_name" content="Command">
+  <meta property="og:title" content="Command Security Policy">
+  <meta property="og:description" content="Command security policy for private vulnerability reports, sensitive diagnostics, supported alpha versions, and privacy references.">
+  <meta property="og:type" content="website">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="Command Security Policy">
+  <meta name="twitter:description" content="Command security policy for private vulnerability reports, sensitive diagnostics, supported alpha versions, and privacy references.">
+  <link rel="stylesheet" href="site.css">
+</head>
+<body>
+  <a class="skip-link" href="#content">Skip to content</a>
+  <div class="doc-wrap">
+    <nav class="toc" aria-label="Documentation sections">
+      <div class="toc-title">Security Policy</div>
+      <a href="index.html">Overview</a>
+      <a href="install.html">Install Guide</a>
+      <a href="uninstall.html">Uninstall</a>
+      <a href="guide.html">User Guide</a>
+      <a href="settings.html">Settings Reference</a>
+      <a href="quick-reference.html">Quick Reference</a>
+      <a href="examples.html">Examples</a>
+      <a href="faq.html">FAQ</a>
+      <a href="changelog.html">Changelog</a>
+      <a href="limitations.html">Alpha Limitations</a>
+      <a href="updates.html">Updates</a>
+      <a href="permissions.html">Permissions</a>
+      <a href="privacy.html">Privacy</a>
+      <a href="troubleshooting.html">Troubleshooting</a>
+      <a href="support.html">Support</a>
+      <a href="security.html">Security Policy</a>
+      <a href="icon-treatments.html">Icon Treatments</a>
+      <a href="background.html">Background Architecture</a>
+      <a href="release.html">Release Checklist</a>
+      <a href="#local-data-scope">Local data scope</a>
+      <a href="#report">Report a vulnerability</a>
+      <a href="#versions">Supported versions</a>
+      <a href="#privacy">Privacy reference</a>
+      <a href="SECURITY.md">Markdown source</a>
+    </nav>
+    <main id="content" class="doc-main">
+      <header class="doc-hero">
+        <h1>Security Policy</h1>
+        <p class="lead">Private reporting path for vulnerabilities, exposed secrets, private logs, or sensitive diagnostics.</p>
+      </header>
+
+      <section id="local-data-scope">
+        <h2>Local Data Scope</h2>
+        <p>Command is a local macOS app that can read selected text, screenshots, clipboard history, dictation text, and background command logs when those workflows are enabled.</p>
+      </section>
+
+      <section id="report">
+        <h2>Report A Vulnerability</h2>
+        <p>Do not file public GitHub issues for vulnerabilities, exposed secrets, private logs, or diagnostic output that contains sensitive text.</p>
+        <p>Use <strong>Settings -> About -> Private Security Report</strong> or <a href="https://github.com/galbutnotgirl/command/security/advisories/new">GitHub private vulnerability reporting</a> instead.</p>
+        <p>Include:</p>
+        <ul>
+          <li>Command version and macOS version.</li>
+          <li>Whether this affects selected text, screenshots, clipboard history, dictation, background actions, import/export, updates, or permissions.</li>
+          <li>Minimal repro steps with sensitive content removed.</li>
+          <li>Relevant diagnostic lines only after redacting secrets, private text, tokens, file paths, or customer data.</li>
+        </ul>
+      </section>
+
+      <section id="versions">
+        <h2>Supported Versions</h2>
+        <p>Alpha builds are supported through the <a href="https://github.com/galbutnotgirl/command/releases/latest">latest GitHub Release</a>.</p>
+        <p>Older alpha builds should be upgraded before filing unless the vulnerability blocks updating.</p>
+      </section>
+
+      <section id="privacy">
+        <h2>Privacy Reference</h2>
+        <p>See <a href="privacy.html">Privacy</a> for local file locations, diagnostics, clipboard history, dictation data, background logs, and export safety.</p>
+        <p>For the in-app support buttons, diagnostics, and reporting actions, see <a href="settings.html">Settings Reference</a>.</p>
+      </section>
+    </main>
+  </div>
+</body>
+</html>

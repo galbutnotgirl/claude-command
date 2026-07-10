@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Command permissions guide explaining Accessibility, Screen Recording, Microphone, Clipboard History, Quick Actions, resets, and diagnostics.">
+  <title>Command Permissions</title>
+  <link rel="canonical" href="https://galbutnotgirl.github.io/command/permissions.html">
+  <meta property="og:site_name" content="Command">
+  <meta property="og:title" content="Command Permissions">
+  <meta property="og:description" content="Command permissions guide explaining Accessibility, Screen Recording, Microphone, Clipboard History, Quick Actions, resets, and diagnostics.">
+  <meta property="og:type" content="website">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="Command Permissions">
+  <meta name="twitter:description" content="Command permissions guide explaining Accessibility, Screen Recording, Microphone, Clipboard History, Quick Actions, resets, and diagnostics.">
+  <link rel="stylesheet" href="site.css">
+</head>
+<body>
+  <a class="skip-link" href="#content">Skip to content</a>
+  <div class="doc-wrap">
+    <nav class="toc" aria-label="Documentation sections">
+      <div class="toc-title">Permissions</div>
+      <a href="index.html">Overview</a>
+      <a href="install.html">Install Guide</a>
+      <a href="uninstall.html">Uninstall</a>
+      <a href="guide.html">User Guide</a>
+      <a href="settings.html">Settings Reference</a>
+      <a href="quick-reference.html">Quick Reference</a>
+      <a href="examples.html">Examples</a>
+      <a href="faq.html">FAQ</a>
+      <a href="changelog.html">Changelog</a>
+      <a href="limitations.html">Alpha Limitations</a>
+      <a href="updates.html">Updates</a>
+      <a href="permissions.html">Permissions</a>
+      <a href="privacy.html">Privacy</a>
+      <a href="troubleshooting.html">Troubleshooting</a>
+      <a href="support.html">Support</a>
+      <a href="security.html">Security Policy</a>
+      <a href="icon-treatments.html">Icon Treatments</a>
+      <a href="background.html">Background Architecture</a>
+      <a href="release.html">Release Checklist</a>
+      <a href="#short">Short Version</a>
+      <a href="#accessibility">Accessibility</a>
+      <a href="#screen-recording">Screen Recording</a>
+      <a href="#microphone">Microphone</a>
+      <a href="#clipboard">Clipboard History</a>
+      <a href="#quick-actions">Quick Actions</a>
+      <a href="#reset">Reset Permissions</a>
+      <a href="#diagnostics">Diagnostics</a>
+      <a href="PERMISSIONS.md">Markdown source</a>
+    </nav>
+    <main id="content" class="doc-main">
+      <header class="doc-hero">
+        <h1>Permissions</h1>
+        <p class="lead">What each macOS permission does, when it is required, and how to reset stuck permission state.</p>
+      </header>
+
+      <section id="short">
+        <h2>Short Version</h2>
+        <table>
+          <thead><tr><th>Permission</th><th>Required for</th><th>Needed when</th></tr></thead>
+          <tbody>
+            <tr><td>Accessibility</td><td>Global shortcuts, copy, paste, submit, and focus restore.</td><td>Always recommended.</td></tr>
+            <tr><td>Screen Recording</td><td>Screenshot triggers.</td><td>Only if you use screenshots.</td></tr>
+            <tr><td>Microphone</td><td>Dictation and voice custom actions.</td><td>Only if you use dictation or voice triggers.</td></tr>
+          </tbody>
+        </table>
+        <p>Optional Set Up items are not broken installs. Clipboard History, Screen Recording, Microphone, dictation model, and source-only Quick Actions only need to be OK for workflows you use.</p>
+      </section>
+
+      <section id="accessibility">
+        <h2>Accessibility</h2>
+        <p>Command needs Accessibility to respond to global hotkeys, copy selected text, paste rendered prompts, submit when auto-submit is enabled, and restore focus after Go-style actions.</p>
+        <p>Grant it in <strong>System Settings -> Privacy &amp; Security -> Accessibility</strong>. Enable <strong>Command</strong>.</p>
+        <ol>
+          <li>Quit and reopen Command if hotkeys still do nothing.</li>
+          <li>Open <strong>Settings -> Set Up</strong> and confirm Accessibility is green.</li>
+          <li>Confirm the shortcut row is enabled and bound in <strong>Settings -> Shortcuts</strong> or <strong>Dictation Settings</strong>.</li>
+        </ol>
+      </section>
+
+      <section id="screen-recording">
+        <h2>Screen Recording</h2>
+        <p>Screen Recording is only needed for screenshot triggers. Selected text, popup, clipboard history, and dictation can work without it.</p>
+        <p>Grant it in <strong>System Settings -> Privacy &amp; Security -> Screen Recording</strong>. Enable <strong>Command</strong>, then restart Command.</p>
+      </section>
+
+      <section id="microphone">
+        <h2>Microphone</h2>
+        <p>Microphone access is only needed for Dictate shortcuts and voice custom action triggers.</p>
+        <p>Grant it in <strong>System Settings -> Privacy &amp; Security -> Microphone</strong>. Enable <strong>Command</strong>. Then open <strong>Settings -> Dictation Settings</strong> and confirm the model is ready.</p>
+        <p>Dictation runs on-device. See <a href="privacy.html">Privacy</a> for local file locations and background CLI caveats.</p>
+      </section>
+
+      <section id="clipboard">
+        <h2>Clipboard History</h2>
+        <p>Clipboard History runs inside Command. It is optional and can be disabled.</p>
+        <ol>
+          <li>Confirm Clipboard History is running in <strong>Settings -> Set Up</strong>.</li>
+          <li>Copy normal text from a non-password app.</li>
+          <li>Open <strong>Settings -> Clipboard History</strong> and confirm retention is not set too low.</li>
+        </ol>
+      </section>
+
+      <section id="quick-actions">
+        <h2>Quick Actions</h2>
+        <p>Quick Actions are optional legacy right-click Services for source installs. Global shortcuts do not need them.</p>
+        <p>Binary installs from GitHub Releases do not need <code>./install-quick-action.sh</code>.</p>
+      </section>
+
+      <section id="reset">
+        <h2>Reset Permissions</h2>
+        <p>If macOS permission state looks stuck, reset one permission from Terminal, then grant it again in System Settings:</p>
+        <pre><code>tccutil reset Accessibility com.claudecommand
+tccutil reset ScreenCapture com.claudecommand
+tccutil reset Microphone com.claudecommand</code></pre>
+        <p>The identifier remains <code>com.claudecommand</code> for compatibility with existing alpha installs, even though the visible app name is Command.</p>
+        <p>Then reopen Command and check <strong>Settings -> Set Up</strong>.</p>
+      </section>
+
+      <section id="diagnostics">
+        <h2>Diagnostics</h2>
+        <p>Use <strong>Settings -> About -> Copy Diagnostic Info</strong> before filing a bug. It includes app path, bundle ID, version, minimum macOS, update channel/check status, shortcut binding summary, Set Up status, log tails, recent command summaries, Clipboard History errors, and recent dictation previews. Review copied diagnostics before sharing if logs or recent text may include sensitive content.</p>
+        <p>For step-by-step symptoms, see <a href="troubleshooting.html">Troubleshooting</a>.</p>
+      </section>
+    </main>
+  </div>
+</body>
+</html>

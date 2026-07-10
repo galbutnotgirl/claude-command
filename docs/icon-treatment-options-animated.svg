@@ -1,0 +1,148 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="680" viewBox="0 0 1280 680">
+  <defs>
+    <linearGradient id="menubar" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#7d8292"/>
+      <stop offset="0.48" stop-color="#555b6d"/>
+      <stop offset="1" stop-color="#2a2e3d"/>
+    </linearGradient>
+    <radialGradient id="purpleBg" cx="35%" cy="25%" r="85%">
+      <stop offset="0" stop-color="#c4adff"/>
+      <stop offset="0.58" stop-color="#7433dc"/>
+      <stop offset="1" stop-color="#3c167e"/>
+    </radialGradient>
+    <filter id="softGlow" x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur stdDeviation="5" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="plateGlow" x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur stdDeviation="10" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <style>
+      text { font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", Arial, sans-serif; fill: #f7f3ff; }
+      .caption { font-size: 22px; font-weight: 700; }
+      .note { font-size: 15px; fill: #d8d1e8; }
+      .small { font-size: 12px; fill: #bdb5ce; }
+      .bar { fill: url(#menubar); }
+      .tile { fill: rgba(255,255,255,0.075); stroke: rgba(255,255,255,0.14); stroke-width: 1; }
+      .whiteStroke { stroke: #fff; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+      .purpleStroke { stroke: #bfa5ff; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+      .deepPurpleStroke { stroke: #7433dc; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+      .whiteFill { fill: #fff; }
+      .lavenderFill { fill: #d9c8ff; }
+      .panelBg { fill: rgba(255,255,255,0.045); }
+
+      .waveA { animation: waveA 1.15s ease-in-out infinite; transform-box: fill-box; transform-origin: center bottom; }
+      .waveB { animation: waveB 1.15s ease-in-out infinite; transform-box: fill-box; transform-origin: center bottom; }
+      .waveC { animation: waveC 1.15s ease-in-out infinite; transform-box: fill-box; transform-origin: center bottom; }
+      .waveD { animation: waveD 1.15s ease-in-out infinite; transform-box: fill-box; transform-origin: center bottom; }
+      @keyframes waveA { 0%,100% { transform: scaleY(.58); opacity:.72; } 50% { transform: scaleY(1.18); opacity:1; } }
+      @keyframes waveB { 0%,100% { transform: scaleY(1.15); opacity:1; } 50% { transform: scaleY(.62); opacity:.74; } }
+      @keyframes waveC { 0%,100% { transform: scaleY(.76); opacity:.82; } 50% { transform: scaleY(1.35); opacity:1; } }
+      @keyframes waveD { 0%,100% { transform: scaleY(.46); opacity:.68; } 50% { transform: scaleY(1.02); opacity:.96; } }
+
+      .arcSpin { animation: arcSpin 2.6s linear infinite; transform-origin: 106px 202px; }
+      @keyframes arcSpin { to { transform: rotate(360deg); } }
+
+      .platePulse { animation: platePulse 1.8s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+      @keyframes platePulse { 0%,100% { transform: scale(.96); opacity:.88; } 50% { transform: scale(1.04); opacity:1; } }
+
+      .orbitOne { animation: orbitOne 2.4s ease-in-out infinite; transform-origin: 106px 202px; }
+      .orbitTwo { animation: orbitTwo 2.4s ease-in-out infinite; transform-origin: 106px 202px; }
+      @keyframes orbitOne { 0%,100% { transform: rotate(24deg); opacity:1; } 50% { transform: rotate(36deg); opacity:.82; } }
+      @keyframes orbitTwo { 0%,100% { transform: rotate(-32deg); opacity:.9; } 50% { transform: rotate(-20deg); opacity:1; } }
+
+      .haloOuter { animation: haloOuter 1.9s ease-out infinite; transform-origin: 106px 202px; }
+      .haloInner { animation: haloInner 1.9s ease-in-out infinite; transform-origin: 106px 202px; }
+      @keyframes haloOuter { 0% { transform: scale(.78); opacity:.32; } 70% { transform: scale(1.18); opacity:.06; } 100% { transform: scale(1.18); opacity:0; } }
+      @keyframes haloInner { 0%,100% { transform: scale(.95); opacity:.28; } 50% { transform: scale(1.05); opacity:.42; } }
+    </style>
+  </defs>
+
+  <rect width="1280" height="680" fill="#181a24"/>
+  <rect width="1280" height="100" class="bar"/>
+  <text x="54" y="58" font-size="30" font-weight="760">Command purple-wave icon animation options</text>
+  <text x="54" y="82" class="note">Looping preview on busy dark/translucent menu-bar background. All options avoid black and keep white-forward contrast.</text>
+
+  <g transform="translate(54 134)">
+    <rect width="212" height="468" rx="22" class="tile"/>
+    <text x="24" y="46" class="caption">1. White motion</text>
+    <text x="24" y="74" class="note">Waveform becomes white</text>
+    <circle cx="106" cy="202" r="62" class="panelBg"/>
+    <g filter="url(#softGlow)" stroke-width="8">
+      <line x1="70" y1="220" x2="70" y2="164" class="whiteStroke waveA"/>
+      <line x1="94" y1="220" x2="94" y2="136" class="whiteStroke waveB"/>
+      <line x1="118" y1="220" x2="118" y2="154" class="whiteStroke waveC"/>
+      <line x1="142" y1="220" x2="142" y2="178" class="whiteStroke waveD"/>
+    </g>
+    <path d="M62 270 C86 247, 126 247, 150 270" class="purpleStroke" stroke-width="3" opacity=".7"/>
+    <text x="24" y="338" class="note">Most readable while recording.</text>
+    <text x="24" y="364" class="small">Tradeoff: motion reads as waveform, less like brand icon.</text>
+  </g>
+
+  <g transform="translate(294 134)">
+    <rect width="212" height="468" rx="22" class="tile"/>
+    <text x="24" y="46" class="caption">2. White + ring</text>
+    <text x="24" y="74" class="note">White mark, purple activity arc</text>
+    <circle cx="106" cy="202" r="64" class="panelBg"/>
+    <g class="arcSpin">
+      <path d="M106 134 A68 68 0 0 1 170 225" class="purpleStroke" stroke-width="7" filter="url(#softGlow)"/>
+    </g>
+    <g stroke-width="5">
+      <ellipse cx="106" cy="202" rx="56" ry="28" transform="rotate(28 106 202)" class="whiteStroke"/>
+      <ellipse cx="106" cy="202" rx="56" ry="28" transform="rotate(-28 106 202)" class="whiteStroke"/>
+      <circle cx="106" cy="202" r="8" class="whiteFill"/>
+    </g>
+    <text x="24" y="338" class="note">Best balance.</text>
+    <text x="24" y="364" class="small">Idle stays crisp; ring says active without shouting.</text>
+  </g>
+
+  <g transform="translate(534 134)">
+    <rect width="212" height="468" rx="22" class="tile"/>
+    <text x="24" y="46" class="caption">3. Purple plate</text>
+    <text x="24" y="74" class="note">White icon on active chip</text>
+    <rect x="47" y="143" width="118" height="118" rx="31" fill="url(#purpleBg)" filter="url(#plateGlow)" class="platePulse"/>
+    <g stroke-width="5.5">
+      <ellipse cx="106" cy="202" rx="49" ry="24" transform="rotate(28 106 202)" class="whiteStroke"/>
+      <ellipse cx="106" cy="202" rx="49" ry="24" transform="rotate(-28 106 202)" class="whiteStroke"/>
+      <circle cx="106" cy="202" r="8" class="whiteFill"/>
+    </g>
+    <text x="24" y="338" class="note">Strongest contrast.</text>
+    <text x="24" y="364" class="small">Most obvious, but more app-icon than menu glyph.</text>
+  </g>
+
+  <g transform="translate(774 134)">
+    <rect width="212" height="468" rx="22" class="tile"/>
+    <text x="24" y="46" class="caption">4. Two-tone orbit</text>
+    <text x="24" y="74" class="note">White + lavender movement</text>
+    <circle cx="106" cy="202" r="62" class="panelBg"/>
+    <g stroke-width="6">
+      <ellipse cx="106" cy="202" rx="57" ry="27" class="whiteStroke orbitOne"/>
+      <ellipse cx="106" cy="202" rx="57" ry="27" class="purpleStroke orbitTwo"/>
+      <circle cx="106" cy="202" r="8" class="lavenderFill"/>
+    </g>
+    <text x="24" y="338" class="note">Classiest subtle motion.</text>
+    <text x="24" y="364" class="small">Readable enough, but softer than white + ring.</text>
+  </g>
+
+  <g transform="translate(1014 134)">
+    <rect width="212" height="468" rx="22" class="tile"/>
+    <text x="24" y="46" class="caption">5. Pulse halo</text>
+    <text x="24" y="74" class="note">White icon, active purple glow</text>
+    <circle cx="106" cy="202" r="60" fill="#7433dc" class="haloOuter"/>
+    <circle cx="106" cy="202" r="58" fill="#7433dc" class="haloInner" filter="url(#softGlow)"/>
+    <g stroke-width="5.5">
+      <ellipse cx="106" cy="202" rx="56" ry="28" transform="rotate(28 106 202)" class="whiteStroke"/>
+      <ellipse cx="106" cy="202" rx="56" ry="28" transform="rotate(-28 106 202)" class="whiteStroke"/>
+      <circle cx="106" cy="202" r="8" class="whiteFill"/>
+    </g>
+    <text x="24" y="338" class="note">Good active-state cue.</text>
+    <text x="24" y="364" class="small">Works if idle icon remains plain white.</text>
+  </g>
+</svg>

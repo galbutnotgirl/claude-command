@@ -77,6 +77,41 @@ public func isHandoffPruneEligible(status: String, createdAt: Date, cutoff: Date
     status != "running" && createdAt < cutoff
 }
 
+// Foreground command history covers paste/new-chat runs that do not create
+// background handoff submissions.
+public struct ForegroundCommandRecord: Identifiable {
+    public let id: String
+    public let createdAt: Date
+    public let action: String
+    public let source: String
+    public let destination: String
+    public let status: String
+    public let prompt: String?
+    public let error: String?
+
+    public init(id: String, createdAt: Date, action: String, source: String, destination: String,
+                status: String, prompt: String?, error: String?) {
+        self.id = id
+        self.createdAt = createdAt
+        self.action = action
+        self.source = source
+        self.destination = destination
+        self.status = status
+        self.prompt = prompt
+        self.error = error
+    }
+
+    public var age: String { foregroundCommandAgeString(createdAt: createdAt) }
+}
+
+public func foregroundCommandAgeString(createdAt: Date, now: Date = Date()) -> String {
+    handoffAgeString(createdAt: createdAt, now: now)
+}
+
+public func isForegroundCommandPruneEligible(createdAt: Date, cutoff: Date) -> Bool {
+    createdAt < cutoff
+}
+
 // ---- custom actions run as background handoffs (isHandoff == true) ---------
 // Same {selection} convention as a regular custom action's prompt (see
 // CustomAction's doc comment): inline if present, otherwise appended below.

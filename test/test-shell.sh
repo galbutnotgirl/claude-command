@@ -25,6 +25,17 @@ assert_eq() {  # $1 = label, $2 = actual, $3 = expected
   fi
 }
 
+assert_status() {  # $1 = label, $2 = actual status, $3 = expected status
+  if [ "$2" = "$3" ]; then
+    PASS=$((PASS + 1))
+  else
+    FAIL=$((FAIL + 1))
+    print -r -- "FAIL: $1"
+    print -r -- "  expected status: $3"
+    print -r -- "  actual status:   $2"
+  fi
+}
+
 # ---- expand_template ---------------------------------------------------------
 # expand_template reads CONTEXT_LINE / URL / SOURCE_LINE from the caller's
 # scope (see send-to-claude-lib.sh's header comment) — set them per case.
@@ -130,6 +141,81 @@ assert_eq "no match → empty output" \
 assert_eq "missing rules file → empty output, no crash" \
   "$(python3 "$MATCH" "/tmp/does-not-exist-$$.json" "" "" "" "")" \
   ""
+
+# ---- send-to-claude.sh URL fallback + legacy To-Do alias --------------------
+# The old Services menu uses ACTION=todo. It must keep working as a background
+# handoff, and an empty text selection from a browser should capture the URL.
+
+SEND_SCRIPT="${DIR}/send-to-claude.sh"
+TODO_URL_OUTPUT="$(
+  ACTION=todo \
+  DRY_RUN=1 \
+  SKIP_SELECTION_CAPTURE=1 \
+  SOURCE_BUNDLE="com.google.Chrome" \
+  SOURCE_APP_NAME="Google Chrome" \
+  SOURCE_URL="https://example.com/task-source" \
+  zsh "$SEND_SCRIPT" 2>/dev/null
+)"
+assert_eq "legacy To-Do Quick Action aliases to background handoff with URL fallback" \
+  "$TODO_URL_OUTPUT" \
+  "DRY_RUN handoff src=url img=0 sel_bytes=31"
+
+# ---- capture-handoff.sh compatibility path ---------------------------------
+# ClaudeCommand's native background actions use submit-cli.js --retry-prompt
+# directly, but capture-handoff.sh remains as a compatibility entry point for
+# external callers. Keep the old bridge covered so future cleanup is deliberate.
+
+CAPTURE_SCRIPT="${DIR}/capture-handoff.sh"
+TMP_CAPTURE_BASE="$(mktemp -d)"
+TMP_MISSING_CORE="$(mktemp -d)"
+TMP_FAKE_CORE="$(mktemp -d)"
+trap 'rm -f "$RULES_FILE"; rm -rf "$TMP_CAPTURE_BASE" "$TMP_MISSING_CORE" "$TMP_FAKE_CORE"' EXIT
+
+CLAUDE_CAPTURE_CORE="$TMP_MISSING_CORE" \
+CLAUDE_CAPTURE_HOME="$TMP_CAPTURE_BASE" \
+zsh "$CAPTURE_SCRIPT" >/dev/null 2>/dev/null <<<"hello"
+assert_status "capture-handoff missing core exits with failure" "$?" "1"
+
+mkdir -p "$TMP_FAKE_CORE/bin"
+cat > "$TMP_FAKE_CORE/bin/submit-cli.js" <<'JS'
+const fs = require('fs');
+const path = process.env.CLAUDE_CAPTURE_TEST_OUT;
+let input = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', chunk => { input += chunk; });
+process.stdin.on('end', () => {
+  fs.writeFileSync(path, JSON.stringify({ argv: process.argv.slice(2), input }));
+});
+JS
+
+CAPTURE_OUT="${TMP_CAPTURE_BASE}/capture-output.json"
+CLAUDE_CAPTURE_CORE="$TMP_FAKE_CORE" \
+CLAUDE_CAPTURE_HOME="$TMP_CAPTURE_BASE" \
+HANDOFF_SOURCE="popup" \
+HANDOFF_CONTEXT="[from: Notes]" \
+CLAUDE_CAPTURE_TEST_OUT="$CAPTURE_OUT" \
+zsh "$CAPTURE_SCRIPT" >/dev/null 2>/dev/null <<<"Captured text"
+assert_status "capture-handoff text path exits successfully" "$?" "0"
+
+assert_eq "capture-handoff passes context plus text to submit-cli" \
+  "$(python3 - "$CAPTURE_OUT" <<'PY'
+import json, sys
+d = json.load(open(sys.argv[1]))
+print(d["input"])
+PY
+)" \
+  $'[from: Notes]\nCaptured text'
+
+assert_eq "capture-handoff invokes submit-cli with text capture args" \
+  "$(python3 - "$CAPTURE_OUT" "$TMP_CAPTURE_BASE" <<'PY'
+import json, sys
+d = json.load(open(sys.argv[1]))
+base = sys.argv[2]
+expected = ["--base-dir", base, "--source", "popup", "--kind", "text"]
+print("ok" if d["argv"] == expected else d["argv"])
+PY
+)" \
+  "ok"
 
 print -r -- ""
 print -r -- "shell tests: ${PASS} passed, ${FAIL} failed"

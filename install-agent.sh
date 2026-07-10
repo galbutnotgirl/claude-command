@@ -1,5 +1,5 @@
 #!/bin/zsh
-# install-agent.sh — write a LaunchAgent plist, bootstrap it, and start ClaudeCommand.
+# install-agent.sh — write a LaunchAgent plist, bootstrap it, and start Command.
 # launchd owns the process so KeepAlive (restart on non-zero exit) works.
 # Re-run after every rebuild to pick up the new binary.
 emulate -L zsh
@@ -7,16 +7,17 @@ set -uo pipefail
 
 DIR="${0:A:h}"
 LABEL="com.claudecommand"
-SRC_APP="${DIR}/ClaudeCommand.app"
+SRC_APP="${DIR}/Command.app"
 # Install to ~/Applications so macOS Login Items shows the correct app icon.
 # Apps outside /Applications or ~/Applications get a generic executable icon.
 INSTALL_DIR="${HOME}/Applications"
-APP="${INSTALL_DIR}/ClaudeCommand.app"
-BIN="${APP}/Contents/MacOS/ClaudeCommand"
+APP="${INSTALL_DIR}/Command.app"
+OLD_APP="${INSTALL_DIR}/ClaudeCommand.app"
+BIN="${APP}/Contents/MacOS/Command"
 PLIST="${HOME}/Library/LaunchAgents/${LABEL}.plist"
 OLD_CLIPWATCH="${HOME}/Library/LaunchAgents/com.claudecommand.clipwatch.plist"
 
-[ -x "${SRC_APP}/Contents/MacOS/ClaudeCommand" ] || { print -- "[agent] missing ClaudeCommand.app — run ./build-agent.sh first"; exit 1; }
+[ -x "${SRC_APP}/Contents/MacOS/Command" ] || { print -- "[agent] missing Command.app — run ./build-agent.sh first"; exit 1; }
 
 # Fresh install = no prior LaunchAgent plist AND no prior app bundle.
 # Update = app already exists (in-place sync, TCC grants survive).
@@ -30,7 +31,11 @@ FRESH_INSTALL=false
 # while the bundle stays at the same path with the same identity → grants persist.
 mkdir -p "$INSTALL_DIR"
 if [ -d "$APP" ]; then
-    rsync -a --delete "${SRC_APP}/" "${APP}/"
+rsync -a --delete "${SRC_APP}/" "${APP}/"
+if [ -d "$OLD_APP" ]; then
+  rm -rf "$OLD_APP"
+  print -- "[agent] removed old ClaudeCommand.app bundle"
+fi
     print -- "[agent] updated in-place at ${APP} (TCC grants preserved)"
 else
     cp -R "$SRC_APP" "$APP"
@@ -53,6 +58,7 @@ if [ -f "$OLD_CLIPWATCH" ]; then
 fi
 
 # Kill any running instance.
+pkill -x Command 2>/dev/null || true
 pkill -x ClaudeCommand 2>/dev/null || true
 sleep 0.3
 

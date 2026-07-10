@@ -31,5 +31,13 @@ jobs:
         working-directory: vendor/claude-command-capture
         run: node --test
 
-      - name: Shell tests (template/enrich-rule matching)
+      - name: Shell tests (prompt/context matching)
         run: ./test/test-shell.sh
+
+      - name: Docs quality tests
+        run: python3 ./test/test-docs.py
+
+      - name: Release asset smoke test
+        run: |
+          ./release.sh --skip-checks
+          ./test/test-release-asset.sh

@@ -21,13 +21,14 @@ import ClaudeCommandCore
 // Fill OWNER/REPO once the public repo exists; an empty owner disables updates
 // gracefully (the UI shows "no update repo configured" instead of erroring).
 let GH_OWNER = "galbutnotgirl"
-let GH_REPO  = "claude-command"
+let GH_REPO  = "command"
 var GITHUB_REPO_URL: String { GH_OWNER.isEmpty ? "" : "https://github.com/\(GH_OWNER)/\(GH_REPO)" }
+var DOCS_SITE_URL: String { GH_OWNER.isEmpty ? "" : "https://\(GH_OWNER).github.io/\(GH_REPO)/" }
 
 // Where install-agent.sh puts the running app. The swapper replaces this path.
-let INSTALL_PATH = (NSHomeDirectory() as NSString).appendingPathComponent("Applications/ClaudeCommand.app")
+let INSTALL_PATH = (NSHomeDirectory() as NSString).appendingPathComponent("Applications/Command.app")
 
-// Prod has no public release yet → keep the Prod option disabled in the UI.
+// Stable has no public release yet -> keep the Stable option disabled in the UI.
 // Flip to true once a stable vX.Y.Z release is cut.
 let PROD_AVAILABLE = false
 
@@ -46,11 +47,23 @@ func reportBugURL() -> URL? {
     guard !GH_OWNER.isEmpty, !GH_REPO.isEmpty else { return nil }
     let version = currentAppVersion()
     let branch = (Bundle.main.infoDictionary?["ClaudeCommandGitBranch"] as? String) ?? ""
+    let bundleID = Bundle.main.bundleIdentifier ?? "unknown"
+    let appPath = Bundle.main.bundlePath
+    let channel = currentChannel().label
     let os = ProcessInfo.processInfo.operatingSystemVersion
     let osString = "\(os.majorVersion).\(os.minorVersion).\(os.patchVersion)"
     var body = """
     **Version:** \(version)\(branch.isEmpty ? "" : " (\(branch))")
+    **Bundle ID:** \(bundleID)
+    **App path:** \(appPath)
     **macOS:** \(osString)
+    **Update channel:** \(channel)
+
+    **Trigger / workflow:** Selected text / Screenshot / Popup / Voice / Dictation / Clipboard History / Background / Import / Export / Update
+    **Shortcut:** 
+    **Source app:** 
+    **Default Claude destination:** 
+    **Target update version, if relevant:** 
 
     **What happened:**
 
@@ -61,16 +74,40 @@ func reportBugURL() -> URL? {
     **Steps to reproduce:**
     1.
 
+    **Diagnostics:**
+    Review copied diagnostics for sensitive log or recent-text content, then paste relevant lines from Settings -> About -> Copy Diagnostic Info.
+    Do not use this public issue for vulnerabilities, exposed secrets, private logs, or sensitive diagnostic output. Use private vulnerability reporting instead: https://github.com/\(GH_OWNER)/\(GH_REPO)/security/advisories/new
+
+    **Dictation / voice detail, if relevant:**
+    Did Dictation History raw text or processed text lose the words? Was recording press-and-hold or locked?
+
     """
-    body += "\n<!-- Logs, if relevant: ~/Library/Logs/claude-command.log (worker), "
-    body += "~/.claude/logs/command-agent.err (agent), ~/.claude/logs/attribution.log (clipboard) -->\n"
+    body += "\n<!-- Logs, if relevant: ~/Library/Logs/claude-command.log (shortcut actions), "
+    body += "~/.claude/logs/command-agent.err (app dispatch), ~/.claude/logs/clipwatch.err (Clipboard History), "
+    body += "~/.claude/logs/attribution.log (clipboard/source attribution) -->\n"
 
     var comps = URLComponents(string: "https://github.com/\(GH_OWNER)/\(GH_REPO)/issues/new")!
     comps.queryItems = [
+        URLQueryItem(name: "template", value: "bug_report.md"),
         URLQueryItem(name: "title", value: "Bug: "),
         URLQueryItem(name: "body", value: body),
     ]
     return comps.url
+}
+
+func requestFeatureURL() -> URL? {
+    guard !GH_OWNER.isEmpty, !GH_REPO.isEmpty else { return nil }
+    var comps = URLComponents(string: "https://github.com/\(GH_OWNER)/\(GH_REPO)/issues/new")!
+    comps.queryItems = [
+        URLQueryItem(name: "template", value: "feature_request.md"),
+        URLQueryItem(name: "title", value: "Feature: "),
+    ]
+    return comps.url
+}
+
+func securityAdvisoryURL() -> URL? {
+    guard !GH_OWNER.isEmpty, !GH_REPO.isEmpty else { return nil }
+    return URL(string: "https://github.com/\(GH_OWNER)/\(GH_REPO)/security/advisories/new")
 }
 
 struct UpdateInfo {
@@ -119,7 +156,7 @@ private func runAutoUpdateCheck() {
     UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: AUTO_UPDATE_LAST_CHECK_KEY)
     Updater.shared.check { result in
         if case .available(let info) = result {
-            notify("Update available", "ClaudeCommand v\(info.latestVersion) is ready — Settings → About to install.")
+            notify("Update available", "Command v\(info.latestVersion) is ready — Settings → About to install.")
         }
     }
 }
@@ -141,7 +178,7 @@ final class Updater {
         }
         var req = URLRequest(url: url, timeoutInterval: 15)
         req.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
-        req.setValue("ClaudeCommand", forHTTPHeaderField: "User-Agent")
+        req.setValue("Command", forHTTPHeaderField: "User-Agent")
         busy = true
         URLSession.shared.dataTask(with: req) { [weak self] data, resp, err in
             self?.busy = false
@@ -167,9 +204,12 @@ final class Updater {
                 let cur = currentAppVersion()
                 var dl: String? = nil
                 if let assets = rel["assets"] as? [[String: Any]] {
-                    for a in assets where (a["name"] as? String)?.hasSuffix(".zip") == true {
-                        dl = a["browser_download_url"] as? String; break
+                    let releaseAssets = assets.compactMap { asset -> ReleaseAssetInfo? in
+                        guard let name = asset["name"] as? String,
+                              let url = asset["browser_download_url"] as? String else { return nil }
+                        return ReleaseAssetInfo(name: name, browserDownloadURL: url)
                     }
+                    dl = downloadableZipAsset(from: releaseAssets)?.browserDownloadURL
                 }
                 let info = UpdateInfo(
                     latestVersion: latest,
@@ -215,7 +255,7 @@ final class Updater {
             catch { DispatchQueue.main.async { done(false, "Could not stage download: \(error.localizedDescription)") }; return }
 
             DispatchQueue.main.async { status("Unpacking…") }
-            // ditto -xk unzips; the archive should contain ClaudeCommand.app at top level.
+            // ditto -xk unzips; the archive should contain Command.app at top level.
             let unzipDir = work + "/extracted"
             let (_, code) = runShell("/usr/bin/ditto", ["-xk", zipPath, unzipDir])
             guard code == 0,

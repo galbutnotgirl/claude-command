@@ -4,19 +4,28 @@
 
 import Foundation
 
-// Mapped onto GitHub release tags: prod = plain "vX.Y.Z", beta = "vX.Y.Z-beta.N",
+// Mapped onto GitHub release tags: stable = plain "vX.Y.Z", beta = "vX.Y.Z-beta.N",
 // alpha = "vX.Y.Z-alpha.N". A channel sees its own builds AND everything more
-// stable (alpha → alpha+beta+prod, beta → beta+prod, prod → prod only), so a
+// stable (alpha -> alpha+beta+stable, beta -> beta+stable, stable -> stable only), so a
 // tester always lands on the newest build they've opted into.
 public enum UpdateChannel: String, CaseIterable {
-    case alpha, beta, prod
-    public var label: String { rawValue.prefix(1).uppercased() + rawValue.dropFirst() }
+    case alpha
+    case beta
+    case stable = "prod"
+
+    public var label: String {
+        switch self {
+        case .alpha: return "Alpha"
+        case .beta: return "Beta"
+        case .stable: return "Stable"
+        }
+    }
     // Channels this selection is allowed to receive (self + more stable).
     public var accepts: Set<UpdateChannel> {
         switch self {
-        case .alpha: return [.alpha, .beta, .prod]
-        case .beta:  return [.beta, .prod]
-        case .prod:  return [.prod]
+        case .alpha: return [.alpha, .beta, .stable]
+        case .beta:  return [.beta, .stable]
+        case .stable: return [.stable]
         }
     }
     // Which channel a release tag belongs to.
@@ -24,7 +33,7 @@ public enum UpdateChannel: String, CaseIterable {
         let t = tag.lowercased()
         if t.contains("alpha") { return .alpha }
         if t.contains("beta")  { return .beta }
-        return .prod
+        return .stable
     }
 }
 
@@ -46,4 +55,25 @@ public func versionGreater(_ a: String, _ b: String) -> Bool {
         if x != y { return x > y }
     }
     return false
+}
+
+public struct ReleaseAssetInfo: Equatable {
+    public var name: String
+    public var browserDownloadURL: String
+
+    public init(name: String, browserDownloadURL: String) {
+        self.name = name
+        self.browserDownloadURL = browserDownloadURL
+    }
+}
+
+public func downloadableZipAsset(from assets: [ReleaseAssetInfo]) -> ReleaseAssetInfo? {
+    assets.first { asset in
+        let name = asset.name.lowercased()
+        let url = asset.browserDownloadURL.lowercased()
+        return name.hasSuffix(".zip")
+            && url.hasSuffix(".zip")
+            && !name.hasSuffix(".zip.sha256")
+            && !url.hasSuffix(".zip.sha256")
+    }
 }

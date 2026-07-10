@@ -1,5 +1,5 @@
 // SettingsWindow.swift — the menu-bar window: Set Up (live permission checks +
-// a step graphic), Shortcuts (central hotkey editor), Troubleshooting, About.
+// a step graphic), Shortcuts, Context, Command History, Dictation, About.
 // Hosted via NSHostingController so the rest of the agent stays AppKit.
 
 import Cocoa
@@ -38,6 +38,34 @@ let appPurple = Color(nsColor: purpleAccent)
 // purple fill behind *white* text; that pairing needs the deep purple in
 // both light and dark mode, unlike appPurple's dark-mode lightening.
 let appPurpleSolid = Color(red: 112/255, green: 40/255, blue: 215/255)
+
+private enum ShortcutRowLayout {
+    static let nestedLeading: CGFloat = 28
+    static let icon: CGFloat = 16
+    static let label: CGFloat = 130
+    static let shortcut: CGFloat = 74
+}
+
+private enum CustomActionSheetLayout {
+    static let width: CGFloat = 820
+    static let height: CGFloat = 680
+    static let fieldColumn: CGFloat = 356
+    static let triggerPicker: CGFloat = 156
+}
+
+func openHelpDoc(named name: String, fragment: String? = nil) {
+    if let local = Bundle.main.url(forResource: name, withExtension: "html", subdirectory: "docs") {
+        var components = URLComponents(url: local, resolvingAgainstBaseURL: false)
+        if let fragment, !fragment.isEmpty { components?.fragment = fragment }
+        NSWorkspace.shared.open(components?.url ?? local)
+        return
+    }
+    guard !DOCS_SITE_URL.isEmpty else { return }
+    let urlString = name == "index" ? DOCS_SITE_URL : "\(DOCS_SITE_URL)\(name).html"
+    var components = URLComponents(string: urlString)
+    if let fragment, !fragment.isEmpty { components?.fragment = fragment }
+    if let url = components?.url { NSWorkspace.shared.open(url) }
+}
 
 extension View {
     func settingsCard() -> some View {
@@ -180,6 +208,34 @@ final class SettingsModel: ObservableObject {
         }
         saveCustomActions(customActions)
     }
+    func setTriggerDelivery(triggerID: String, delivery: ActionDelivery?) {
+        for i in customActions.indices {
+            if let j = customActions[i].triggers.firstIndex(where: { $0.id == triggerID }) {
+                customActions[i].triggers[j].deliveryOverride = delivery
+                customActions[i].triggers[j].sessionModeOverride = nil
+                break
+            }
+        }
+        saveCustomActions(customActions)
+    }
+    func setTriggerDestination(triggerID: String, destination: ClaudeDestination?) {
+        for i in customActions.indices {
+            if let j = customActions[i].triggers.firstIndex(where: { $0.id == triggerID }) {
+                customActions[i].triggers[j].destinationOverride = destination
+                break
+            }
+        }
+        saveCustomActions(customActions)
+    }
+    func setTriggerAutoSubmit(triggerID: String, autoSubmit: Bool?) {
+        for i in customActions.indices {
+            if let j = customActions[i].triggers.firstIndex(where: { $0.id == triggerID }) {
+                customActions[i].triggers[j].isAutoSubmitOverride = autoSubmit
+                break
+            }
+        }
+        saveCustomActions(customActions)
+    }
 
     // Check whether keycode+mods collides with any other binding (different action/id).
     // Sets bindingConflict to a human-readable message, or nil if clear.
@@ -229,9 +285,10 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     private func build() {
         let host = NSHostingController(rootView: SettingsRootView(model: settingsModel))
         let w = NSWindow(contentViewController: host)
-        w.title = "ClaudeCommand"
+        w.title = "Command"
         w.styleMask = [.titled, .closable, .miniaturizable, .resizable]
         w.isReleasedWhenClosed = false
+        w.minSize = NSSize(width: 960, height: 600)
         w.delegate = self
         window = w
         // Resize to fit each tab (up to the screen) whenever the tab changes.
@@ -245,9 +302,8 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     private func sizeWindow(for tab: SettingsTab) {
         guard let w = window, !w.isVisible else { return }
         let cap = ((w.screen ?? NSScreen.main)?.visibleFrame.height ?? 900) - 40
-        let shortcutsH = 200 + CGFloat(max(1, settingsModel.bindings.count)) * 62
-        let h = min(max(920, shortcutsH), cap)
-        w.setContentSize(NSSize(width: 720, height: h))
+        let h = min(860, cap)
+        w.setContentSize(NSSize(width: 1040, height: h))
         w.center()
     }
 
@@ -268,7 +324,7 @@ struct SettingsRootView: View {
             Divider()
             content.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
-        .frame(minWidth: 720, minHeight: 520)
+        .frame(minWidth: 960, minHeight: 600)
         // Without this, every control that follows the system accent color — Pickers,
         // segmented controls, Toggles, text-field cursors, .accentColor(...) usages
         // sprinkled through this file — renders macOS's default blue, since the app
@@ -281,8 +337,8 @@ struct SettingsRootView: View {
         VStack(alignment: .leading, spacing: 4) {
             tabButton(.setup, "Set Up", "checklist")
             tabButton(.shortcuts, "Shortcuts", "keyboard")
-            tabButton(.templates, "Templates", "doc.text.below.ecg")
-            tabButton(.handoffs, "Handoff History", "paperplane.circle")
+            tabButton(.templates, "Context", "doc.text.below.ecg")
+            tabButton(.handoffs, "Command History", "paperplane.circle")
             tabButton(.history, "Clipboard History", "clock.arrow.circlepath")
 
             Divider().padding(.vertical, 4)
@@ -357,7 +413,7 @@ struct SetupView: View {
                 // Permissions — numbered steps
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Permissions").font(.headline)
-                    Text("Grant these before using ClaudeCommand.")
+                    Text("Grant these before using Command.")
                         .font(.caption).foregroundColor(.secondary)
                 }
 
@@ -388,17 +444,17 @@ struct SetupView: View {
 
                 HStack(spacing: 10) {
                     Button("Re-check") { model.refresh() }
-                    Button("Restart agent") { restartApp() }
+                    Button("Restart Command") { restartApp() }
                     Spacer()
                 }
 
                 VStack(alignment: .leading, spacing: 6) {
                     Divider()
-                    Text("Grant still red after enabling? Restart agent — macOS applies grants on relaunch.")
+                    Text("Grant still red after enabling? Restart Command — macOS applies grants on relaunch.")
                         .font(.caption).foregroundColor(.secondary)
-                    Text("After a rebuild, re-grant permissions — new binary = new identity to macOS.")
+                    Text("If macOS asks again after a rebuild, re-grant permissions for Command.")
                         .font(.caption).foregroundColor(.secondary)
-                    Text("F5–F8 don't fire? System Settings → Keyboard → enable \"Use F1, F2… as standard function keys\".")
+                    Text("F5–F8 don't fire? Enable standard function keys in macOS Keyboard settings, or bind dictation to Home, End, PgUp, or PgDn in Dictation Settings.")
                         .font(.caption).foregroundColor(.secondary)
                 }
             }
@@ -432,7 +488,7 @@ struct SetupView: View {
 
     private func compAction(for title: String, model: SettingsModel) -> CheckAction? {
         switch title {
-        case "Clipboard daemon":
+        case "Clipboard History":
             let enabled = UserDefaults.standard.bool(forKey: "cliphistoryEnabled")
             return CheckAction(label: enabled ? "Restart" : "Enable") {
                 if !enabled { UserDefaults.standard.set(true, forKey: "cliphistoryEnabled") }
@@ -442,10 +498,8 @@ struct SetupView: View {
         case "Hotkeys configured":
             return CheckAction(label: "Shortcuts →") { model.tab = .shortcuts }
         case "Right-click actions":
-            return CheckAction(label: "Instructions") {
-                if let url = URL(string: "https://github.com/galbutnotgirl/claude-command#install") {
-                    NSWorkspace.shared.open(url)
-                }
+            return CheckAction(label: "Learn") {
+                openHelpDoc(named: "install", fragment: "source")
             }
         default:
             return nil
@@ -491,7 +545,7 @@ struct PermStep: View {
                     .font(.caption).foregroundColor(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                 if check.state == .ok && isRestartSensitive {
-                    Text("Revocation only applies after agent restart.")
+            Text("Revocation only applies after Command restarts.")
                         .font(.caption2).foregroundColor(.secondary)
                 }
                 if check.state == .missing, let hint = instructionHint {
@@ -512,10 +566,10 @@ struct PermStep: View {
     private var instructionHint: String? {
         let t = check.title.lowercased()
         if t.contains("accessibility") {
-            return "→ System Settings → Privacy & Security → Accessibility → enable ClaudeCommand"
+            return "→ System Settings → Privacy & Security → Accessibility → enable Command"
         }
         if t.contains("screen") {
-            return "→ System Settings → Privacy & Security → Screen Recording → enable ClaudeCommand"
+            return "→ System Settings → Privacy & Security → Screen Recording → enable Command"
         }
         return nil
     }
@@ -561,6 +615,7 @@ struct CompRow: View {
 // ---- Shortcuts --------------------------------------------------------------
 struct ShortcutsView: View {
     @ObservedObject var model: SettingsModel
+    @StateObject private var templates = TemplatesModel()
     @State private var showingAddCustom = false
 
     private var destBinding: Binding<String> {
@@ -576,16 +631,12 @@ struct ShortcutsView: View {
                 HStack {
                     Text("Shortcuts").font(.title2).bold()
                     Spacer()
-                    Button("Export…") { exportSettings() }.buttonStyle(.bordered)
-                    Button("Import…") { importSettings(model: model) }.buttonStyle(.bordered)
                 }
-                Text("Click a key field and press a combo to set it. Press Delete to clear. Esc cancels. Changes apply instantly.")
-                    .foregroundColor(.secondary)
 
                 // Destination — where every hotkey and custom action opens Claude.
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("Claude destination").font(.headline)
-                    Text("All three open the Claude desktop app — Chat, Cowork, and Code are just different modes inside it.")
+                    Text("Default Claude destination").font(.headline)
+                    Text("Used unless a prompt or individual trigger overrides it.")
                         .font(.caption).foregroundColor(.secondary)
                     Picker("", selection: destBinding) {
                         Text("Chat").tag("chat")
@@ -610,19 +661,11 @@ struct ShortcutsView: View {
                     .cornerRadius(8)
                 }
 
-                VStack(spacing: 8) {
-                    ForEach(model.bindings) { b in
-                        HStack(spacing: 12) {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(b.name)
-                                Text(b.detail).font(.caption).foregroundColor(.secondary)
-                                    .fixedSize(horizontal: false, vertical: true)
-                            }
-                            Spacer()
-                            KeyBindingField(action: b.action, binding: b, model: model)
-                        }
-                        .settingsCard()
-                    }
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Compose").font(.headline)
+                    Text("One shared prompt with selected-text and screenshot combinations.")
+                        .font(.caption).foregroundColor(.secondary)
+                    BuiltInComposeCard(model: model, templates: templates)
                 }
 
                 // ---- Custom Actions ----
@@ -635,7 +678,7 @@ struct ShortcutsView: View {
                 }
                 .padding(.top, 8)
 
-                Text("Pick a trigger (text selection, screenshot, a typed popup, or voice) and either paste the rendered prompt into Claude or run it as a background handoff (no window, just \(HandoffConfig.load().cliCommand) -p addressed to a skill). Use {selection} (and {file} for screenshot handoffs) to place captured content inline — otherwise it's appended below the prompt.")
+                Text("Prompt groups with their own triggers, delivery, and destination.")
                     .font(.caption).foregroundColor(.secondary)
 
                 VStack(spacing: 8) {
@@ -656,6 +699,207 @@ struct ShortcutsView: View {
     }
 }
 
+struct BuiltInComposeCard: View {
+    @ObservedObject var model: SettingsModel
+    @ObservedObject var templates: TemplatesModel
+    @State private var showingEdit = false
+    @State private var settings = loadBuiltInComposeSettings()
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 12) {
+                Image(systemName: "text.badge.checkmark").foregroundColor(appPurple).frame(width: 20)
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 6) {
+                        Text("Compose").font(.callout)
+                    }
+                    Text("Shared prompt. Behavior and auto-submit can vary by row.")
+                        .font(.caption).foregroundColor(.secondary).lineLimit(2)
+                }
+                Spacer()
+                Button(action: { showingEdit = true }) {
+                    Image(systemName: "pencil").foregroundColor(.secondary)
+                }
+                .buttonStyle(.plain)
+                .help("Edit compose")
+            }
+            VStack(spacing: 6) {
+                BuiltInComposeSummaryRow(def: def(for: "add"), binding: binding(for: "add"), autoSubmit: settings.effectiveAutoSubmit(for: "add"))
+                BuiltInComposeSummaryRow(def: def(for: "comment"), binding: binding(for: "comment"), autoSubmit: settings.effectiveAutoSubmit(for: "comment"))
+                BuiltInComposeSummaryRow(def: def(for: "go"), binding: binding(for: "go"), autoSubmit: settings.effectiveAutoSubmit(for: "go"))
+                Divider().padding(.leading, ShortcutRowLayout.icon + 10)
+                BuiltInComposeSummaryRow(def: def(for: "shotadd"), binding: binding(for: "shotadd"), autoSubmit: settings.effectiveAutoSubmit(for: "shotadd"))
+                BuiltInComposeSummaryRow(def: def(for: "shotcomment"), binding: binding(for: "shotcomment"), autoSubmit: settings.effectiveAutoSubmit(for: "shotcomment"))
+                BuiltInComposeSummaryRow(def: def(for: "shotgo"), binding: binding(for: "shotgo"), autoSubmit: settings.effectiveAutoSubmit(for: "shotgo"))
+            }
+            .padding(.leading, ShortcutRowLayout.nestedLeading)
+        }
+        .settingsCard()
+        .sheet(isPresented: $showingEdit, onDismiss: { settings = loadBuiltInComposeSettings() }) {
+            BuiltInComposeSheet(isPresented: $showingEdit, model: model, templates: templates)
+        }
+    }
+
+    private func binding(for action: String) -> HotkeyBinding {
+        model.bindings.first(where: { $0.action == action }) ?? HotkeyBinding(action: action, keycode: 0, mods: 0, enabled: true)
+    }
+
+    private func def(for action: String) -> BuiltInComposeRowDefinition {
+        BUILTIN_COMPOSE_ROWS.first(where: { $0.action == action })!
+    }
+}
+
+struct BuiltInComposeSummaryRow: View {
+    let def: BuiltInComposeRowDefinition
+    let binding: HotkeyBinding
+    let autoSubmit: Bool
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: def.icon)
+                .foregroundColor(appPurple)
+                .frame(width: ShortcutRowLayout.icon)
+                .help(def.inputLabel)
+            Text(def.behaviorLabel)
+                .font(.caption2).padding(.horizontal, 6).padding(.vertical, 2)
+                .background(Color.secondary.opacity(0.12)).cornerRadius(4)
+            if autoSubmit {
+                Text("Auto-submit")
+                    .font(.caption2).padding(.horizontal, 6).padding(.vertical, 2)
+                    .background(appPurple.opacity(0.12)).cornerRadius(4)
+            }
+            Spacer()
+            Text(binding.human)
+                .font(.system(.body, design: .rounded).bold())
+                .frame(width: ShortcutRowLayout.shortcut, alignment: .trailing)
+        }
+        .frame(maxWidth: .infinity)
+    }
+}
+
+enum AutoSubmitChoice: String, CaseIterable, Identifiable {
+    case useDefault, on, off
+    var id: String { rawValue }
+    var label: String {
+        switch self {
+        case .useDefault: return "—"
+        case .on: return "Auto-submit"
+        case .off: return "Don't auto-submit"
+        }
+    }
+    var boolValue: Bool? {
+        switch self {
+        case .useDefault: return nil
+        case .on: return true
+        case .off: return false
+        }
+    }
+    static func from(_ value: Bool?) -> AutoSubmitChoice {
+        switch value {
+        case true: return .on
+        case false: return .off
+        case nil: return .useDefault
+        }
+    }
+}
+
+struct BuiltInComposeSheet: View {
+    @Binding var isPresented: Bool
+    @ObservedObject var model: SettingsModel
+    @ObservedObject var templates: TemplatesModel
+
+    @State private var prompt = ""
+    @State private var defaultAutoSubmit = false
+    @State private var overrides: [String: Bool] = [:]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Edit Compose").font(.headline)
+
+            Toggle("Default auto-submit", isOn: $defaultAutoSubmit)
+                .help("Used unless a row overrides it.")
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Prompt text").font(.caption).bold()
+                Text("Shared across selected-text and screenshot compose rows.")
+                    .font(.caption).foregroundColor(.secondary)
+                TextEditor(text: $prompt)
+                    .font(.system(.body, design: .monospaced))
+                    .frame(minHeight: 100)
+                    .overlay(RoundedRectangle(cornerRadius: 4).stroke(Color.gray.opacity(0.3)))
+            }
+
+            if !templates.builtInComposeTemplatesAreUnified {
+                Text("Prompt variants were different before. Saving here will unify them.")
+                    .font(.caption2).foregroundColor(.secondary)
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Triggers").font(.caption).bold()
+                ForEach(BUILTIN_COMPOSE_ROWS) { def in
+                    EditableBuiltInComposeRow(def: def,
+                                              binding: binding(for: def.action),
+                                              autoSubmitChoice: Binding(
+                                                get: { AutoSubmitChoice.from(overrides[def.action]) },
+                                                set: { overrides[def.action] = $0.boolValue }
+                                              ),
+                                              model: model)
+                }
+            }
+
+            TemplateVariablesLegend(compact: true)
+
+            HStack {
+                Button("Cancel") { isPresented = false }
+                    .keyboardShortcut(.cancelAction)
+                Spacer()
+                Button("Save") {
+                    templates.setBuiltInComposeTemplate(prompt)
+                    saveBuiltInComposeSettings(BuiltInComposeSettings(autoSubmitDefault: defaultAutoSubmit,
+                                                                     autoSubmitOverrides: overrides))
+                    isPresented = false
+                }
+                .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(24)
+        .frame(minWidth: 620, minHeight: 420)
+        .onAppear {
+            let settings = loadBuiltInComposeSettings()
+            prompt = templates.builtInComposeTemplate
+            defaultAutoSubmit = settings.autoSubmitDefault
+            overrides = settings.autoSubmitOverrides
+        }
+    }
+
+    private func binding(for action: String) -> HotkeyBinding {
+        model.bindings.first(where: { $0.action == action }) ?? HotkeyBinding(action: action, keycode: 0, mods: 0, enabled: true)
+    }
+}
+
+struct EditableBuiltInComposeRow: View {
+    let def: BuiltInComposeRowDefinition
+    let binding: HotkeyBinding
+    @Binding var autoSubmitChoice: AutoSubmitChoice
+    @ObservedObject var model: SettingsModel
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: def.icon).foregroundColor(appPurple).frame(width: 16)
+            Text(def.inputLabel).font(.caption).frame(width: 110, alignment: .leading)
+            Text(def.behaviorLabel).font(.caption).frame(width: 96, alignment: .leading)
+            Picker("", selection: $autoSubmitChoice) {
+                ForEach(AutoSubmitChoice.allCases) { choice in
+                    Text(choice.label).tag(choice)
+                }
+            }
+            .labelsHidden().frame(width: 130)
+            Spacer()
+            KeyBindingField(action: binding.action, binding: binding, model: model)
+        }
+    }
+}
+
 // One shared prompt body (name/prompt/skill/delivery), any number of ways to
 // fire it. The header row is the body; each trigger gets its own sub-row
 // with its own kind + hotkey, so e.g. a popup binding and a voice binding of
@@ -668,50 +912,43 @@ struct CustomActionRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 12) {
-                Image(systemName: ca.isHandoff ? "paperplane.circle" : "text.cursor")
+                Image(systemName: ca.delivery == .background ? "paperplane.circle" : "text.cursor")
                     .foregroundColor(appPurple).frame(width: 20)
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 6) {
                         Text(ca.name).font(.callout)
-                        if ca.isHandoff {
-                            Text(ca.skill.isEmpty ? "handoff" : "/\(ca.skill)")
-                                .font(.caption2).padding(.horizontal, 5).padding(.vertical, 1)
-                                .background(Color.secondary.opacity(0.12)).cornerRadius(4)
-                        }
-                        if !ca.includeSource && !ca.isHandoff {
+                        Text(ca.delivery.label)
+                            .font(.caption2).padding(.horizontal, 5).padding(.vertical, 1)
+                            .background(Color.secondary.opacity(0.12)).cornerRadius(4)
+                        Text(ca.destination.label)
+                            .font(.caption2).padding(.horizontal, 5).padding(.vertical, 1)
+                            .background(Color.secondary.opacity(0.12)).cornerRadius(4)
+                        if !ca.includeSource && ca.delivery != .background {
                             Text("no src").font(.caption2).padding(.horizontal, 5).padding(.vertical, 1)
                                 .background(Color.secondary.opacity(0.12)).cornerRadius(4)
                         }
+                        if ca.isAutoSubmit && ca.delivery != .background {
+                            Text("Auto-submit")
+                                .font(.caption2).padding(.horizontal, 5).padding(.vertical, 1)
+                                .background(appPurple.opacity(0.12)).cornerRadius(4)
+                        }
                     }
-                    let preview = String(ca.prompt.prefix(70))
-                    Text(preview + (ca.prompt.count > 70 ? "…" : ""))
-                        .font(.caption).foregroundColor(.secondary)
                 }
                 Spacer()
                 Button(action: { showingEdit = true }) {
                     Image(systemName: "pencil").foregroundColor(.secondary)
                 }
                 .buttonStyle(.plain)
+                .help("Edit action")
                 Button(action: { model.deleteCustomAction(id: ca.id) }) {
                     Image(systemName: "trash").foregroundColor(.red)
                 }
                 .buttonStyle(.plain)
+                .help("Delete action")
             }
 
             ForEach(ca.triggers) { trig in
-                TriggerRow(actionID: ca.id, trigger: trig, model: model, canRemove: ca.triggers.count > 1)
-            }
-
-            HStack {
-                Spacer()
-                Menu {
-                    ForEach(ActionKind.allCases, id: \.self) { k in
-                        Button(k.label) { model.addTrigger(actionID: ca.id, kind: k) }
-                    }
-                } label: {
-                    Label("Add Trigger", systemImage: "plus.circle").font(.caption)
-                }
-                .menuStyle(.borderlessButton).fixedSize()
+                TriggerSummaryRow(trigger: trig, action: ca)
             }
         }
         .settingsCard()
@@ -721,11 +958,9 @@ struct CustomActionRow: View {
     }
 }
 
-struct TriggerRow: View {
-    let actionID: String
+struct TriggerSummaryRow: View {
     let trigger: ActionTrigger
-    @ObservedObject var model: SettingsModel
-    let canRemove: Bool
+    let action: CustomAction
 
     private var kindIcon: String {
         switch trigger.kind {
@@ -737,26 +972,32 @@ struct TriggerRow: View {
     }
 
     var body: some View {
+        let kindLabel = trigger.kind.label.components(separatedBy: " (").first ?? trigger.kind.label
         HStack(spacing: 10) {
-            Image(systemName: kindIcon).foregroundColor(appPurple).frame(width: 16)
-            Picker("", selection: Binding(
-                get: { trigger.kind },
-                set: { model.setTriggerKind(triggerID: trigger.id, kind: $0) }
-            )) {
-                ForEach(ActionKind.allCases, id: \.self) { k in
-                    Text(k.label.components(separatedBy: " (").first ?? k.label).tag(k)
-                }
+            Image(systemName: kindIcon).foregroundColor(appPurple).frame(width: ShortcutRowLayout.icon)
+            Text(kindLabel).font(.caption).frame(width: ShortcutRowLayout.label, alignment: .leading)
+            if let delivery = trigger.deliveryOverride {
+                Text(delivery.label)
+                    .font(.caption2).padding(.horizontal, 6).padding(.vertical, 2)
+                    .background(Color.secondary.opacity(0.12)).cornerRadius(4)
             }
-            .labelsHidden().frame(width: 130)
+            if let destination = trigger.destinationOverride {
+                Text(destination.label)
+                    .font(.caption2).padding(.horizontal, 6).padding(.vertical, 2)
+                    .background(Color.secondary.opacity(0.12)).cornerRadius(4)
+            }
+            if let autoSubmit = trigger.isAutoSubmitOverride {
+                Text(autoSubmit ? "Auto-submit" : "Don't auto-submit")
+                    .font(.caption2).padding(.horizontal, 6).padding(.vertical, 2)
+                    .background(appPurple.opacity(0.12)).cornerRadius(4)
+            }
             Spacer()
-            TriggerKeyBindingField(trigger: trigger, model: model)
-            Button(action: { model.removeTrigger(actionID: actionID, triggerID: trigger.id) }) {
-                Image(systemName: "minus.circle").foregroundColor(.secondary)
-            }
-            .buttonStyle(.plain).disabled(!canRemove)
-            .help(canRemove ? "Remove this trigger" : "An action needs at least one trigger")
+            Text(trigger.human)
+                .font(.system(.body, design: .rounded).bold())
+                .frame(width: ShortcutRowLayout.shortcut, alignment: .trailing)
         }
-        .padding(.leading, 32)
+        .frame(maxWidth: .infinity)
+        .padding(.leading, ShortcutRowLayout.nestedLeading)
     }
 }
 
@@ -798,99 +1039,262 @@ struct CustomActionSheet: View {
     @State private var isAutoSubmit: Bool = false
     @State private var sessionMode: String = "new"
     @State private var includeSource: Bool = true
-    @State private var isHandoff: Bool = false
+    @State private var delivery: ActionDelivery = .newChat
+    @State private var destination: ClaudeDestination = .default
     @State private var skill: String = ""
+    @State private var actionTriggers: [ActionTrigger] = []
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text(editing == nil ? "New Custom Action" : "Edit Custom Action").font(.headline)
-
-            TextField("Name (e.g. Summarize)", text: $name)
-                .textFieldStyle(.roundedBorder)
-
-            Toggle("Run as background handoff", isOn: $isHandoff)
-                .help("No Claude window — pipes the rendered prompt to `claude -p` in the background, addressed to a skill. See it in Handoff History.")
-
-            if isHandoff {
-                TextField("Skill name (e.g. triage-capture — empty = no skill line)", text: $skill)
-                    .textFieldStyle(.roundedBorder)
-            } else {
-                Picker("Session", selection: $sessionMode) {
-                    Text("New session").tag("new")
-                    Text("Add to existing chat").tag("add")
-                }
-                .pickerStyle(.segmented)
-                .help("New session opens a fresh Claude Code window. Add pastes into the currently open chat. Default for triggers that don't override it.")
-
-                Toggle("Include source app", isOn: $includeSource)
-                    .help("Prepend \"from: AppName — URL\" before the prompt. Default for triggers that don't override it.")
-
-                Toggle("Auto-submit", isOn: $isAutoSubmit)
-                    .help("Press Return automatically after pasting the prompt into Claude. Default for triggers that don't override it.")
-            }
-
+        VStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 4) {
-                Text("Prompt template").font(.caption).bold()
-                Text("Shared across every trigger below. {selection} is replaced with the captured content (typed, spoken, screenshotted, or selected, depending on which trigger fired) — otherwise it's appended below the prompt. {file} for a screenshot trigger's saved image path, in handoff mode.")
+                Text(editing == nil ? "New Custom Action" : "Edit Custom Action").font(.headline)
+                Text("Prompt defaults apply to every trigger unless a trigger row overrides them.")
                     .font(.caption).foregroundColor(.secondary)
-                TextEditor(text: $prompt)
-                    .font(.system(.body, design: .monospaced))
-                    .frame(minHeight: 90)
-                    .overlay(RoundedRectangle(cornerRadius: 4).stroke(Color.gray.opacity(0.3)))
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 24)
+            .padding(.top, 22)
+            .padding(.bottom, 12)
+
+            Divider()
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text("Action name").font(.caption).bold()
+                        TextField("Summarize", text: $name)
+                            .textFieldStyle(.roundedBorder)
+                    }
+
+                    HStack(alignment: .top, spacing: 18) {
+                        VStack(alignment: .leading, spacing: 5) {
+                            Text("Delivery").font(.caption).bold()
+                            Picker("", selection: $delivery) {
+                                ForEach(ActionDelivery.allCases, id: \.self) { d in Text(d.label).tag(d) }
+                            }
+                            .labelsHidden()
+                            .pickerStyle(.segmented)
+                            .help("Existing chat pastes into the open Claude chat. New chat opens a fresh Claude session. Background pipes to `claude -p`.")
+                        }
+                        .frame(width: CustomActionSheetLayout.fieldColumn, alignment: .leading)
+
+                        VStack(alignment: .leading, spacing: 5) {
+                            Text("Destination").font(.caption).bold()
+                            Picker("", selection: $destination) {
+                                ForEach(ClaudeDestination.allCases, id: \.self) { d in
+                                    Text(d == .default ? "—" : d.label).tag(d)
+                                }
+                            }
+                            .labelsHidden()
+                            .pickerStyle(.segmented)
+                            .help("Default uses the global setting at the top of Shortcuts. Chat, Cowork, and Code override it for this prompt.")
+                        }
+                        .frame(width: CustomActionSheetLayout.fieldColumn, alignment: .leading)
+                    }
+
+                    if delivery == .background {
+                        VStack(alignment: .leading, spacing: 5) {
+                            Text("Background skill").font(.caption).bold()
+                            TextField("triage-capture (empty = claude -p)", text: $skill)
+                                .textFieldStyle(.roundedBorder)
+                        }
+                    } else {
+                        HStack(spacing: 18) {
+                            Toggle("Include source app", isOn: $includeSource)
+                                .help("Prepend \"from: AppName — URL\" before the prompt. Default for triggers that don't override it.")
+                            Toggle("Auto-submit", isOn: $isAutoSubmit)
+                                .help("Press Return automatically after pasting the prompt into Claude. Default for triggers that don't override it.")
+                            Spacer()
+                        }
+                    }
+
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text("Prompt text").font(.caption).bold()
+                        Text("Use {selection} for captured content and {file} for screenshot file paths.")
+                            .font(.caption).foregroundColor(.secondary)
+                        TextEditor(text: $prompt)
+                            .font(.system(.body, design: .monospaced))
+                            .frame(minHeight: 112)
+                            .overlay(RoundedRectangle(cornerRadius: 5).stroke(Color.gray.opacity(0.3)))
+                    }
+
+                    if editing == nil {
+                        Text("New actions start with one Selected text trigger. Save, then reopen to add screenshot, popup, or voice triggers.")
+                            .font(.caption2).foregroundColor(.secondary)
+                    } else if let editingAction = editing {
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack {
+                                Text("Triggers").font(.caption).bold()
+                                Spacer()
+                                Menu {
+                                    ForEach(ActionKind.allCases, id: \.self) { k in
+                                        Button(k.label) { model.addTrigger(actionID: editingAction.id, kind: k) }
+                                    }
+                                } label: {
+                                    Label("Add Trigger", systemImage: "plus.circle").font(.caption)
+                                }
+                                .menuStyle(.borderlessButton).fixedSize()
+                            }
+                            ForEach(actionTriggers) { trigger in
+                                EditableTriggerRow(actionID: editingAction.id, trigger: trigger, model: model,
+                                                   canRemove: actionTriggers.count > 1)
+                            }
+                        }
+                    }
+                }
+                .padding(24)
             }
 
-            if editing == nil {
-                Text("Add a trigger (text/screenshot/popup/voice) and its hotkey after creating — one action can have several.")
-                    .font(.caption2).foregroundColor(.secondary)
-            }
+            Divider()
 
             HStack {
                 Button("Cancel") { isPresented = false }
                     .keyboardShortcut(.cancelAction)
                 Spacer()
-                Button(editing == nil ? "Add" : "Save") {
-                    let trimName = name.trimmingCharacters(in: .whitespaces)
-                    let trimSkill = skill.trimmingCharacters(in: .whitespaces)
-                    guard !trimName.isEmpty else { return }
-                    if let existing = editing {
-                        var updated = existing
-                        updated.name = trimName; updated.prompt = prompt
-                        updated.isAutoSubmit = isAutoSubmit
-                        updated.sessionMode = sessionMode; updated.includeSource = includeSource
-                        updated.isHandoff = isHandoff; updated.skill = trimSkill
-                        model.updateCustomAction(updated)
-                    } else {
-                        var ca = CustomAction.makeNew(name: trimName, prompt: prompt, kind: .text,
-                                                       isHandoff: isHandoff, skill: trimSkill)
-                        ca.isAutoSubmit = isAutoSubmit
-                        ca.sessionMode = sessionMode; ca.includeSource = includeSource
-                        model.addCustomAction(ca)
-                    }
-                    isPresented = false
-                }
-                .keyboardShortcut(.defaultAction)
-                .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
+                Button(editing == nil ? "Add" : "Save") { save() }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
             }
+            .padding(.horizontal, 24)
+            .padding(.vertical, 14)
         }
-        .padding(24)
-        .frame(minWidth: 460, minHeight: 340)
+        .frame(width: CustomActionSheetLayout.width, height: CustomActionSheetLayout.height)
         .onAppear {
             if let e = editing {
                 name = e.name; prompt = e.prompt
                 isAutoSubmit = e.isAutoSubmit
+                delivery = e.delivery; destination = e.destination
                 sessionMode = e.sessionMode; includeSource = e.includeSource
-                isHandoff = e.isHandoff; skill = e.skill
+                skill = e.skill
+                actionTriggers = e.triggers
             }
+        }
+        .onReceive(model.$customActions) { actions in
+            guard let editing else { return }
+            actionTriggers = actions.first(where: { $0.id == editing.id })?.triggers ?? []
+        }
+    }
+
+    private func save() {
+        let trimName = name.trimmingCharacters(in: .whitespaces)
+        let trimSkill = skill.trimmingCharacters(in: .whitespaces)
+        guard !trimName.isEmpty else { return }
+        if let existing = editing {
+            var updated = existing
+            updated.name = trimName; updated.prompt = prompt
+            updated.isAutoSubmit = isAutoSubmit
+            updated.delivery = delivery; updated.destination = destination
+            updated.sessionMode = delivery.sessionMode; updated.includeSource = includeSource
+            updated.isHandoff = delivery == .background; updated.skill = trimSkill
+            model.updateCustomAction(updated)
+        } else {
+            var ca = CustomAction.makeNew(name: trimName, prompt: prompt, kind: .text,
+                                           isHandoff: delivery == .background, skill: trimSkill)
+            ca.isAutoSubmit = isAutoSubmit
+            ca.delivery = delivery; ca.destination = destination
+            ca.sessionMode = delivery.sessionMode; ca.includeSource = includeSource
+            model.addCustomAction(ca)
+        }
+        isPresented = false
+    }
+}
+
+struct EditableTriggerRow: View {
+    let actionID: String
+    let trigger: ActionTrigger
+    @ObservedObject var model: SettingsModel
+    let canRemove: Bool
+
+    private var kindIcon: String {
+        switch trigger.kind {
+        case .text: return "text.cursor"
+        case .screenshot: return "camera.viewfinder"
+        case .popup: return "text.bubble"
+        case .voice: return "waveform"
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 10) {
+                Image(systemName: kindIcon).foregroundColor(appPurple).frame(width: 16)
+                Picker("", selection: Binding(
+                    get: { trigger.kind },
+                    set: { model.setTriggerKind(triggerID: trigger.id, kind: $0) }
+                )) {
+                    ForEach(ActionKind.allCases, id: \.self) { k in
+                        Text(k.label.components(separatedBy: " (").first ?? k.label).tag(k)
+                    }
+                }
+                .labelsHidden().frame(width: 150)
+                Spacer()
+                TriggerKeyBindingField(trigger: trigger, model: model)
+                Button(action: { model.removeTrigger(actionID: actionID, triggerID: trigger.id) }) {
+                    Image(systemName: "minus.circle").foregroundColor(.secondary)
+                }
+                .buttonStyle(.plain).disabled(!canRemove)
+                .help(canRemove ? "Remove this trigger" : "Action needs at least one trigger")
+            }
+
+            HStack(spacing: 12) {
+                LabeledPicker(caption: "Delivery") {
+                    Picker("", selection: Binding(
+                        get: { trigger.deliveryOverride },
+                        set: { model.setTriggerDelivery(triggerID: trigger.id, delivery: $0) }
+                    )) {
+                        Text("—").tag(Optional<ActionDelivery>.none)
+                        ForEach(ActionDelivery.allCases, id: \.self) { d in
+                            Text(d.label).tag(Optional(d))
+                        }
+                    }
+                }
+
+                LabeledPicker(caption: "Destination") {
+                    Picker("", selection: Binding(
+                        get: { trigger.destinationOverride },
+                        set: { model.setTriggerDestination(triggerID: trigger.id, destination: $0) }
+                    )) {
+                        Text("—").tag(Optional<ClaudeDestination>.none)
+                        ForEach(ClaudeDestination.allCases.filter { $0 != .default }, id: \.self) { d in
+                            Text(d.label).tag(Optional(d))
+                        }
+                    }
+                }
+
+                LabeledPicker(caption: "Submit") {
+                    Picker("", selection: Binding(
+                        get: { AutoSubmitChoice.from(trigger.isAutoSubmitOverride) },
+                        set: { model.setTriggerAutoSubmit(triggerID: trigger.id, autoSubmit: $0.boolValue) }
+                    )) {
+                        ForEach(AutoSubmitChoice.allCases) { choice in
+                            Text(choice.label).tag(choice)
+                        }
+                    }
+                }
+            }
+        }
+        .padding(10)
+        .background(Color.secondary.opacity(0.06))
+        .cornerRadius(8)
+    }
+}
+
+private struct LabeledPicker<Content: View>: View {
+    let caption: String
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(caption).font(.caption2).foregroundColor(.secondary)
+            content.labelsHidden().frame(width: CustomActionSheetLayout.triggerPicker)
         }
     }
 }
 
-// ---- Templates: pre/post wrapping for go/comment/add + auto-context rules ---
+// ---- Context: auto-context rules used by built-in and custom prompts ----------
 
 struct TemplatesView: View {
     @StateObject private var model = TemplatesModel()
-    // Defaults to the first action in display order (Add) — same list Shortcuts uses.
-    @State private var previewAction: String = DEFAULT_COMMAND_TEMPLATES.first?.action ?? "add"
     @State private var previewSource: PreviewSource = PreviewSource(label: "Generic (no match)", appName: "Chrome", url: "", enrich: "", displayName: "")
 
     private let sampleSelection = "the exact text you'd have selected"
@@ -898,8 +1302,7 @@ struct TemplatesView: View {
     private var sources: [PreviewSource] { previewSources(from: model.rules) }
 
     private var preview: String {
-        guard let t = model.templates.first(where: { $0.action == previewAction }) else { return "" }
-        return composePreview(action: t.action, template: t.template,
+        return composePreview(action: "add", template: "{source}\n\n{context}\n\n{selection}",
                                source: previewSource, selection: sampleSelection)
     }
 
@@ -907,12 +1310,10 @@ struct TemplatesView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 HStack {
-                    Text("Templates").font(.title2).bold()
+                    Text("Context").font(.title2).bold()
                     Spacer()
-                    Button("Export…") { exportTemplates() }.buttonStyle(.bordered)
-                    Button("Import…") { importTemplates(model: model) }.buttonStyle(.bordered)
                 }
-                Text("One template per action — place {selection}, {context}, {source}, {url} wherever you want them. See Variables below for what each one does.")
+                Text("Rules that add app/site-specific source context to prompts. Built-in prompt text now lives in Shortcuts.")
                     .foregroundColor(.secondary)
 
                 // ---- preview first, then the variables it's built from, then the
@@ -922,12 +1323,6 @@ struct TemplatesView: View {
                     Text("Preview").font(.title3).bold()
                     VStack(alignment: .leading, spacing: 8) {
                         HStack(spacing: 8) {
-                            Text("Action").font(.caption).foregroundColor(.secondary)
-                            Picker("", selection: $previewAction) {
-                                ForEach(model.templates) { t in Text(actionName(t.action)).tag(t.action) }
-                            }
-                            .labelsHidden().frame(width: 100)
-
                             Text("Preview as").font(.caption).foregroundColor(.secondary)
                             Picker("", selection: $previewSource) {
                                 ForEach(sources) { s in Text(s.label).tag(s) }
@@ -955,13 +1350,6 @@ struct TemplatesView: View {
                 TemplateVariablesLegend()
 
                 Divider()
-
-                // ---- Add, New, Go — same order as Settings ▸ Shortcuts ----
-                ForEach(model.templates) { t in
-                    CommandTemplateBox(template: t, model: model)
-                }
-
-                Divider().padding(.vertical, 4)
 
                 HStack {
                     Text("Context").font(.headline)
@@ -1020,7 +1408,7 @@ struct CommandTemplateBox: View {
 private let TEMPLATE_PLACEHOLDER_TOKENS = ["{selection}", "{prompt}", "{text}", "{context}", "{source}", "{url}"]
 
 // SwiftUI's AttributedString-backed TextEditor needs macOS 26 — way past this app's
-// deployment target (13.0) — so this is a plain NSTextView wrapped directly (same
+// deployment target (14.0) — so this is a plain NSTextView wrapped directly (same
 // approach as FittingTextView/SelectableText elsewhere in this file), recoloring
 // placeholder-token ranges after every edit via textStorage, the standard AppKit
 // syntax-highlighting pattern. Attribute-only changes (no character count change)
@@ -1093,10 +1481,12 @@ struct PlaceholderHighlightingEditor: NSViewRepresentable {
 // Shared legend — every placeholder available in a CommandTemplate or Context
 // rule text, in one place, instead of scattered across each field's help text.
 struct TemplateVariablesLegend: View {
+    var compact: Bool = false
+
     var body: some View {
         GroupBox(label: Text("Variables").bold()) {
             VStack(alignment: .leading, spacing: 6) {
-                ForEach(TEMPLATE_VARIABLES) { v in
+                ForEach(compact ? TEMPLATE_VARIABLES.filter { $0.token != "{url}" } : TEMPLATE_VARIABLES) { v in
                     HStack(alignment: .top, spacing: 8) {
                         Text(v.token)
                             .font(.system(size: 12, design: .monospaced)).bold()
@@ -1184,72 +1574,324 @@ struct EnrichRuleRow: View {
     }
 }
 
-// MARK: - Export / Import settings
+// MARK: - Global Import / Export
 
-private func exportSettings() {
-    let hotkeys = (try? Data(contentsOf: URL(fileURLWithPath: CFG))) ?? Data()
-    let customs = (try? Data(contentsOf: URL(fileURLWithPath: CUSTOM_ACTIONS_PATH))) ?? Data()
-    let hkObj  = (try? JSONSerialization.jsonObject(with: hotkeys))  ?? []
-    let caObj  = (try? JSONSerialization.jsonObject(with: customs))  ?? []
-    let bundle: [String: Any] = ["hotkeys": hkObj, "customActions": caObj, "version": 1]
-    guard let data = try? JSONSerialization.data(withJSONObject: bundle, options: [.prettyPrinted]) else { return }
+enum GlobalBundleSection: String, CaseIterable, Identifiable {
+    case shortcuts, templates, vocabulary, handoffSettings, appPreferences
+    var id: String { rawValue }
+    var label: String {
+        switch self {
+        case .shortcuts: return "Shortcuts and prompts"
+        case .templates: return "Prompt text and context rules"
+        case .vocabulary: return "Dictation vocabulary"
+        case .handoffSettings: return "Background settings"
+        case .appPreferences: return "App preferences"
+        }
+    }
+}
+
+private enum GlobalImportMode: String, CaseIterable, Identifiable {
+    case skip, merge, overwrite
+    var id: String { rawValue }
+    var label: String {
+        switch self {
+        case .skip: return "Keep current"
+        case .merge: return "Merge"
+        case .overwrite: return "Overwrite"
+        }
+    }
+}
+
+struct GlobalImportBundle: Identifiable {
+    let id = UUID()
+    let url: URL
+    let object: [String: Any]
+    let available: Set<GlobalBundleSection>
+}
+
+private func importSectionSummary(_ section: GlobalBundleSection, object: [String: Any]) -> String {
+    switch section {
+    case .shortcuts:
+        let root = object["shortcuts"] as? [String: Any] ?? object
+        let hotkeys = (root["hotkeys"] as? [Any])?.count ?? 0
+        let actions = (root["customActions"] as? [Any])?.count ?? 0
+        let compose = root["builtInComposeSettings"] == nil ? "no compose settings" : "compose settings"
+        return "\(hotkeys) shortcuts, \(actions) custom actions, \(compose)"
+    case .templates:
+        let root = object["templates"] as? [String: Any] ?? object
+        let prompts = (root["commandTemplates"] as? [String: Any])?.count ?? 0
+        let rules = (root["enrichRules"] as? [Any])?.count ?? 0
+        return "\(prompts) prompts, \(rules) context rules"
+    case .vocabulary:
+        let root = object["vocabulary"] as? [String: Any] ?? object
+        let replacements = (root["replacements"] as? [Any])?.count ?? 0
+        let terms = (root["vocab"] as? [Any])?.count ?? 0
+        let fillers = (root["fillers"] as? [Any])?.count ?? 0
+        return "\(replacements) corrections, \(terms) terms, \(fillers) fillers"
+    case .handoffSettings:
+        let root = object["handoffSettings"] as? [String: Any] ?? [:]
+        return "\(root.count) settings"
+    case .appPreferences:
+        let root = object["appPreferences"] as? [String: Any] ?? [:]
+        return "\(root.count) preferences"
+    }
+}
+
+private func jsonObject(at path: String, fallback: Any) -> Any {
+    guard let data = try? Data(contentsOf: URL(fileURLWithPath: path)),
+          let obj = try? JSONSerialization.jsonObject(with: data) else { return fallback }
+    return obj
+}
+
+private func writeJSONObject(_ obj: Any, to path: String) {
+    guard JSONSerialization.isValidJSONObject(obj),
+          let data = try? JSONSerialization.data(withJSONObject: obj, options: [.prettyPrinted]) else { return }
+    try? FileManager.default.createDirectory(
+        at: URL(fileURLWithPath: path).deletingLastPathComponent(),
+        withIntermediateDirectories: true
+    )
+    try? data.write(to: URL(fileURLWithPath: path), options: .atomic)
+}
+
+@MainActor
+private func globalBundle(sections: Set<GlobalBundleSection>) -> [String: Any] {
+    var bundle: [String: Any] = ["version": 2, "exportedAt": ISO8601DateFormatter().string(from: Date())]
+    if sections.contains(.shortcuts) {
+        bundle["shortcuts"] = [
+            "hotkeys": jsonObject(at: CFG, fallback: []),
+            "customActions": jsonObject(at: CUSTOM_ACTIONS_PATH, fallback: []),
+            "builtInComposeSettings": jsonObject(at: BUILTIN_COMPOSE_SETTINGS_PATH, fallback: [
+                "autoSubmitDefault": DEFAULT_BUILTIN_COMPOSE_SETTINGS.autoSubmitDefault,
+                "autoSubmitOverrides": DEFAULT_BUILTIN_COMPOSE_SETTINGS.autoSubmitOverrides
+            ])
+        ]
+    }
+    if sections.contains(.templates) {
+        bundle["templates"] = [
+            "commandTemplates": jsonObject(at: COMMAND_TEMPLATES_PATH, fallback: [:]),
+            "enrichRules": jsonObject(at: ENRICHMENT_RULES_PATH, fallback: [])
+        ]
+    }
+    if sections.contains(.vocabulary) {
+        bundle["vocabulary"] = jsonObject(at: VocabularyStore.diskURL().path, fallback: [:])
+    }
+    if sections.contains(.handoffSettings) {
+        bundle["handoffSettings"] = jsonObject(at: HandoffConfig.settingsFile, fallback: [:])
+    }
+    if sections.contains(.appPreferences) {
+        bundle["appPreferences"] = [
+            "claudeDestination": UserDefaults.standard.string(forKey: "claudeDestination") ?? "code",
+            "clipRetentionDays": readRetentionDays(),
+            "commandRetentionDays": readCommandRetentionDays(),
+            "handoffRetentionDays": readHandoffRetentionDays(),
+            "soundsEnabled": settingsModel.soundsEnabled,
+            "soundVolume": settingsModel.soundVolume,
+            "startSound": settingsModel.startSound,
+            "stopSound": settingsModel.stopSound
+        ]
+    }
+    return bundle
+}
+
+@MainActor
+private func exportGlobalBundle(sections: Set<GlobalBundleSection>) {
+    guard !sections.isEmpty,
+          let data = try? JSONSerialization.data(withJSONObject: globalBundle(sections: sections), options: [.prettyPrinted]) else { return }
     let panel = NSSavePanel()
     panel.allowedContentTypes = [.json]
-    panel.nameFieldStringValue = "claude-command-settings.json"
+    panel.nameFieldStringValue = "command-export.json"
     if panel.runModal() == .OK, let url = panel.url {
         try? data.write(to: url)
     }
 }
 
-private func importSettings(model: SettingsModel) {
+@MainActor
+private func chooseGlobalImportBundle() -> GlobalImportBundle? {
     let panel = NSOpenPanel()
     panel.allowedContentTypes = [.json]
-    panel.message = "Select a claude-command-settings.json export file"
+    panel.message = "Select a Command export file"
     guard panel.runModal() == .OK, let url = panel.url,
           let data = try? Data(contentsOf: url),
-          let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return }
-    if let hk = obj["hotkeys"], let hkData = try? JSONSerialization.data(withJSONObject: hk) {
-        try? hkData.write(to: URL(fileURLWithPath: CFG))
+          let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
+    var available = Set<GlobalBundleSection>()
+    if obj["shortcuts"] != nil || obj["hotkeys"] != nil || obj["customActions"] != nil { available.insert(.shortcuts) }
+    if obj["templates"] != nil || obj["commandTemplates"] != nil || obj["enrichRules"] != nil { available.insert(.templates) }
+    if obj["vocabulary"] != nil || obj["replacements"] != nil || obj["vocab"] != nil { available.insert(.vocabulary) }
+    if obj["handoffSettings"] != nil { available.insert(.handoffSettings) }
+    if obj["appPreferences"] != nil { available.insert(.appPreferences) }
+    return GlobalImportBundle(url: url, object: obj, available: available)
+}
+
+@MainActor
+private func applyGlobalImport(_ bundle: GlobalImportBundle, modes: [GlobalBundleSection: GlobalImportMode], model: SettingsModel) {
+    let obj = bundle.object
+    if let mode = modes[.shortcuts], mode != .skip {
+        if let shortcuts = obj["shortcuts"] as? [String: Any] {
+            if let hotkeys = shortcuts["hotkeys"] { writeJSONObject(mergedArray(currentPath: CFG, incoming: hotkeys, key: "action", mode: mode), to: CFG) }
+            if let actions = shortcuts["customActions"] { writeJSONObject(mergedArray(currentPath: CUSTOM_ACTIONS_PATH, incoming: actions, key: "id", mode: mode), to: CUSTOM_ACTIONS_PATH) }
+            if let compose = shortcuts["builtInComposeSettings"] { writeJSONObject(mergedDictionary(currentPath: BUILTIN_COMPOSE_SETTINGS_PATH, incoming: compose, mode: mode), to: BUILTIN_COMPOSE_SETTINGS_PATH) }
+        } else {
+            if let hotkeys = obj["hotkeys"] { writeJSONObject(mergedArray(currentPath: CFG, incoming: hotkeys, key: "action", mode: mode), to: CFG) }
+            if let actions = obj["customActions"] { writeJSONObject(mergedArray(currentPath: CUSTOM_ACTIONS_PATH, incoming: actions, key: "id", mode: mode), to: CUSTOM_ACTIONS_PATH) }
+            if let compose = obj["builtInComposeSettings"] { writeJSONObject(mergedDictionary(currentPath: BUILTIN_COMPOSE_SETTINGS_PATH, incoming: compose, mode: mode), to: BUILTIN_COMPOSE_SETTINGS_PATH) }
+        }
     }
-    if let ca = obj["customActions"], let caData = try? JSONSerialization.data(withJSONObject: ca) {
-        try? caData.write(to: URL(fileURLWithPath: CUSTOM_ACTIONS_PATH))
+    if let mode = modes[.templates], mode != .skip {
+        if let templates = obj["templates"] as? [String: Any] {
+            if let t = templates["commandTemplates"] { writeJSONObject(mergedDictionary(currentPath: COMMAND_TEMPLATES_PATH, incoming: t, mode: mode), to: COMMAND_TEMPLATES_PATH) }
+            if let r = templates["enrichRules"] { writeJSONObject(mergedEnrichRules(incoming: r, mode: mode), to: ENRICHMENT_RULES_PATH) }
+        } else {
+            if let t = obj["commandTemplates"] { writeJSONObject(mergedDictionary(currentPath: COMMAND_TEMPLATES_PATH, incoming: t, mode: mode), to: COMMAND_TEMPLATES_PATH) }
+            if let r = obj["enrichRules"] { writeJSONObject(mergedEnrichRules(incoming: r, mode: mode), to: ENRICHMENT_RULES_PATH) }
+        }
+    }
+    if let mode = modes[.vocabulary], mode != .skip {
+        let vocabObj: Any? = obj["vocabulary"] ?? (obj["replacements"] != nil || obj["vocab"] != nil ? obj : nil)
+        if let vocabObj { writeJSONObject(mergedVocabulary(incoming: vocabObj, mode: mode), to: VocabularyStore.diskURL().path); VocabularyStore.shared.load() }
+    }
+    if let mode = modes[.handoffSettings], mode != .skip, let h = obj["handoffSettings"] {
+        writeJSONObject(mergedDictionary(currentPath: HandoffConfig.settingsFile, incoming: h, mode: mode), to: HandoffConfig.settingsFile)
+    }
+    if let mode = modes[.appPreferences], mode != .skip, let prefs = obj["appPreferences"] as? [String: Any] {
+        if let v = prefs["claudeDestination"] as? String {
+            UserDefaults.standard.set(v, forKey: "claudeDestination")
+            model.claudeDestination = v
+        }
+        if let v = prefs["clipRetentionDays"] as? Int { writeRetentionDays(v) }
+        if let v = prefs["commandRetentionDays"] as? Int { writeCommandRetentionDays(v) }
+        if let v = prefs["handoffRetentionDays"] as? Int { writeHandoffRetentionDays(v) }
+        if let v = prefs["soundsEnabled"] as? Bool { UserDefaults.standard.set(v, forKey: "soundsEnabled"); model.soundsEnabled = v }
+        if let v = prefs["soundVolume"] as? Double { UserDefaults.standard.set(v, forKey: "soundVolume"); model.soundVolume = v }
+        if let v = prefs["startSound"] as? String { UserDefaults.standard.set(v, forKey: "startSound"); model.startSound = v }
+        if let v = prefs["stopSound"] as? String { UserDefaults.standard.set(v, forKey: "stopSound"); model.stopSound = v }
     }
     reregisterHotkeys()
     model.refresh()
 }
 
-@MainActor
-private func exportTemplates() {
-    let templates = (try? Data(contentsOf: URL(fileURLWithPath: COMMAND_TEMPLATES_PATH))) ?? Data()
-    let rules = (try? Data(contentsOf: URL(fileURLWithPath: ENRICHMENT_RULES_PATH))) ?? Data()
-    let tObj = (try? JSONSerialization.jsonObject(with: templates)) ?? [:]
-    let rObj = (try? JSONSerialization.jsonObject(with: rules)) ?? []
-    let bundle: [String: Any] = ["commandTemplates": tObj, "enrichRules": rObj, "version": 1]
-    guard let data = try? JSONSerialization.data(withJSONObject: bundle, options: [.prettyPrinted]) else { return }
-    let panel = NSSavePanel()
-    panel.allowedContentTypes = [.json]
-    panel.nameFieldStringValue = "claude-command-templates.json"
-    if panel.runModal() == .OK, let url = panel.url {
-        try? data.write(to: url)
-    }
+private func mergedArray(currentPath: String, incoming: Any, key: String, mode: GlobalImportMode) -> Any {
+    guard mode == .merge,
+          let current = jsonObject(at: currentPath, fallback: []) as? [[String: Any]],
+          let inc = incoming as? [[String: Any]] else { return incoming }
+    return mergeDictionaryArrays(current: current, incoming: inc, key: key)
+}
+
+private func mergedDictionary(currentPath: String, incoming: Any, mode: GlobalImportMode) -> Any {
+    guard mode == .merge,
+          let current = jsonObject(at: currentPath, fallback: [:]) as? [String: Any],
+          let inc = incoming as? [String: Any] else { return incoming }
+    return mergeDictionaryValues(current: current, incoming: inc)
+}
+
+private func mergedEnrichRules(incoming: Any, mode: GlobalImportMode) -> Any {
+    guard mode == .merge,
+          let current = jsonObject(at: ENRICHMENT_RULES_PATH, fallback: []) as? [[String: Any]],
+          let inc = incoming as? [[String: Any]] else { return incoming }
+    return mergeEnrichRuleDictionaries(current: current, incoming: inc)
 }
 
 @MainActor
-private func importTemplates(model: TemplatesModel) {
-    let panel = NSOpenPanel()
-    panel.allowedContentTypes = [.json]
-    panel.message = "Select a claude-command-templates.json export file"
-    guard panel.runModal() == .OK, let url = panel.url,
-          let data = try? Data(contentsOf: url),
-          let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return }
-    if let t = obj["commandTemplates"], let tData = try? JSONSerialization.data(withJSONObject: t) {
-        try? tData.write(to: URL(fileURLWithPath: COMMAND_TEMPLATES_PATH))
+private func mergedVocabulary(incoming: Any, mode: GlobalImportMode) -> Any {
+    guard mode == .merge,
+          let cur = jsonObject(at: VocabularyStore.diskURL().path, fallback: [:]) as? [String: Any],
+          let inc = incoming as? [String: Any] else { return incoming }
+    return mergeVocabularyDictionaries(current: cur, incoming: inc)
+}
+
+struct GlobalExportSheet: View {
+    @Binding var isPresented: Bool
+    @State private var selected = Set(GlobalBundleSection.allCases)
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Export").font(.headline)
+            Text("Choose what to include in one Command export file.")
+                .font(.caption).foregroundColor(.secondary)
+            ForEach(GlobalBundleSection.allCases) { section in
+                Toggle(section.label, isOn: Binding(
+                    get: { selected.contains(section) },
+                    set: { on in
+                        if on { selected.insert(section) } else { selected.remove(section) }
+                    }
+                ))
+                .toggleStyle(.checkbox)
+            }
+            HStack {
+                Button("Cancel") { isPresented = false }
+                Spacer()
+                Button("Export") {
+                    exportGlobalBundle(sections: selected)
+                    isPresented = false
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(selected.isEmpty)
+            }
+        }
+        .padding(24)
+        .frame(width: 420)
     }
-    if let r = obj["enrichRules"], let rData = try? JSONSerialization.data(withJSONObject: r) {
-        try? rData.write(to: URL(fileURLWithPath: ENRICHMENT_RULES_PATH))
+}
+
+struct GlobalImportSheet: View {
+    @Binding var isPresented: Bool
+    let bundle: GlobalImportBundle
+    @ObservedObject var model: SettingsModel
+    @State private var modes: [GlobalBundleSection: GlobalImportMode] = [:]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Import").font(.headline)
+            Text(bundle.url.lastPathComponent).font(.caption).foregroundColor(.secondary)
+            Text("Choose what to keep, merge, or overwrite before anything changes.")
+                .font(.caption).foregroundColor(.secondary)
+            if bundle.available.isEmpty {
+                Text("No importable sections found.")
+                    .font(.callout).foregroundColor(.secondary)
+            } else {
+                ForEach(GlobalBundleSection.allCases) { section in
+                    HStack(spacing: 10) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(section.label)
+                            Text(bundle.available.contains(section) ? importSectionSummary(section, object: bundle.object) : "Not found in file")
+                                .font(.caption2).foregroundColor(.secondary)
+                        }
+                        Spacer()
+                        Picker("", selection: Binding(
+                            get: { modes[section] ?? .skip },
+                            set: { modes[section] = $0 }
+                        )) {
+                            ForEach(GlobalImportMode.allCases) { m in
+                                Text(m.label).tag(m)
+                            }
+                        }
+                        .labelsHidden()
+                        .frame(width: 190)
+                        .disabled(!bundle.available.contains(section))
+                    }
+                    .opacity(bundle.available.contains(section) ? 1 : 0.45)
+                }
+            }
+            HStack {
+                Button("Cancel") { isPresented = false }
+                Spacer()
+                Button("Import Selected") {
+                    applyGlobalImport(bundle, modes: modes, model: model)
+                    isPresented = false
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(!modes.values.contains { $0 != .skip })
+            }
+        }
+        .padding(24)
+        .frame(width: 460)
+        .onAppear {
+            var initial: [GlobalBundleSection: GlobalImportMode] = [:]
+            for s in GlobalBundleSection.allCases {
+                initial[s] = bundle.available.contains(s) ? .merge : .skip
+            }
+            modes = initial
+        }
     }
-    model.templates = loadCommandTemplates()
-    model.rules = loadEnrichRules()
 }
 
 struct KeyBindingField: View {
@@ -1323,7 +1965,7 @@ struct TroubleshootingView: View {
                     Button("Re-scan") { reload() }
                 }
 
-                Text("Red means a requirement isn't met yet — not a crash. Grant permissions in the Set Up tab first, then Re-scan here.")
+                Text("Red means a checked requirement is not met for that workflow — not a crash. Grant needed permissions in Set Up, then Re-scan here.")
                     .foregroundColor(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
 
@@ -1341,11 +1983,11 @@ struct TroubleshootingView: View {
                 Text("Other common issues").font(.headline)
 
                 tipRow("Hotkeys need fn key",
-                       "If F6–F8 don't fire, go to System Settings > Keyboard and enable \"Use F1, F2… as standard function keys\".")
+                       "If F5–F8 don't fire, enable standard function keys in macOS Keyboard settings, or bind dictation to Home, End, PgUp, or PgDn in Dictation Settings.")
                 tipRow("Browser URL not captured",
                        "First Go from each browser (Chrome, Safari, Arc…) prompts for Automation — approve it once per browser.")
                 tipRow("Logs",
-                       "~/Library/Logs/claude-command.log (worker) · ~/.claude/logs/command-agent.err (agent) · ~/.claude/logs/clipwatch.err (daemon)")
+                       "~/Library/Logs/claude-command.log (shortcut actions) · ~/.claude/logs/command-agent.err (app dispatch) · ~/.claude/logs/clipwatch.err (Clipboard History)")
             }
             .padding(24)
         }
@@ -1353,25 +1995,27 @@ struct TroubleshootingView: View {
     }
 
     private func reload() {
+        let clipboardHistoryEnabled = UserDefaults.standard.bool(forKey: "cliphistoryEnabled")
+        let clipboardHistoryRunning = runShell("/usr/bin/pgrep", ["-f", "clipwatch.py"]).code == 0
         items = [
             DiagItem(
                 title: "Accessibility",
                 ok: axTrusted(),
-                fix: "Open System Settings > Privacy & Security > Accessibility. Find ClaudeCommand and flip it ON. Then Re-scan.",
+                fix: "Open System Settings > Privacy & Security > Accessibility. Find Command and flip it ON. Then Re-scan.",
                 action: { requestAccessibility(); openPrivacyPane("Privacy_Accessibility") },
                 actionLabel: "Open Settings"
             ),
             DiagItem(
                 title: "Screen Recording",
                 ok: screenRecordingOK(),
-                fix: "Open System Settings > Privacy & Security > Screen Recording. Toggle ClaudeCommand ON. Then Re-scan.",
+                fix: "Open System Settings > Privacy & Security > Screen Recording. Toggle Command ON. Then Re-scan.",
                 action: { openPrivacyPane("Privacy_ScreenCapture") },
                 actionLabel: "Open Settings"
             ),
             DiagItem(
-                title: "Agent running",
+                title: "Background service",
                 ok: fileExists(home(".claude/state/command-agent.sock")),
-                fix: "Agent socket missing. Run ./install-agent.sh from the claude-command folder to reinstall the LaunchAgent.",
+                fix: "Background service is not ready. Restart Command. If it still fails, reinstall from the Install Guide; source checkouts can run ./install-agent.sh.",
                 action: nil,
                 actionLabel: ""
             ),
@@ -1383,16 +2027,20 @@ struct TroubleshootingView: View {
                 actionLabel: ""
             ),
             DiagItem(
-                title: "Quick Actions installed",
-                ok: fileExists(home("Library/Services/Claude - Add.workflow")),
-                fix: "Right-click actions missing. Run ./install-quick-action.sh from the claude-command folder.",
+                title: "Quick Actions optional",
+                ok: true,
+                fix: fileExists(home("Library/Services/Claude - Add.workflow"))
+                    ? "Optional right-click Services are installed."
+                    : "Optional right-click Services are not installed. Global shortcuts do not need them; source installs can run ./install-quick-action.sh.",
                 action: nil,
                 actionLabel: ""
             ),
             DiagItem(
-                title: "Clipboard daemon",
-                ok: runShell("/usr/bin/pgrep", ["-f", "clipwatch.py"]).code == 0,
-                fix: "Clipboard history daemon not running. Run ./install-agent.sh to reinstall.",
+                title: "Clipboard History",
+                ok: !clipboardHistoryEnabled || clipboardHistoryRunning,
+                fix: clipboardHistoryEnabled
+                    ? "Clipboard History is not running. Restart Command. If it still fails, reinstall from the Install Guide; source checkouts can run ./install-agent.sh."
+                    : "Clipboard History is off. Enable it in Clipboard History settings if you want the picker.",
                 action: nil,
                 actionLabel: ""
             ),
@@ -1444,6 +2092,7 @@ struct ClearOption: Identifiable {
 }
 
 struct HistoryView: View {
+    @ObservedObject private var model: SettingsModel = settingsModel
     @State private var enabled = UserDefaults.standard.bool(forKey: "cliphistoryEnabled")
     @State private var retentionText = String(readRetentionDays())
     @State private var pendingClear: ClearOption? = nil
@@ -1482,6 +2131,21 @@ struct HistoryView: View {
                 }
 
                 if enabled {
+                    if let binding = model.bindings.first(where: { $0.action == "cliphistory" }) {
+                        GroupBox(label: Text("Shortcut").bold()) {
+                            HStack(spacing: 12) {
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text("Open Clipboard History")
+                                    Text("Shows the searchable picker from anywhere.")
+                                        .font(.caption).foregroundColor(.secondary)
+                                }
+                                Spacer()
+                                KeyBindingField(action: binding.action, binding: binding, model: model)
+                            }
+                            .padding(8)
+                        }
+                    }
+
                     GroupBox {
                         HStack(spacing: 10) {
                             Text("Keep history for")
@@ -1563,19 +2227,19 @@ struct HistoryView: View {
     }
 }
 
-// ---- Handoffs -----------------------------------------------------------------
-// The downstream consumer for background skill handoffs: every submission
-// capture-handoff.sh produces (see docs/HANDOFF.md) as a real list instead of
-// just the menu bar's last-8 quick view.
+// ---- Command History ---------------------------------------------------------
+// Handoffs live here now as the background-command slice. Foreground command
+// logging uses the same retention model and can grow into the same list.
 
 struct HandoffsView: View {
     @State private var submissions: [HandoffSubmission] = loadHandoffSubmissions(limit: nil)
+    @State private var foreground: [ForegroundCommandRecord] = loadForegroundCommandHistory(limit: nil)
     @State private var query = ""
     @State private var statusFilter: String = "all"   // all | running | succeeded | failed
     @State private var pendingDelete: HandoffSubmission? = nil
-    @State private var retentionText = String(readHandoffRetentionDays())
+    @State private var retentionText = String(readCommandRetentionDays())
 
-    private var filtered: [HandoffSubmission] {
+    private var filteredHandoffs: [HandoffSubmission] {
         var out = submissions
         if statusFilter != "all" { out = out.filter { $0.status == statusFilter } }
         guard !query.isEmpty else { return out }
@@ -1587,20 +2251,33 @@ struct HandoffsView: View {
         }
     }
 
+    private var filteredForeground: [ForegroundCommandRecord] {
+        var out = foreground
+        if statusFilter != "all" { out = out.filter { $0.status == statusFilter } }
+        guard !query.isEmpty else { return out }
+        let q = query.lowercased()
+        return out.filter {
+            $0.action.lowercased().contains(q) ||
+            $0.source.lowercased().contains(q) ||
+            $0.destination.lowercased().contains(q) ||
+            ($0.prompt ?? "").lowercased().contains(q)
+        }
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 HStack {
-                    Text("Handoff History").font(.title2).bold()
+                    Text("Command History").font(.title2).bold()
                     Spacer()
                     Button("Reveal in Finder") {
                         NSWorkspace.shared.open(URL(fileURLWithPath: HANDOFF_BASE))
                     }
-                    Button("Handoff Settings…") { HandoffSettingsWindowController.shared.show() }
+                    Button("Background Settings…") { HandoffSettingsWindowController.shared.show() }
                     Button(action: refresh) { Image(systemName: "arrow.clockwise") }
                         .help("Reload from disk")
                 }
-                Text("Every capture routed through Skill Handoff / Screenshot Handoff / Text Handoff — rendered into a prompt and piped to \(HandoffConfig.load().cliCommand) in the background. Records live in \(HANDOFF_BASE).")
+                Text("Commands sent through Command. Background runs and foreground shortcuts share the same seven-day retention foundation.")
                     .font(.caption).foregroundColor(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
 
@@ -1612,15 +2289,20 @@ struct HandoffsView: View {
                         Text("Failed").tag("failed")
                     }
                     .pickerStyle(.segmented).frame(width: 320)
-                    TextField("Search skill, source, or prompt", text: $query)
+                    TextField("Search action, source, destination, skill, or prompt", text: $query)
                         .textFieldStyle(.roundedBorder)
                 }
 
                 HStack(spacing: 10) {
-                    Text("Auto-delete finished handoffs after")
+                    Text("Auto-delete command history after")
                     Stepper(value: Binding(
-                        get: { Int(retentionText) ?? readHandoffRetentionDays() },
-                        set: { retentionText = String($0); writeHandoffRetentionDays($0); refresh() }
+                        get: { Int(retentionText) ?? readCommandRetentionDays() },
+                        set: {
+                            retentionText = String($0)
+                            writeCommandRetentionDays($0)
+                            writeHandoffRetentionDays($0)
+                            refresh()
+                        }
                     ), in: 1...365) {
                         Text("\(retentionText) days").frame(minWidth: 70, alignment: .leading)
                     }
@@ -1628,19 +2310,33 @@ struct HandoffsView: View {
                 }
                 .font(.caption)
 
-                if filtered.isEmpty {
-                    Text(submissions.isEmpty ? "No handoffs yet — bind Skill Handoff, Screenshot Handoff, or Text Handoff in Shortcuts." : "No matches.")
+                if filteredForeground.isEmpty && filteredHandoffs.isEmpty {
+                    Text(submissions.isEmpty && foreground.isEmpty ? "No commands yet." : "No matches.")
                         .font(.caption).foregroundColor(.secondary).padding(.vertical, 12)
                 } else {
-                    VStack(spacing: 0) {
-                        ForEach(filtered) { s in
-                            HandoffSubmissionRow(
-                                submission: s,
-                                onRetry: { retryHandoffSubmission(s) },
-                                onMarkFailed: { markHandoffSubmissionFailed(s); refresh() },
-                                onDelete: { pendingDelete = s }
-                            )
-                            Divider()
+                    VStack(alignment: .leading, spacing: 14) {
+                        if !filteredForeground.isEmpty {
+                            Text("Foreground").font(.headline)
+                            VStack(spacing: 0) {
+                                ForEach(filteredForeground) { r in
+                                    ForegroundCommandRow(record: r)
+                                    Divider()
+                                }
+                            }
+                        }
+                        if !filteredHandoffs.isEmpty {
+                            Text("Background").font(.headline)
+                            VStack(spacing: 0) {
+                                ForEach(filteredHandoffs) { s in
+                                    HandoffSubmissionRow(
+                                        submission: s,
+                                        onRetry: { retryHandoffSubmission(s) },
+                                        onMarkFailed: { markHandoffSubmissionFailed(s); refresh() },
+                                        onDelete: { pendingDelete = s }
+                                    )
+                                    Divider()
+                                }
+                            }
                         }
                     }
                 }
@@ -1648,7 +2344,7 @@ struct HandoffsView: View {
             .padding(24)
         }
         .onAppear { refresh() }
-        .alert("Delete this handoff record?",
+        .alert("Delete this background run?",
                isPresented: Binding(get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } }),
                presenting: pendingDelete) { s in
             Button("Delete", role: .destructive) {
@@ -1657,13 +2353,61 @@ struct HandoffsView: View {
             }
             Button("Cancel", role: .cancel) { }
         } message: { _ in
-            Text("Removes the submission record, its captured content, and its log. This can't be undone.")
+            Text("Removes the run record, its captured content, and its log. This can't be undone.")
         }
     }
 
     private func refresh() {
+        pruneForegroundCommandHistory()
         pruneHandoffSubmissions()
         submissions = loadHandoffSubmissions(limit: nil)
+        foreground = loadForegroundCommandHistory(limit: nil)
+        retentionText = String(readCommandRetentionDays())
+    }
+}
+
+struct ForegroundCommandRow: View {
+    let record: ForegroundCommandRecord
+    @State private var expanded = false
+
+    private var statusColor: Color {
+        record.status == "succeeded" ? .green : (record.status == "failed" ? .red : .secondary)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 10) {
+                Text(record.status == "succeeded" ? "✓" : "✗")
+                    .foregroundColor(statusColor).bold().frame(width: 16)
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 6) {
+                        Text(actionName(record.action)).bold()
+                        Text(record.destination)
+                            .font(.caption2).padding(.horizontal, 5).padding(.vertical, 1)
+                            .background(Color.secondary.opacity(0.12)).cornerRadius(4)
+                        Text("from \(record.source)").font(.caption).foregroundColor(.secondary)
+                    }
+                    Text(record.age + (record.error.map { " — \($0)" } ?? ""))
+                        .font(.caption2).foregroundColor(.secondary)
+                }
+                Spacer()
+                if record.prompt != nil {
+                    Button(expanded ? "Hide" : "Details") { expanded.toggle() }
+                        .buttonStyle(.plain).font(.caption)
+                }
+            }
+            if expanded, let prompt = record.prompt {
+                Text(prompt)
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundColor(.secondary)
+                    .textSelection(.enabled)
+                    .padding(8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.secondary.opacity(0.07))
+                    .cornerRadius(6)
+            }
+        }
+        .padding(.vertical, 8)
     }
 }
 
@@ -1745,14 +2489,14 @@ struct HandoffSubmissionRow: View {
     }
 }
 
-// ---- channel picker (segmented; Prod greyed until a stable release exists) --
+// ---- channel picker (segmented; Stable greyed until a stable release exists) --
 struct ChannelPicker: View {
     @Binding var channel: UpdateChannel
 
     var body: some View {
         HStack(spacing: 0) {
             ForEach(Array(UpdateChannel.allCases.enumerated()), id: \.element) { idx, c in
-                let disabled = (c == .prod && !PROD_AVAILABLE)
+                let disabled = (c == .stable && !PROD_AVAILABLE)
                 let selected = channel == c
                 Button {
                     channel = c
@@ -1792,6 +2536,8 @@ struct AboutView: View {
     @State private var available: UpdateInfo? = nil
     @State private var channel = currentChannel()
     @State private var diagCopied = false
+    @State private var showingExport = false
+    @State private var importBundle: GlobalImportBundle? = nil
 
     private var version: String {
         (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "1.0"
@@ -1807,15 +2553,15 @@ struct AboutView: View {
         switch channel {
         case .alpha: return "Alpha — earliest builds, least tested."
         case .beta:  return "Beta — pre-release builds for testing."
-        case .prod:  return "Stable releases only."
+        case .stable: return "Stable is visible but unavailable until the first stable release exists."
         }
     }
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                Text("ClaudeCommand").font(.title2).bold()
-                Text("Select text or an image in any Mac app → hotkey or right-click → it lands in the Claude Code desktop app, with source context attached. Plus a clipboard-history picker and screenshot→Claude.")
+                Text("Command").font(.title2).bold()
+                Text("Prompt-centered macOS shortcuts for selected text, screenshots, typed popups, voice, background runs, clipboard history, and command history.")
                     .foregroundColor(.secondary).fixedSize(horizontal: false, vertical: true)
 
                 // Version + updates
@@ -1868,34 +2614,176 @@ struct AboutView: View {
 
                 Divider()
 
-                Button {
-                    if let u = URL(string: GITHUB_REPO_URL) { NSWorkspace.shared.open(u) }
-                } label: {
-                    Label("View on GitHub", systemImage: "link")
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Import / Export").font(.headline)
+                    Text("Move shortcuts, prompt settings, context rules, vocabulary, background settings, and app preferences in one file.")
+                        .font(.caption).foregroundColor(.secondary)
+                    HStack(spacing: 10) {
+                        Button {
+                            showingExport = true
+                        } label: {
+                            Label("Export", systemImage: "square.and.arrow.up")
+                        }
+                        Button {
+                            importBundle = chooseGlobalImportBundle()
+                        } label: {
+                            Label("Import", systemImage: "square.and.arrow.down")
+                        }
+                    }
+                }
+
+                Divider()
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Help & Documentation").font(.headline)
+                    Button {
+                        if let u = URL(string: GITHUB_REPO_URL) { NSWorkspace.shared.open(u) }
+                    } label: {
+                        Label("View on GitHub", systemImage: "link")
+                    }
+                }
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 10)], alignment: .leading, spacing: 10) {
+                    Button {
+                        openHelpDoc(named: "index")
+                    } label: {
+                        Label("Documentation", systemImage: "book")
+                    }
+                    Button {
+                        openHelpDoc(named: "guide")
+                    } label: {
+                        Label("User Guide", systemImage: "book.pages")
+                    }
+                    Button {
+                        openHelpDoc(named: "install")
+                    } label: {
+                        Label("Install Guide", systemImage: "arrow.down.app")
+                    }
+                    Button {
+                        openHelpDoc(named: "uninstall")
+                    } label: {
+                        Label("Uninstall", systemImage: "trash")
+                    }
+                    Button {
+                        openHelpDoc(named: "settings")
+                    } label: {
+                        Label("Settings Reference", systemImage: "list.bullet.rectangle")
+                    }
+                    Button {
+                        openHelpDoc(named: "quick-reference")
+                    } label: {
+                        Label("Quick Reference", systemImage: "bolt")
+                    }
+                    Button {
+                        openHelpDoc(named: "troubleshooting")
+                    } label: {
+                        Label("Troubleshooting", systemImage: "wrench.and.screwdriver")
+                    }
+                    Button {
+                        openHelpDoc(named: "permissions")
+                    } label: {
+                        Label("Permissions", systemImage: "lock.shield")
+                    }
+                    Button {
+                        openHelpDoc(named: "support")
+                    } label: {
+                        Label("Support", systemImage: "questionmark.circle")
+                    }
+                    Button {
+                        openHelpDoc(named: "security")
+                    } label: {
+                        Label("Security Policy", systemImage: "lock.shield")
+                    }
+                    Button {
+                        openHelpDoc(named: "examples")
+                    } label: {
+                        Label("Examples", systemImage: "sparkles")
+                    }
+                    Button {
+                        openHelpDoc(named: "faq")
+                    } label: {
+                        Label("FAQ", systemImage: "questionmark.bubble")
+                    }
+                    Button {
+                        openHelpDoc(named: "updates")
+                    } label: {
+                        Label("Updates", systemImage: "arrow.triangle.2.circlepath")
+                    }
+                    Button {
+                        openHelpDoc(named: "privacy")
+                    } label: {
+                        Label("Privacy", systemImage: "hand.raised")
+                    }
+                    Button {
+                        openHelpDoc(named: "changelog")
+                    } label: {
+                        Label("Changelog", systemImage: "clock")
+                    }
+                    Button {
+                        openHelpDoc(named: "limitations")
+                    } label: {
+                        Label("Alpha Limitations", systemImage: "exclamationmark.triangle")
+                    }
+                    Button {
+                        openHelpDoc(named: "icon-treatments")
+                    } label: {
+                        Label("Icon Treatments", systemImage: "waveform.path.ecg")
+                    }
+                    Button {
+                        openHelpDoc(named: "background")
+                    } label: {
+                        Label("Background Architecture", systemImage: "terminal")
+                    }
+                    Button {
+                        openHelpDoc(named: "release")
+                    } label: {
+                        Label("Release Checklist", systemImage: "checklist")
+                    }
                 }
                 Text(GITHUB_REPO_URL).font(.caption).foregroundColor(.secondary).textSelection(.enabled)
 
                 Divider()
 
-                HStack(spacing: 10) {
-                    Button {
-                        if let u = reportBugURL() { NSWorkspace.shared.open(u) }
-                    } label: {
-                        Label("Report a Bug", systemImage: "ladybug")
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Support & Reporting").font(.headline)
+                    HStack(spacing: 10) {
+                        Button("Copy Diagnostic Info") {
+                            copyDiagnosticInfo()
+                            diagCopied = true
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { diagCopied = false }
+                        }
+                        .buttonStyle(.bordered)
+                        Button {
+                            if let u = reportBugURL() { NSWorkspace.shared.open(u) }
+                        } label: {
+                            Label("Report a Bug", systemImage: "ladybug")
+                        }
+                        Button {
+                            if let u = requestFeatureURL() { NSWorkspace.shared.open(u) }
+                        } label: {
+                            Label("Request Feature", systemImage: "sparkles")
+                        }
+                        Button {
+                            if let u = securityAdvisoryURL() { NSWorkspace.shared.open(u) }
+                        } label: {
+                            Label("Private Security Report", systemImage: "lock.shield")
+                        }
+                        if diagCopied { Text("Copied").font(.caption).foregroundColor(.secondary) }
                     }
-                    Button("Copy Diagnostic Info") {
-                        copyDiagnosticInfo()
-                        diagCopied = true
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { diagCopied = false }
-                    }
-                    .buttonStyle(.bordered)
-                    if diagCopied { Text("Copied").font(.caption).foregroundColor(.secondary) }
+                    Text("Copy Diagnostic Info first, review it for sensitive content, then use Report a Bug for problems, Request Feature for non-bug workflow, trigger, destination, docs, or release improvements, or Private Security Report for vulnerabilities, exposed secrets, private logs, or sensitive diagnostics.")
+                        .font(.caption2).foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-                Text("Report a Bug opens a pre-filled GitHub issue (version, macOS, repro steps). Log file paths are already in the template — Copy Diagnostic Info if you want to paste them somewhere else instead.")
-                    .font(.caption2).foregroundColor(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
             }
             .padding(24)
+        }
+        .sheet(isPresented: $showingExport) {
+            GlobalExportSheet(isPresented: $showingExport)
+        }
+        .sheet(item: $importBundle) { bundle in
+            GlobalImportSheet(isPresented: Binding(
+                get: { importBundle != nil },
+                set: { if !$0 { importBundle = nil } }
+            ), bundle: bundle, model: model)
         }
     }
 
@@ -1924,12 +2812,85 @@ struct AboutView: View {
     // Tail of each log, not the whole file — enough to actually see what just
     // happened without dumping megabytes of history into the clipboard.
     private func copyDiagnosticInfo() {
+        func oneLinePreview(_ text: String, limit: Int = 220) -> String {
+            let compact = text
+                .replacingOccurrences(of: "\n", with: " ")
+                .replacingOccurrences(of: "\t", with: " ")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            return compact.count > limit ? String(compact.prefix(limit)) + "…" : compact
+        }
+        func stateLabel(_ state: CheckState) -> String {
+            switch state {
+            case .ok: return "ok"
+            case .missing: return "missing"
+            case .unknown: return "unknown"
+            }
+        }
+        func modelStatusLabel(_ status: Recorder.ModelStatus) -> String {
+            switch status {
+            case .notDownloaded: return "not downloaded"
+            case .downloading(let progress): return "downloading \(Int(progress * 100))%"
+            case .ready: return "ready"
+            case .error(let message): return "error: \(oneLinePreview(message, limit: 120))"
+            }
+        }
+
+        let dateFormatter = ISO8601DateFormatter()
         let os = ProcessInfo.processInfo.operatingSystemVersion
-        var out = "ClaudeCommand \(version)\(gitBranch.isEmpty ? "" : " (\(gitBranch))")\n"
-        out += "macOS \(os.majorVersion).\(os.minorVersion).\(os.patchVersion)\n\n"
+        var out = "Command \(version)\(gitBranch.isEmpty ? "" : " (\(gitBranch))")\n"
+        out += "macOS \(os.majorVersion).\(os.minorVersion).\(os.patchVersion)\n"
+        out += "App path: \(Bundle.main.bundlePath)\n"
+        out += "Bundle ID: \(Bundle.main.bundleIdentifier ?? "unknown")\n"
+        out += "Minimum macOS: \((Bundle.main.infoDictionary?["LSMinimumSystemVersion"] as? String) ?? "unknown")\n"
+        out += "Update channel: \(channel.label)\n"
+        if let available {
+            out += "Update check: v\(available.latestVersion) available\n"
+            out += "Update download asset: \(available.downloadURL == nil ? "missing" : "present")\n"
+        } else if updateStatus.isEmpty {
+            out += "Update check: not checked this session\n"
+        } else {
+            out += "Update check: \(oneLinePreview(updateStatus, limit: 160))\n"
+        }
+        out += "Default Claude destination: \(model.claudeDestination)\n"
+        out += "Launch at login: \(launchAtLogin ? "on" : "off")\n"
+        out += "Menu bar icon: \(showIcon ? "shown" : "hidden")\n"
+        out += "Dock icon: \(showDock ? "shown" : "hidden")\n\n"
+
+        out += "--- Shortcut bindings ---\n"
+        for binding in loadBindings() {
+            out += "\(binding.name): \(binding.enabled ? "enabled" : "disabled") \(binding.human)\n"
+        }
+        let customActions = loadCustomActions()
+        if customActions.isEmpty {
+            out += "Custom actions: (none)\n"
+        } else {
+            out += "Custom actions:\n"
+            for action in customActions {
+                out += "\(action.name): \(action.enabled ? "enabled" : "disabled") delivery=\(action.delivery.label) destination=\(action.destination.label) autoSubmit=\(action.isAutoSubmit ? "on" : "off")\n"
+                for trigger in action.triggers {
+                    out += "  - \(trigger.kind.label): \(trigger.enabled ? "enabled" : "disabled") \(trigger.human)"
+                    if let delivery = trigger.deliveryOverride { out += " delivery=\(delivery.label)" }
+                    if let destination = trigger.destinationOverride { out += " destination=\(destination.label)" }
+                    if let autoSubmit = trigger.isAutoSubmitOverride { out += " autoSubmit=\(autoSubmit ? "on" : "off")" }
+                    out += "\n"
+                }
+            }
+        }
+        out += "\n"
+
+        out += "--- Set Up status ---\n"
+        for check in permissionChecks() {
+            out += "\(check.title): \(stateLabel(check.state))\n"
+        }
+        for check in componentChecks() {
+            out += "\(check.title): \(stateLabel(check.state))\n"
+        }
+        out += "Dictation model: \(modelStatusLabel(recorder.modelStatus))\n\n"
+
         let logs = [
             "\(HOME)/Library/Logs/claude-command.log",
             "\(HOME)/.claude/logs/command-agent.err",
+            "\(HOME)/.claude/logs/clipwatch.err",
             "\(HOME)/.claude/logs/attribution.log",
         ]
         for path in logs {
@@ -1941,6 +2902,50 @@ struct AboutView: View {
             }
             out += "\n\n"
         }
+
+        out += "--- Recent command history (last 5 each, summaries only) ---\n"
+        let foregroundRecords = loadForegroundCommandHistory(limit: 5)
+        if foregroundRecords.isEmpty {
+            out += "Foreground: (none)\n"
+        } else {
+            out += "Foreground:\n"
+            for record in foregroundRecords {
+                out += "\(dateFormatter.string(from: record.createdAt)) status=\(record.status) action=\(actionName(record.action)) destination=\(record.destination) source=\(record.source)"
+                if let error = record.error, !error.isEmpty {
+                    out += " error=\(oneLinePreview(error, limit: 120))"
+                }
+                out += "\n"
+            }
+        }
+        let backgroundRecords = loadHandoffSubmissions(limit: 5)
+        if backgroundRecords.isEmpty {
+            out += "Background: (none)\n"
+        } else {
+            out += "Background:\n"
+            for record in backgroundRecords {
+                out += "\(dateFormatter.string(from: record.createdAt)) status=\(record.status) kind=\(record.kind) source=\(record.source)"
+                if let skill = record.skill, !skill.isEmpty { out += " skill=/\(skill)" }
+                if let result = record.result, !result.isEmpty { out += " result=\(oneLinePreview(result, limit: 120))" }
+                if let error = record.error, !error.isEmpty { out += " error=\(oneLinePreview(error, limit: 120))" }
+                if let logFile = record.logFile, !logFile.isEmpty { out += " log=\(logFile)" }
+                out += "\n"
+            }
+        }
+        out += "\n"
+
+        out += "--- Recent dictation entries (last 3, truncated) ---\n"
+        let dictationRecords = Array(HistoryStore.shared.records.prefix(3))
+        if dictationRecords.isEmpty {
+            out += "(none)\n"
+        } else {
+            for record in dictationRecords {
+                out += "\(dateFormatter.string(from: record.timestamp)) mode=\(record.mode)\n"
+                out += "raw: \(oneLinePreview(record.raw))\n"
+                out += "processed: \(oneLinePreview(record.processed))\n"
+            }
+        }
+        out += "\n"
+
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(out, forType: .string)
     }
@@ -2198,8 +3203,6 @@ struct DictCorrectionsView: View {
                 HStack {
                     Text("Word Corrections").font(.title2).bold()
                     Spacer()
-                    Button("Export…") { exportVocabulary() }.buttonStyle(.bordered)
-                    Button("Import…") { importVocabulary(vocab: vocab) }.buttonStyle(.bordered)
                 }
                 Text("Misheard → Correct. Applied before any other processing.")
                     .foregroundColor(.secondary)
@@ -2278,8 +3281,6 @@ struct DictVocabularyView: View {
                 HStack {
                     Text("Vocabulary").font(.title2).bold()
                     Spacer()
-                    Button("Export…") { exportVocabulary() }.buttonStyle(.bordered)
-                    Button("Import…") { importVocabulary(vocab: vocab) }.buttonStyle(.bordered)
                 }
 
                 GroupBox(label: Text("Vocabulary Hints").font(.subheadline).bold()) {
@@ -2345,30 +3346,6 @@ struct DictVocabularyView: View {
             }.padding(24)
         }
     }
-}
-
-// Both tabs (Corrections + Vocabulary) surface the same export/import — they're
-// separate UI over the one vocabulary.json (replacements + terms + fillers).
-@MainActor
-private func exportVocabulary() {
-    let data = (try? Data(contentsOf: VocabularyStore.diskURL())) ?? Data()
-    let panel = NSSavePanel()
-    panel.allowedContentTypes = [.json]
-    panel.nameFieldStringValue = "claude-command-vocabulary.json"
-    if panel.runModal() == .OK, let url = panel.url {
-        try? data.write(to: url)
-    }
-}
-
-@MainActor
-private func importVocabulary(vocab: VocabularyStore) {
-    let panel = NSOpenPanel()
-    panel.allowedContentTypes = [.json]
-    panel.message = "Select a claude-command-vocabulary.json export file"
-    guard panel.runModal() == .OK, let url = panel.url,
-          let data = try? Data(contentsOf: url) else { return }
-    try? data.write(to: VocabularyStore.diskURL(), options: .atomic)
-    vocab.load()
 }
 
 // ---- Sound browser -----------------------------------------------------------
@@ -2491,6 +3468,26 @@ struct DictSettingsView: View {
                                     }
                                 }
                             }.buttonStyle(.bordered).controlSize(.small)
+                        }
+                    }.padding(.vertical, 6)
+                }
+
+                GroupBox(label: Text("Shortcuts").font(.subheadline).bold()) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Recommendation: keep dictation hotkeys here. They control recording behavior; voice-based prompt actions live under Shortcuts as custom voice triggers.")
+                            .font(.caption).foregroundColor(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                        ForEach(model.bindings.filter { ["dictate", "dictateadd"].contains($0.action) }) { b in
+                            HStack(spacing: 12) {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(b.name)
+                                    Text(b.detail).font(.caption).foregroundColor(.secondary)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
+                                Spacer()
+                                KeyBindingField(action: b.action, binding: b, model: model)
+                            }
+                            .settingsCard()
                         }
                     }.padding(.vertical, 6)
                 }

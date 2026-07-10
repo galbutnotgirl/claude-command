@@ -4,11 +4,14 @@
 # appear in the right-click menu on selected text in any app. Each one is a thin
 # launcher that calls send-to-claude.sh with a different ACTION.
 #
-# Actions installed (edit the ACTIONS table to add/remove):
+# Actions installed as optional right-click Services (edit ACTIONS to add/remove).
+# Global hotkeys are owned by Command; set-hotkeys.sh only binds Add/New,
+# Screenshot Add/New, and Clipboard History by default.
+# Installed Services:
 #   Claude - Go         bg-feel: new session, submit, focus returns; Claude acts
-#   Claude - Comment    new session pre-filled, foreground, you add a note & send
+#   Claude - New        new session pre-filled, foreground, you add a note & send
 #   Claude - Add        paste selection into the already-open Claude chat
-#   Claude - To-Do      native popup → intake.sh (your tracker)
+#   Claude - To-Do      legacy alias → background handoff
 #
 # Re-run safely (overwrites). Uninstall: ./uninstall-quick-action.sh
 
@@ -23,14 +26,14 @@ SERVICES_DIR="${HOME}/Library/Services"
 # Text services — appear on a text selection + hotkey-bindable.
 ACTIONS=(
   "Claude - Go|go"
-  "Claude - Comment|comment"
+  "Claude - New|comment"
   "Claude - Add|add"
   "Claude - To-Do|todo"
 )
 # No-input services — hotkey-driven, no selection needed (screenshots, picker).
 NOINPUT_ACTIONS=(
   "Claude - Screenshot Go|shotgo"
-  "Claude - Screenshot Comment|shotcomment"
+  "Claude - Screenshot New|shotcomment"
   "Claude - Screenshot Add|shotadd"
   "Claude - Clipboard History|cliphistory"
 )

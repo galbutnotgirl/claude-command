@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Command troubleshooting guide for permissions, shortcuts, screenshots, dictation, clipboard history, background runs, imports, updates, and logs.">
+  <title>Command Troubleshooting</title>
+  <link rel="canonical" href="https://galbutnotgirl.github.io/command/troubleshooting.html">
+  <meta property="og:site_name" content="Command">
+  <meta property="og:title" content="Command Troubleshooting">
+  <meta property="og:description" content="Command troubleshooting guide for permissions, shortcuts, screenshots, dictation, clipboard history, background runs, imports, updates, and logs.">
+  <meta property="og:type" content="website">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="Command Troubleshooting">
+  <meta name="twitter:description" content="Command troubleshooting guide for permissions, shortcuts, screenshots, dictation, clipboard history, background runs, imports, updates, and logs.">
+  <link rel="stylesheet" href="site.css">
+</head>
+<body>
+  <a class="skip-link" href="#content">Skip to content</a>
+  <div class="doc-wrap">
+    <nav class="toc" aria-label="Documentation sections">
+      <div class="toc-title">Troubleshooting</div>
+      <a href="index.html">Overview</a>
+      <a href="install.html">Install Guide</a>
+      <a href="uninstall.html">Uninstall</a>
+      <a href="guide.html">User Guide</a>
+      <a href="settings.html">Settings Reference</a>
+      <a href="quick-reference.html">Quick Reference</a>
+      <a href="examples.html">Examples</a>
+      <a href="faq.html">FAQ</a>
+      <a href="changelog.html">Changelog</a>
+      <a href="limitations.html">Alpha Limitations</a>
+      <a href="updates.html">Updates</a>
+      <a href="permissions.html">Permissions</a>
+      <a href="privacy.html">Privacy</a>
+      <a href="troubleshooting.html">Troubleshooting</a>
+      <a href="support.html">Support</a>
+      <a href="security.html">Security Policy</a>
+      <a href="icon-treatments.html">Icon Treatments</a>
+      <a href="background.html">Background Architecture</a>
+      <a href="release.html">Release Checklist</a>
+      <a href="#first">First Checks</a>
+      <a href="#symptoms">Common Symptoms</a>
+      <a href="#logs">Logs</a>
+      <a href="#commands">Command Checks</a>
+      <a href="#bugs">Bug Reports</a>
+      <a href="TROUBLESHOOTING.md">Markdown source</a>
+    </nav>
+    <main id="content" class="doc-main">
+      <header class="doc-hero">
+        <h1>Troubleshooting</h1>
+        <p class="lead">Symptom-first fixes for permissions, shortcuts, screenshots, dictation, clipboard history, background runs, imports, and updates.</p>
+      </header>
+
+      <section id="first">
+        <h2>First Checks</h2>
+        <ol>
+          <li>Open <strong>Settings -> Set Up</strong>.</li>
+          <li>Confirm Accessibility is green.</li>
+          <li>Confirm Screen Recording if using screenshots.</li>
+          <li>Confirm Microphone and model status if using dictation or voice custom actions.</li>
+          <li>Restart Command if a permission changed.</li>
+        </ol>
+        <p>For what each permission does, optional Set Up items, and reset commands, see <a href="permissions.html">Permissions</a>.</p>
+        <p>For binary installs, quit and reopen <code>~/Applications/Command.app</code>. From a repo checkout, you can also restart launchd:</p>
+        <pre><code>./install-agent.sh</code></pre>
+      </section>
+
+      <section id="symptoms">
+        <h2>Common Symptoms</h2>
+        <table>
+          <thead><tr><th>Symptom</th><th>Fix</th></tr></thead>
+          <tbody>
+            <tr><td>Hotkeys do nothing</td><td>Grant Accessibility, then restart Command. Confirm shortcut row is enabled and bound in <strong>Settings -> Shortcuts</strong> or <strong>Dictation Settings</strong>.</td></tr>
+            <tr><td>F5-F8 do system functions</td><td>Open macOS <strong>System Settings -> Keyboard</strong> and enable standard function keys, rebind prompt shortcuts in <strong>Settings -> Shortcuts</strong>, or rebind dictation shortcuts in <strong>Settings -> Dictation Settings</strong>.</td></tr>
+            <tr><td>Home or another non-F-key shortcut does not start dictation</td><td>Rebind it in <strong>Settings -> Dictation Settings</strong>, not <strong>Shortcuts</strong>. Dictate shortcuts use the press-and-hold/double-tap recorder path; prompt voice triggers live under <strong>Shortcuts</strong>.</td></tr>
+            <tr><td>Screenshot capture fails</td><td>Grant Screen Recording, then restart Command. If macOS still blocks capture, quit and relaunch Command.</td></tr>
+            <tr><td>Screenshot -> New chat shortcut does nothing</td><td>Confirm the <strong>Screenshot -> New chat</strong> combination is bound and enabled in <strong>Settings -> Shortcuts</strong>. Confirm Screen Recording is granted.</td></tr>
+            <tr><td>Dictation does not start</td><td>Grant Microphone, download Parakeet model in <strong>Dictation Settings</strong>, then retry.</td></tr>
+            <tr><td>Dictation cuts off final words</td><td>Release the key after the last word, then check <strong>Dictation History</strong> to see whether raw text or processed text lost the tail. The stop sound means release was accepted; the menu-bar recording chip stays visible until tail capture, model finalization, and dispatch finish. Include exact behavior and diagnostic lines in a support report.</td></tr>
+            <tr><td>Dictation feels slow after release</td><td>Watch the active menu-bar chip, not the sound. The sound fires on release; the chip remains during tail capture and transcription. Shorter utterances should finish faster. If it stays visible after transcription appears, include diagnostics.</td></tr>
+            <tr><td>Dictation History has full raw text but sent command is missing words</td><td>Report whether processed text is also complete. If raw and processed text are complete, include the Command History entry or sent-command diagnostic lines because the loss happened during dispatch, not recording.</td></tr>
+            <tr><td>Voice custom action records but does not send</td><td>Confirm trigger delivery/destination in <strong>Settings -> Shortcuts</strong> and inspect <strong>Command History</strong>.</td></tr>
+            <tr><td>Clipboard History is empty</td><td>Confirm Clipboard History is enabled and running in <strong>Settings -> Set Up</strong>. Copy a normal text snippet from a non-password app.</td></tr>
+            <tr><td>Right-click actions show as optional or missing</td><td>This is not a broken binary install. Global shortcuts do not need Services. Source installs can run <code>./install-quick-action.sh</code> if you want legacy macOS Services menu items.</td></tr>
+            <tr><td>Right-click To-Do does not capture a browser URL</td><td>If text is selected, Command sends the selection. If no text is selected and the front app is Safari, Chrome, Brave, Chromium, or Arc, it sends the current tab URL. Check <strong>Command History -> Background</strong> for the captured source and result.</td></tr>
+            <tr><td>Claude opens wrong surface</td><td>Check global destination, prompt/action destination, then trigger override.</td></tr>
+            <tr><td>Background action fails</td><td>Open <strong>Settings -> Command History -> Background</strong>, expand failed run, inspect log, and check <strong>Background Settings</strong>.</td></tr>
+            <tr><td>Import does not show expected content</td><td>Confirm file is a Command export or legacy settings/templates/vocabulary export.</td></tr>
+            <tr><td>Update fails</td><td>Confirm channel in <strong>Settings -> About</strong>; try manual install from <a href="install.html">Install Guide</a>.</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="logs">
+        <h2>Logs</h2>
+        <table>
+          <thead><tr><th>Log</th><th>Purpose</th></tr></thead>
+          <tbody>
+            <tr><td><code>~/Library/Logs/claude-command.log</code></td><td>Shortcut activity, capture/paste/open flow.</td></tr>
+            <tr><td><code>~/.claude/logs/command-agent.err</code></td><td>App dispatch, hotkey, and startup errors.</td></tr>
+            <tr><td><code>~/.claude/logs/clipwatch.err</code></td><td>Clipboard History errors.</td></tr>
+            <tr><td><code>~/.claude/logs/attribution.log</code></td><td>Clipboard/source attribution.</td></tr>
+            <tr><td><code>~/Library/Application Support/claude-command/logs/</code></td><td>Background run logs.</td></tr>
+          </tbody>
+        </table>
+        <p>Use <strong>Settings -> About -> Copy Diagnostic Info</strong> to copy app path, bundle ID, version, minimum macOS, update channel/check status, shortcut binding summary, Set Up permission/component status, recent log tails, recent command summaries, Clipboard History errors, and last three dictation raw/processed previews.</p>
+      </section>
+
+      <section id="commands">
+        <h2>Command Checks</h2>
+        <pre><code>./doctor.sh
+python3 ./test/test-docs.py
+./test/test-shell.sh</code></pre>
+        <p>For code changes:</p>
+        <pre><code>cd agent && swift test
+cd ../vendor/claude-command-capture && node --test</code></pre>
+      </section>
+
+      <section id="bugs">
+        <h2>Bug Reports</h2>
+        <p>For bugs, open <strong>Settings -> About -> Report a Bug</strong> and include version, macOS version, trigger kind, shortcut, source app, expected result, actual result, and relevant diagnostic lines.</p>
+      </section>
+    </main>
+  </div>
+</body>
+</html>

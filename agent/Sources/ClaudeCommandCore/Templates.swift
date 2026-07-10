@@ -36,21 +36,26 @@ public let TEMPLATE_VARIABLES: [TemplateVariable] = [
                       detail: "The raw source URL, if the source app had one — empty string otherwise."),
 ]
 
-public struct CommandTemplate: Identifiable {
-    public let action: String   // "go" | "comment" | "add"
+public struct CommandTemplate: Identifiable, Equatable {
+    public let action: String   // "add" | "comment" | "go" plus screenshot aliases
     public var template: String
     public var id: String { action }
     public init(action: String, template: String) { self.action = action; self.template = template }
 }
 
+public let BUILT_IN_COMPOSE_TEMPLATE_ACTIONS = ["add", "comment", "go", "shotadd", "shotcomment", "shotgo"]
+
 // Matches the strings currently hardcoded in send-to-claude.sh, so shipping this
 // feature changes nothing until a user actually edits a template.
-// Order matches Settings ▸ Shortcuts (Add, New, Go) — same three actions, same order,
-// wherever they show up.
+// Order matches Settings -> Shortcuts: selected-text rows, then screenshot rows.
 public let DEFAULT_COMMAND_TEMPLATES: [CommandTemplate] = [
     CommandTemplate(action: "add", template: "{selection}"),
     CommandTemplate(action: "comment", template: "{selection}"),
     CommandTemplate(action: "go",
+                     template: "{selection}\n\n(Right-click \"Go\": {context} Then do what's most useful and report.)"),
+    CommandTemplate(action: "shotadd", template: "{selection}"),
+    CommandTemplate(action: "shotcomment", template: "{selection}"),
+    CommandTemplate(action: "shotgo",
                      template: "{selection}\n\n(Right-click \"Go\": {context} Then do what's most useful and report.)"),
 ]
 
@@ -135,7 +140,7 @@ public let DEFAULT_ENRICH_RULES: [EnrichRule] = [
 // ---- live preview -------------------------------------------------------------
 // Mirrors send-to-claude.sh's CONTEXT/{context} composition exactly (see the
 // "context + always-on enrichment" and dispatch sections there) so what you see
-// in Settings ▸ Templates is what actually gets sent — not an approximation.
+// in Settings ▸ Context is what actually gets sent — not an approximation.
 
 public struct PreviewSource: Identifiable, Hashable {
     public let id = UUID()

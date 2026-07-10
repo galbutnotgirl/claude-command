@@ -65,6 +65,7 @@ func saveEnrichRules(_ rules: [EnrichRule]) {
 final class TemplatesModel: ObservableObject {
     @Published var templates: [CommandTemplate] = loadCommandTemplates()
     @Published var rules: [EnrichRule] = loadEnrichRules()
+    private let builtInComposeActions = BUILT_IN_COMPOSE_TEMPLATE_ACTIONS
 
     func setTemplate(action: String, template: String) {
         guard let i = templates.firstIndex(where: { $0.action == action }) else { return }
@@ -77,6 +78,33 @@ final class TemplatesModel: ObservableObject {
               let def = DEFAULT_COMMAND_TEMPLATES.first(where: { $0.action == action }) else { return }
         templates[i] = def
         saveCommandTemplates(templates)
+    }
+
+    var builtInComposeTemplate: String {
+        let values = builtInComposeActions.compactMap { action in
+            templates.first(where: { $0.action == action })?.template
+        }
+        guard let first = values.first else { return "" }
+        return values.allSatisfy { $0 == first } ? first : first
+    }
+
+    var builtInComposeTemplatesAreUnified: Bool {
+        let values = builtInComposeActions.compactMap { action in
+            templates.first(where: { $0.action == action })?.template
+        }
+        guard let first = values.first else { return true }
+        return values.allSatisfy { $0 == first }
+    }
+
+    func setBuiltInComposeTemplate(_ template: String) {
+        var changed = false
+        for i in templates.indices where builtInComposeActions.contains(templates[i].action) {
+            if templates[i].template != template {
+                templates[i].template = template
+                changed = true
+            }
+        }
+        if changed { saveCommandTemplates(templates) }
     }
 
     func addRule() {

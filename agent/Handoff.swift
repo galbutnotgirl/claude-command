@@ -2,7 +2,7 @@
 // Electron-free pipeline in vendor/claude-command-capture, contract in its
 // docs/HANDOFF.md). Three pieces, all self-contained:
 //   - HandoffConfig: read/patch settings.json (imported schema, unknown keys kept) —
-//     the CLI command/cwd/extraArgs/notifications every Custom Handoff shares
+//     the CLI command/cwd/extraArgs/notifications every background action shares
 //   - HandoffSubmission + loadHandoffSubmissions(): read submissions/ records
 //   - CustomActionTextEntryPanel: popup-kind Custom Actions' typed-entry trigger
 
@@ -84,7 +84,7 @@ private let handoffISO: ISO8601DateFormatter = {
     return f
 }()
 
-// limit: nil = every record (Settings ▸ Handoffs); the menu bar passes a small
+// limit: nil = every record (Settings > Command History); the menu bar passes a small
 // limit since it only ever shows the last few.
 func loadHandoffSubmissions(limit: Int? = 8) -> [HandoffSubmission] {
     let dir = "\(HANDOFF_BASE)/submissions"
@@ -145,11 +145,26 @@ func markHandoffSubmissionFailed(_ s: HandoffSubmission, reason: String = "Marke
 // ---- retention (mirrors the clipboard-history retentionDays model) ----------
 // Own key in command-config.json — same default as clipboard history's 7 days.
 let DEFAULT_HANDOFF_RETENTION_DAYS = 7
+let DEFAULT_COMMAND_RETENTION_DAYS = 7
 
 func readHandoffRetentionDays() -> Int {
     if let v = readCommandConfig()["handoffRetentionDays"] as? Int, v >= 1 { return v }
     if let d = readCommandConfig()["handoffRetentionDays"] as? Double, d >= 1 { return Int(d) }
     return DEFAULT_HANDOFF_RETENTION_DAYS
+}
+
+func readCommandRetentionDays() -> Int {
+    if let v = readCommandConfig()["commandRetentionDays"] as? Int, v >= 1 { return v }
+    if let d = readCommandConfig()["commandRetentionDays"] as? Double, d >= 1 { return Int(d) }
+    return DEFAULT_COMMAND_RETENTION_DAYS
+}
+
+func writeCommandRetentionDays(_ days: Int) {
+    var cfg = readCommandConfig()
+    cfg["commandRetentionDays"] = max(1, days)
+    if let data = try? JSONSerialization.data(withJSONObject: cfg, options: [.prettyPrinted]) {
+        try? data.write(to: URL(fileURLWithPath: COMMAND_CONFIG))
+    }
 }
 
 func writeHandoffRetentionDays(_ days: Int) {
@@ -170,6 +185,63 @@ func pruneHandoffSubmissions() -> Int {
     var removed = 0
     for s in loadHandoffSubmissions(limit: nil) where isHandoffPruneEligible(status: s.status, createdAt: s.createdAt, cutoff: cutoff) {
         deleteHandoffSubmission(s)
+        removed += 1
+    }
+    return removed
+}
+
+private var foregroundISO: ISO8601DateFormatter { handoffISO }
+
+func appendForegroundCommandHistory(action: String, source: String, destination: String,
+                                    status: String, prompt: String?, error: String?) {
+    let dir = "\(HANDOFF_BASE)/command-history"
+    try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+    let id = UUID().uuidString.lowercased()
+    var d: [String: Any] = [
+        "id": id,
+        "createdAt": foregroundISO.string(from: Date()),
+        "action": action,
+        "source": source,
+        "destination": destination,
+        "status": status
+    ]
+    if let prompt, !prompt.isEmpty { d["prompt"] = prompt }
+    if let error, !error.isEmpty { d["error"] = error }
+    guard let data = try? JSONSerialization.data(withJSONObject: d, options: [.prettyPrinted]) else { return }
+    try? data.write(to: URL(fileURLWithPath: "\(dir)/\(id).json"))
+}
+
+func loadForegroundCommandHistory(limit: Int? = nil) -> [ForegroundCommandRecord] {
+    let dir = "\(HANDOFF_BASE)/command-history"
+    guard let files = try? FileManager.default.contentsOfDirectory(atPath: dir) else { return [] }
+    var records: [ForegroundCommandRecord] = []
+    for f in files where f.hasSuffix(".json") {
+        guard let data = FileManager.default.contents(atPath: "\(dir)/\(f)"),
+              let d = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let id = d["id"] as? String else { continue }
+        records.append(ForegroundCommandRecord(
+            id: id,
+            createdAt: foregroundISO.date(from: d["createdAt"] as? String ?? "") ?? .distantPast,
+            action: d["action"] as? String ?? "?",
+            source: d["source"] as? String ?? "?",
+            destination: d["destination"] as? String ?? "code",
+            status: d["status"] as? String ?? "?",
+            prompt: d["prompt"] as? String,
+            error: d["error"] as? String
+        ))
+    }
+    let sorted = records.sorted { $0.createdAt > $1.createdAt }
+    guard let limit = limit else { return sorted }
+    return Array(sorted.prefix(limit))
+}
+
+@discardableResult
+func pruneForegroundCommandHistory() -> Int {
+    let cutoff = Date().addingTimeInterval(-Double(readCommandRetentionDays()) * 86400)
+    let dir = "\(HANDOFF_BASE)/command-history"
+    var removed = 0
+    for r in loadForegroundCommandHistory(limit: nil) where isForegroundCommandPruneEligible(createdAt: r.createdAt, cutoff: cutoff) {
+        try? FileManager.default.removeItem(atPath: "\(dir)/\(r.id).json")
         removed += 1
     }
     return removed
@@ -206,7 +278,7 @@ private func submitHandoffPrompt(_ prompt: String, source: String, kind: String,
     }
     let shim = (core as NSString).appendingPathComponent("bin/submit-cli.js")
     guard FileManager.default.fileExists(atPath: shim) else {
-        notify(failureTitle, "Handoff core missing — rebuild the agent.")
+        notify(failureTitle, "Background runner missing — reinstall from the Install Guide.")
         return
     }
     guard let node = which("node") else {
@@ -253,23 +325,23 @@ func runCustomHandoff(_ ca: CustomAction, trigger: ActionTrigger, capturedText: 
     let skill = ca.skill.isEmpty ? nil : ca.skill
     if trigger.kind == .screenshot {
         guard let file = writeClipboardImageFile() else {
-            notify("Handoff failed", "No image on the clipboard.")
+            notify("Background action failed", "No image on the clipboard.")
             return
         }
         let prompt = renderCustomActionHandoffPrompt(ca, content: nil, file: file)
-        submitHandoffPrompt(prompt, source: "screenshot", kind: "image", skill: skill, failureTitle: "Handoff failed")
+        submitHandoffPrompt(prompt, source: "screenshot", kind: "image", skill: skill, failureTitle: "Background action failed")
     } else {
         // popup/voice always arrive with definitive content (typed or spoken);
         // plain text falls back to the clipboard if nothing was captured.
         let text = !capturedText.isEmpty ? capturedText
             : (trigger.kind == .text ? (NSPasteboard.general.string(forType: .string) ?? "") : "")
         guard !text.isEmpty else {
-            notify("Handoff failed", "Nothing selected or on the clipboard.")
+            notify("Background action failed", "Nothing selected or on the clipboard.")
             return
         }
         let source = trigger.kind == .popup ? "popup" : (trigger.kind == .voice ? "voice" : "selection")
         let prompt = renderCustomActionHandoffPrompt(ca, content: text, file: nil)
-        submitHandoffPrompt(prompt, source: source, kind: "text", skill: skill, failureTitle: "Handoff failed")
+        submitHandoffPrompt(prompt, source: source, kind: "text", skill: skill, failureTitle: "Background action failed")
     }
 }
 
@@ -285,7 +357,7 @@ final class HandoffSettingsWindowController: NSObject, NSWindowDelegate {
         let w = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 560, height: 620),
             styleMask: [.titled, .closable], backing: .buffered, defer: false)
-        w.title = "Skill Handoff Settings"
+        w.title = "Background Settings"
         w.contentViewController = NSHostingController(rootView: HandoffSettingsView())
         w.center(); w.isReleasedWhenClosed = false; w.delegate = self
         window = w
@@ -302,14 +374,14 @@ struct HandoffSettingsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Background handoff: captures are rendered into a prompt and piped to `claude -p` addressed to this skill. Records land in \(HANDOFF_BASE).")
+            Text("Shared CLI settings for Background delivery. Custom Actions use their own prompt text; legacy settings below support older background capture flows.")
                 .font(.system(size: 11)).foregroundColor(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
             Group {
-                Text("Skill name").font(.headline)
+                Text("Legacy default skill").font(.headline)
                 TextField("e.g. triage-capture (empty = no skill line)", text: $config.skill)
-                Text("Resolved from the CLI working directory's .claude/skills/ (or ~/.claude/skills/).")
+                Text("Fallback for older background capture flows. Custom Actions use their own Background skill field.")
                     .font(.system(size: 10)).foregroundColor(.secondary)
             }
 
@@ -321,10 +393,10 @@ struct HandoffSettingsView: View {
             }
 
             Group {
-                Text("Text prompt template").font(.headline)
+                Text("Legacy text prompt").font(.headline)
                 TextEditor(text: $config.promptTemplate)
                     .font(.system(size: 11, design: .monospaced)).frame(height: 90)
-                Text("Image prompt template").font(.headline)
+                Text("Legacy image prompt").font(.headline)
                 TextEditor(text: $config.imagePromptTemplate)
                     .font(.system(size: 11, design: .monospaced)).frame(height: 90)
                 Text("Placeholders: {skillInvocation} {skill} {source} {timestamp} {content} {file}")
@@ -362,8 +434,8 @@ private final class EscClosingPanel: NSPanel {
 
 // Trigger for any Custom Action with kind == .popup: a floating text box
 // (⌘⏎ submits, Esc closes) whose content becomes that action's captured
-// input — the paste-into-Claude path if it's a plain action, or
-// runCustomHandoff if isHandoff. One panel, re-shown for whichever action's
+// input — the paste-into-Claude path, or runCustomHandoff for background
+// delivery. One panel, re-shown for whichever action's
 // hotkey fired; each call updates the title/target instead of stacking panels.
 final class CustomActionTextEntryPanel: NSObject, NSWindowDelegate {
     static let shared = CustomActionTextEntryPanel()
@@ -429,13 +501,16 @@ final class CustomActionTextEntryPanel: NSObject, NSWindowDelegate {
         let text = tv.string.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { NSSound.beep(); return }
         let front = NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? ""
-        if ca.isHandoff {
+        let delivery = ca.effectiveDelivery(for: trig)
+        if delivery == .background {
             DispatchQueue.global().async { runCustomHandoff(ca, trigger: trig, capturedText: text) }
         } else {
+            let dest = ca.effectiveDestination(for: trig).envValue
             DispatchQueue.global().async {
                 runWorker("custom", source: front, captured: text,
                           customPrompt: ca.prompt, customSubmit: ca.autoSubmit(for: trig),
-                          customSession: ca.effectiveSessionMode(for: trig), customIncludeSource: ca.shouldIncludeSource(for: trig))
+                          customSession: delivery.sessionMode, customIncludeSource: ca.shouldIncludeSource(for: trig),
+                          claudeDestination: dest)
             }
         }
         tv.string = ""

@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Command icon treatment reference for active menu-bar recording, capture, and animated status visibility reviews.">
+  <title>Command Icon Treatments</title>
+  <link rel="canonical" href="https://galbutnotgirl.github.io/command/icon-treatments.html">
+  <meta property="og:site_name" content="Command">
+  <meta property="og:title" content="Command Icon Treatments">
+  <meta property="og:description" content="Command icon treatment reference for active menu-bar recording, capture, and animated status visibility reviews.">
+  <meta property="og:type" content="website">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="Command Icon Treatments">
+  <meta name="twitter:description" content="Command icon treatment reference for active menu-bar recording, capture, and animated status visibility reviews.">
+  <link rel="stylesheet" href="site.css">
+</head>
+<body>
+  <a class="skip-link" href="#content">Skip to content</a>
+  <div class="doc-wrap">
+    <nav class="toc" aria-label="Documentation sections">
+      <div class="toc-title">Icon Treatments</div>
+      <a href="index.html">Overview</a>
+      <a href="install.html">Install Guide</a>
+      <a href="uninstall.html">Uninstall</a>
+      <a href="guide.html">User Guide</a>
+      <a href="settings.html">Settings Reference</a>
+      <a href="quick-reference.html">Quick Reference</a>
+      <a href="examples.html">Examples</a>
+      <a href="faq.html">FAQ</a>
+      <a href="changelog.html">Changelog</a>
+      <a href="limitations.html">Alpha Limitations</a>
+      <a href="updates.html">Updates</a>
+      <a href="permissions.html">Permissions</a>
+      <a href="privacy.html">Privacy</a>
+      <a href="troubleshooting.html">Troubleshooting</a>
+      <a href="support.html">Support</a>
+      <a href="security.html">Security Policy</a>
+      <a href="icon-treatments.html">Icon Treatments</a>
+      <a href="#current-recording-direction">Current Recording Direction</a>
+      <a href="#animated-previews">Animated Previews</a>
+      <a href="#options">Options</a>
+      <a href="#implementation-notes">Implementation Notes</a>
+      <a href="background.html">Background Architecture</a>
+      <a href="release.html">Release Checklist</a>
+      <a href="ICON_TREATMENTS.md">Markdown source</a>
+    </nav>
+    <main id="content" class="doc-main">
+      <header class="doc-hero">
+        <h1>Icon Treatments</h1>
+        <p class="lead">Visual reference for active menu-bar states: recording, capture, and high-visibility status treatments.</p>
+      </header>
+
+      <section id="current-recording-direction">
+        <h2>Current Recording Direction</h2>
+        <p>The current active dictation state uses a compact solid-purple voice-lines icon: a menu-bar-sized purple rounded square with animated white bars. It is intentionally close to macOS microphone and camera status controls, but avoids the earlier wide badge, microphone glyph, live dot, and pulse ring.</p>
+        <ul>
+          <li>Visible on dark, light, and translucent menu-bar backgrounds.</li>
+          <li>White-forward contrast, no black icon treatment.</li>
+          <li>White carries only the moving voice bars; purple stays pure and solid.</li>
+          <li>Motion says recording is active without feeling noisy.</li>
+        </ul>
+      </section>
+
+      <section id="animated-previews">
+        <h2>Animated Previews</h2>
+        <figure class="media-frame">
+          <img src="icon-treatment-bold-animated.svg" alt="Animated preview of a bold white and purple active menu-bar privacy control with a white microphone and white waveform bars.">
+          <figcaption>Bolder active-state treatments.</figcaption>
+        </figure>
+        <figure class="media-frame">
+          <img src="icon-treatment-options-animated.svg" alt="Animated preview of original icon treatment options on a busy dark translucent menu-bar background.">
+          <figcaption>Original animated option set.</figcaption>
+        </figure>
+        <figure class="media-frame">
+          <img src="icon-treatment-options.svg" alt="Static sheet of Command menu-bar icon treatment options.">
+          <figcaption>Static comparison sheet.</figcaption>
+        </figure>
+      </section>
+
+      <section id="options">
+        <h2>Options</h2>
+        <table>
+          <thead><tr><th>Option</th><th>Best For</th><th>Tradeoff</th></tr></thead>
+          <tbody>
+            <tr><td>System mic/camera beacon</td><td>Most obvious app-branded state, closest to macOS mic/camera controls.</td><td>Most visual weight in menu bar.</td></tr>
+            <tr><td>White mic-style badge</td><td>Most similar to macOS recording status.</td><td>Less unique to Command.</td></tr>
+            <tr><td>Camera-style capture</td><td>Screenshot/capture state.</td><td>Too specific for dictation.</td></tr>
+            <tr><td>Bold waveform pill</td><td>Highest live voice visibility.</td><td>Least subtle.</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="implementation-notes">
+        <h2>Implementation Notes</h2>
+        <p>Runtime drawing lives in <code>agent/MenuBar.swift</code>. The installed app currently uses a compact active width, pure purple rounded-square backing, and four white voice bars driven by recorder audio level.</p>
+      </section>
+    </main>
+  </div>
+</body>
+</html>

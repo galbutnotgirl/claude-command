@@ -45,13 +45,17 @@ let CUSTOM_ACTIONS_PATH = (NSHomeDirectory() as NSString)
 private func decodeTrigger(_ d: [String: Any]) -> ActionTrigger? {
     guard let id = d["id"] as? String,
           let rawKind = d["kind"] as? String, let kind = ActionKind(rawValue: rawKind) else { return nil }
+    let delivery = (d["deliveryOverride"] as? String).flatMap(ActionDelivery.init(rawValue:))
+    let destination = (d["destinationOverride"] as? String).flatMap(ClaudeDestination.init(rawValue:))
     return ActionTrigger(
         id: id, kind: kind,
         keycode: UInt32(d["keycode"] as? Int ?? 0), mods: UInt32(d["mods"] as? Int ?? 0),
         enabled: d["enabled"] as? Bool ?? true,
         isAutoSubmitOverride: d["isAutoSubmitOverride"] as? Bool,
         sessionModeOverride: d["sessionModeOverride"] as? String,
-        includeSourceOverride: d["includeSourceOverride"] as? Bool
+        includeSourceOverride: d["includeSourceOverride"] as? Bool,
+        deliveryOverride: delivery,
+        destinationOverride: destination
     )
 }
 
@@ -93,6 +97,8 @@ func loadCustomActions() -> [CustomAction] {
             enabled: d["enabled"] as? Bool ?? true,
             isHandoff: d["isHandoff"] as? Bool ?? false,
             skill: d["skill"] as? String ?? "",
+            delivery: (d["delivery"] as? String).flatMap(ActionDelivery.init(rawValue:)),
+            destination: (d["destination"] as? String).flatMap(ClaudeDestination.init(rawValue:)) ?? .default,
             triggers: triggers
         )
     }
@@ -104,6 +110,8 @@ private func encodeTrigger(_ t: ActionTrigger) -> [String: Any] {
     if let v = t.isAutoSubmitOverride { d["isAutoSubmitOverride"] = v }
     if let v = t.sessionModeOverride { d["sessionModeOverride"] = v }
     if let v = t.includeSourceOverride { d["includeSourceOverride"] = v }
+    if let v = t.deliveryOverride { d["deliveryOverride"] = v.rawValue }
+    if let v = t.destinationOverride { d["destinationOverride"] = v.rawValue }
     return d
 }
 
@@ -113,6 +121,7 @@ func saveCustomActions(_ actions: [CustomAction]) {
          "isAutoSubmit": ca.isAutoSubmit, "sessionMode": ca.sessionMode,
          "includeSource": ca.includeSource, "enabled": ca.enabled,
          "isHandoff": ca.isHandoff, "skill": ca.skill,
+         "delivery": ca.delivery.rawValue, "destination": ca.destination.rawValue,
          "triggers": ca.triggers.map(encodeTrigger)]
     }
     if let data = try? JSONSerialization.data(withJSONObject: arr, options: [.prettyPrinted]) {

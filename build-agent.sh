@@ -1,13 +1,13 @@
 #!/bin/zsh
-# build-agent.sh — compile agent/*.swift into a codesigned ClaudeCommand.app with a
-# stable bundle id, so its Accessibility grant sticks. Output: ClaudeCommand.app
+# build-agent.sh — compile agent/*.swift into a codesigned Command.app with a
+# stable bundle id, so its Accessibility grant sticks. Output: Command.app
 # next to this script. Install/run it with install-agent.sh.
 emulate -L zsh
 set -uo pipefail
 
 DIR="${0:A:h}"
 SRC_DIR="${DIR}/agent"
-APP="${DIR}/ClaudeCommand.app"
+APP="${DIR}/Command.app"
 BIN_DIR="${APP}/Contents/MacOS"
 BUNDLE_ID="com.claudecommand"
 
@@ -37,24 +37,24 @@ print -- "[agent] compiling (swift build)…"
 if ! ( cd "${SRC_DIR}" && swift build -c release 2>&1 ); then
   print -- "[agent] ERROR swift build failed"; exit 1
 fi
-cp "${SRC_DIR}/.build/release/ClaudeCommand" "${BIN_DIR}/ClaudeCommand"
+cp "${SRC_DIR}/.build/release/ClaudeCommand" "${BIN_DIR}/Command"
 
 cat > "${APP}/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>CFBundleExecutable</key><string>ClaudeCommand</string>
+	<key>CFBundleExecutable</key><string>Command</string>
 	<key>CFBundleIdentifier</key><string>${BUNDLE_ID}</string>
-	<key>CFBundleName</key><string>Claude Command</string>
-	<key>CFBundleDisplayName</key><string>Claude Command</string>
+	<key>CFBundleName</key><string>Command</string>
+	<key>CFBundleDisplayName</key><string>Command</string>
 	<key>CFBundlePackageType</key><string>APPL</string>
 	<key>CFBundleShortVersionString</key><string>${VERSION}</string>
 	<key>ClaudeCommandGitBranch</key><string>${GIT_BRANCH}</string>
 	<key>CFBundleIconFile</key><string>AppIcon</string>
 	<key>LSUIElement</key><true/>
-	<key>LSMinimumSystemVersion</key><string>13.0</string>
-	<key>NSMicrophoneUsageDescription</key><string>ClaudeCommand uses your microphone for on-device dictation via Parakeet TDT.</string>
+	<key>LSMinimumSystemVersion</key><string>14.0</string>
+	<key>NSMicrophoneUsageDescription</key><string>Command uses your microphone for on-device dictation via Parakeet TDT.</string>
 </dict>
 </plist>
 PLIST
@@ -74,6 +74,22 @@ CLIPWATCH="${DIR}/clipwatch.py"
 if [ -f "$CLIPWATCH" ]; then
   cp "$CLIPWATCH" "${APP}/Contents/Resources/clipwatch.py"
   print -- "[agent] bundled clipwatch.py"
+fi
+
+# Bundle end-user docs so About's docs buttons work before a release is pushed
+# and when the user is offline.
+DOCS_SRC="${DIR}/docs"
+if [ -f "${DOCS_SRC}/USER_GUIDE.md" ]; then
+  mkdir -p "${APP}/Contents/Resources/docs"
+  for doc_asset in 404.html index.html install.html uninstall.html guide.html settings.html quick-reference.html examples.html faq.html changelog.html limitations.html updates.html permissions.html troubleshooting.html privacy.html support.html security.html icon-treatments.html background.html release.html site.css robots.txt sitemap.xml INSTALL.md UNINSTALL.md USER_GUIDE.md SETTINGS_REFERENCE.md QUICK_REFERENCE.md EXAMPLES.md FAQ.md CHANGELOG.md LIMITATIONS.md UPDATES.md PERMISSIONS.md TROUBLESHOOTING.md PRIVACY.md SUPPORT.md SECURITY.md ICON_TREATMENTS.md BACKGROUND_TRIGGER_INTEGRATION.md RELEASE_CHECKLIST.md icon-treatment-bold-animated.svg icon-treatment-options-animated.svg icon-treatment-options.svg; do
+    if [ -f "${DOCS_SRC}/${doc_asset}" ]; then
+      cp "${DOCS_SRC}/${doc_asset}" "${APP}/Contents/Resources/docs/"
+    else
+      print -- "[agent] ERROR missing bundled docs asset: docs/${doc_asset}"; exit 1
+    fi
+  done
+  cp "${DIR}/README.md" "${APP}/Contents/Resources/README.md" 2>/dev/null || true
+  print -- "[agent] bundled user docs"
 fi
 
 # Background skill handoff: capture-handoff.sh + the vendored Electron-free
@@ -131,4 +147,4 @@ codesign --force --sign "$SIGN_ID" --identifier "$BUNDLE_ID" "$APP" \
   || { print -- "[agent] ERROR codesign failed (SIGN_ID=$SIGN_ID)"; exit 1; }
 
 print -- "[agent] built: $APP"
-print -- "First run prompts for Accessibility for 'ClaudeCommand' — allow once, covers all hotkeys + keystrokes."
+print -- "First run prompts for Accessibility for 'Command' — allow once, covers all hotkeys + keystrokes."

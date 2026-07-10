@@ -20,8 +20,8 @@ set -uo pipefail
 export PATH="/opt/homebrew/bin:${HOME}/.claude/local:${HOME}/.local/bin:/usr/local/bin:/usr/bin:/bin:${PATH}"
 
 LOG_FILE="${HOME}/Library/Logs/claude-command.log"
-log()    { print -r -- "$(date '+%Y-%m-%d %H:%M:%S') [handoff] $*" >> "$LOG_FILE" 2>/dev/null; }
-notify() { osascript -e "display notification \"$1\" with title \"${2:-Claude Command}\"" 2>/dev/null; }
+log()    { print -r -- "$(date '+%Y-%m-%d %H:%M:%S') [background] $*" >> "$LOG_FILE" 2>/dev/null; }
+notify() { osascript -e "display notification \"$1\" with title \"${2:-ClaudeCommand}\"" 2>/dev/null; }
 
 SCRIPT_DIR="${0:A:h}"
 # Bundled layout (app Resources) puts the core next to this script; repo layout
@@ -31,9 +31,9 @@ CORE="${CLAUDE_CAPTURE_CORE:-${SCRIPT_DIR}/claude-command-capture}"
 SHIM="${CORE}/bin/submit-cli.js"
 BASE="${CLAUDE_CAPTURE_HOME:-${HOME}/Library/Application Support/claude-command}"
 
-[ -f "$SHIM" ] || { log "shim missing at $SHIM"; notify "Handoff core missing — rebuild the agent."; exit 1; }
+[ -f "$SHIM" ] || { log "shim missing at $SHIM"; notify "Background core missing — reinstall from the Install Guide."; exit 1; }
 NODE="$(command -v node 2>/dev/null)" || true
-[ -n "${NODE:-}" ] || { log "node not found on PATH"; notify "Handoff needs Node.js 20+ on PATH."; exit 1; }
+[ -n "${NODE:-}" ] || { log "node not found on PATH"; notify "Background delivery needs Node.js 20+ on PATH."; exit 1; }
 
 SRC="${HANDOFF_SOURCE:-selection}"
 CTX="${HANDOFF_CONTEXT:-}"

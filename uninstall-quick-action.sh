@@ -3,15 +3,17 @@
 emulate -L zsh
 set -uo pipefail
 NAMES=(
+  "Claude - New"
   "Claude - Go"
-  "Claude - Comment"
   "Claude - Add"
   "Claude - Reformat"
   "Claude - To-Do"
+  "Claude - Screenshot New"
   "Claude - Screenshot Go"
-  "Claude - Screenshot Comment"
   "Claude - Screenshot Full"
   "Claude - Clipboard History"
+  "Claude - Comment"           # legacy names
+  "Claude - Screenshot Comment"
   "Send to Claude — Comment"   # legacy names
   "Send to Claude — Go"
   "Fix Format (Claude)"
