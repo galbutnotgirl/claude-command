@@ -1200,6 +1200,7 @@ func registerFromConfig() {
     let sig = OSType(0x434D4447) // 'CMDG'
     for (i, hk) in loadHotkeys().enumerated() {
         guard hk.keycode != 0 else { continue }  // keycode 0 = 'A' key; 0 means unbound
+        guard !isBuiltInVoiceAction(hk.action) else { continue } // HID event tap owns voice press/release.
         let hkID = UInt32(i + 1)
         let id = EventHotKeyID(signature: sig, id: hkID)
         hotkeyActions[hkID] = hk.action
@@ -1220,6 +1221,7 @@ func registerFromConfig() {
     var triggerSlot = 0
     for ca in loadCustomActions() where ca.enabled {
         for trig in ca.triggers where trig.enabled && trig.keycode != 0 {
+            guard trig.kind != .voice else { continue } // HID event tap owns voice press/release.
             let hkID = UInt32(100 + triggerSlot)
             triggerSlot += 1
             let id = EventHotKeyID(signature: sig, id: hkID)
@@ -1266,6 +1268,37 @@ private var _mediaEventTap: CFMachPort?
 // NX_SYSDEFINED events fire repeating isDown=true while held (no autorepeat flag).
 // Track held state per keyCode to swallow repeats without breaking double-tap detection.
 private var _nxHeld: [Int: Bool] = [:]
+private var _voiceHeldKeycodes: Set<UInt32> = []
+
+private enum VoiceHotkeyTarget {
+    case builtIn(DictMode)
+    case custom(actionID: String, triggerID: String)
+}
+
+private func isBuiltInVoiceAction(_ action: String) -> Bool {
+    action == "dictate" || action == "dictateadd"
+}
+
+private func voiceHotkeyTarget(keycode: UInt32, mods: UInt32) -> VoiceHotkeyTarget? {
+    if let hk = loadHotkeys().first(where: { $0.keycode == keycode && $0.mods == mods && isBuiltInVoiceAction($0.action) }) {
+        return .builtIn(hk.action == "dictate" ? .insert : .claude)
+    }
+    if let (ca, trig) = triggerMatching(keycode: keycode, mods: mods), trig.kind == .voice {
+        return .custom(actionID: ca.id, triggerID: trig.id)
+    }
+    return nil
+}
+
+@MainActor
+private func triggerVoiceHotkey(_ target: VoiceHotkeyTarget, keycode: CGKeyCode) {
+    switch target {
+    case .builtIn(let mode):
+        triggerDictation(mode: mode, keycode: keycode, pollForRelease: false)
+    case .custom(let actionID, let triggerID):
+        triggerDictation(mode: .customAction(actionID: actionID, triggerID: triggerID),
+                         keycode: keycode, pollForRelease: false)
+    }
+}
 
 private func physicalModifierMask(fallback flags: NSEvent.ModifierFlags = []) -> UInt32 {
     var cm: UInt32 = 0
@@ -1418,9 +1451,11 @@ let MEDIA_KEYCODES: Set<UInt32> = [96, 97, 98, 99, 100, 101]  // F5–F10
 
 func startMediaKeyHook() {
     guard AXIsProcessTrusted() else { return }
-    // Intercept NX_SYSDEFINED (media-key mode) and keyDown only.
-    // PTT polling uses CGEventSource.keyState on a 40ms timer — no keyUp needed.
-    let eventMask = CGEventMask((1 << 14) | (1 << CGEventType.keyDown.rawValue))
+    // Intercept NX_SYSDEFINED (media-key mode) plus keyDown/keyUp. Voice hotkeys
+    // use keyUp to end push-to-talk without depending on Carbon release events.
+    let eventMask = CGEventMask((1 << 14) |
+                                (1 << CGEventType.keyDown.rawValue) |
+                                (1 << CGEventType.keyUp.rawValue))
     guard let tap = CGEvent.tapCreate(tap: .cghidEventTap, place: .headInsertEventTap,
                                       options: .defaultTap, eventsOfInterest: eventMask,
         callback: { _, type, event, _ -> Unmanaged<CGEvent>? in
@@ -1450,8 +1485,8 @@ func startMediaKeyHook() {
                 return nil
             }
 
-            // --- standard function-key mode (regular keyDown) ---
-            if type == .keyDown {
+            // --- regular keyDown/keyUp path ---
+            if type == .keyDown || type == .keyUp {
                 let kc = UInt32(event.getIntegerValueField(.keyboardEventKeycode))
                 let f  = event.flags
 
@@ -1475,12 +1510,39 @@ func startMediaKeyHook() {
                     return passthrough  // never swallow Cmd+C/X
                 }
 
+                let cm = physicalModifierMask(cgFlags: f)
+                if type == .keyUp, _voiceHeldKeycodes.contains(kc) {
+                    _voiceHeldKeycodes.remove(kc)
+                    appendLog("[eventTap] voice up kc=\(kc) mods=\(cm)")
+                    DispatchQueue.main.async {
+                        Task { @MainActor in
+                            if _dictTrigMode == .pushToTalk {
+                                _dictPTTimer?.invalidate(); _dictPTTimer = nil
+                                _dictTrigMode = .idle
+                                if DictationOverlay.shared.isVisible { DictationOverlay.shared.stopRecording() }
+                            }
+                        }
+                    }
+                    return nil
+                }
+                if let voiceTarget = voiceHotkeyTarget(keycode: kc, mods: cm) {
+                    guard type == .keyDown else { return passthrough }
+                    appendLog("[eventTap] voice down kc=\(kc) mods=\(cm)")
+                    let isRepeat = event.getIntegerValueField(.keyboardEventAutorepeat) != 0
+                    guard !isRepeat else { return nil }
+                    _voiceHeldKeycodes.insert(kc)
+                    DispatchQueue.main.async {
+                        Task { @MainActor in triggerVoiceHotkey(voiceTarget, keycode: CGKeyCode(kc)) }
+                    }
+                    return nil
+                }
+
+                guard type == .keyDown else { return passthrough }
                 guard MEDIA_KEYCODES.contains(kc) else { return passthrough }
                 // Skip key-repeat events — only fire on the initial key-down.
                 // Without this, holding a bound key fires start→stop→start... rapidly.
                 let isRepeat = event.getIntegerValueField(.keyboardEventAutorepeat) != 0
                 guard !isRepeat else { return nil }  // swallow repeat but don't act
-                let cm = physicalModifierMask(cgFlags: f)
                 let bound = loadHotkeys().contains { $0.keycode == kc && $0.mods == cm }
                     || triggerMatching(keycode: kc, mods: cm) != nil
                 appendLog("[eventTap] keyDown kc=\(kc) mods=\(cm) bound=\(bound)")
@@ -1622,14 +1684,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc func openAbout(_ sender: Any?) { settingsWindow.show(tab: .about) }
-    @objc func openSettings(_ sender: Any?) { openLastSettingsTab() }
+    @objc func openSettings(_ sender: Any?) { settingsWindow.show(tab: .shortcuts) }
     @objc func openSetUp(_ sender: Any?) { settingsWindow.show(tab: .setup) }
     @objc func openShortcuts(_ sender: Any?) { settingsWindow.show(tab: .shortcuts) }
     @objc func openContext(_ sender: Any?) { settingsWindow.show(tab: .templates) }
     @objc func openCommandHistory(_ sender: Any?) { settingsWindow.show(tab: .handoffs) }
     @objc func openClipboardHistorySettings(_ sender: Any?) { settingsWindow.show(tab: .history) }
+    @objc func openBackground(_ sender: Any?) { settingsWindow.show(tab: .background) }
     @objc func openDictationHistory(_ sender: Any?) { settingsWindow.show(tab: .dictHistory) }
     @objc func openDictationSettings(_ sender: Any?) { settingsWindow.show(tab: .dictSettings) }
+    @objc func openDictationVocabulary(_ sender: Any?) { settingsWindow.show(tab: .dictVocabulary) }
+    @objc func openDictationCorrections(_ sender: Any?) { settingsWindow.show(tab: .dictCorrections) }
     @objc func openImportExport(_ sender: Any?) { settingsWindow.show(tab: .about) }
     @objc func restartCommand(_ sender: Any?) { restartApp() }
     @MainActor @objc func copyDiagnosticInfo(_ sender: Any?) {
@@ -1881,13 +1946,28 @@ func installMainMenu() {
     viewMenuItem.submenu = viewMenu
     for (title, selector) in [
         ("Set Up", #selector(AppDelegate.openSetUp(_:))),
-        ("Shortcuts", #selector(AppDelegate.openShortcuts(_:))),
-        ("Context", #selector(AppDelegate.openContext(_:))),
-        ("Command History", #selector(AppDelegate.openCommandHistory(_:))),
-        ("Clipboard History", #selector(AppDelegate.openClipboardHistorySettings(_:))),
-        ("Dictation History", #selector(AppDelegate.openDictationHistory(_:))),
-        ("Dictation Settings", #selector(AppDelegate.openDictationSettings(_:))),
         ("About", #selector(AppDelegate.openAbout(_:))),
+        ("Clipboard History", #selector(AppDelegate.openClipboardHistorySettings(_:))),
+    ] {
+        let item = viewMenu.addItem(withTitle: title, action: selector, keyEquivalent: "")
+        item.target = appDelegate
+    }
+    viewMenu.addItem(NSMenuItem.separator())
+    for (title, selector) in [
+        ("Shortcut Settings", #selector(AppDelegate.openShortcuts(_:))),
+        ("Context", #selector(AppDelegate.openContext(_:))),
+        ("Background", #selector(AppDelegate.openBackground(_:))),
+        ("Shortcut History", #selector(AppDelegate.openCommandHistory(_:))),
+    ] {
+        let item = viewMenu.addItem(withTitle: title, action: selector, keyEquivalent: "")
+        item.target = appDelegate
+    }
+    viewMenu.addItem(NSMenuItem.separator())
+    for (title, selector) in [
+        ("Dictation Settings", #selector(AppDelegate.openDictationSettings(_:))),
+        ("Vocabulary", #selector(AppDelegate.openDictationVocabulary(_:))),
+        ("Corrections", #selector(AppDelegate.openDictationCorrections(_:))),
+        ("Dictation History", #selector(AppDelegate.openDictationHistory(_:))),
     ] {
         let item = viewMenu.addItem(withTitle: title, action: selector, keyEquivalent: "")
         item.target = appDelegate
