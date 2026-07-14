@@ -12,6 +12,7 @@ import AppKit
 // One binding per catalog action, in catalog order; unbound actions get keycode 0.
 func loadBindings() -> [HotkeyBinding] {
     var byAction: [String: HotkeyBinding] = [:]
+    var shouldPersistMigration = false
     let hasFile = FileManager.default.fileExists(atPath: CFG)
     if hasFile, let data = FileManager.default.contents(atPath: CFG),
        let arr = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] {
@@ -21,22 +22,58 @@ func loadBindings() -> [HotkeyBinding] {
                 byAction[a] = HotkeyBinding(action: a, keycode: UInt32(k), mods: UInt32(m), enabled: en)
             }
         }
+        shouldPersistMigration = migrateExperimentalShortcutDefaultsIfNeeded(&byAction)
     } else {
         // No user file — seed from built-in defaults so Settings shows real bindings.
         for def in DEFAULT_BINDINGS {
             byAction[def.action] = HotkeyBinding(action: def.action, keycode: def.keycode, mods: def.mods, enabled: true)
         }
     }
-    return COMMAND_ACTIONS.map { byAction[$0.id] ?? HotkeyBinding(action: $0.id, keycode: 0, mods: 0, enabled: true) }
+    let bindings = COMMAND_ACTIONS.map { byAction[$0.id] ?? HotkeyBinding(action: $0.id, keycode: 0, mods: 0, enabled: true) }
+    if shouldPersistMigration {
+        writeBindings(bindings)
+    }
+    return bindings
 }
 
 func saveBindings(_ bindings: [HotkeyBinding]) {
+    writeBindings(bindings)
+    DispatchQueue.main.async { reregisterHotkeys() }   // live — no agent restart
+}
+
+private func writeBindings(_ bindings: [HotkeyBinding]) {
     let arr = bindings.filter { $0.keycode != 0 }
         .map { ["action": $0.action, "keycode": Int($0.keycode), "mods": Int($0.mods), "enabled": $0.enabled] as [String: Any] }
     if let data = try? JSONSerialization.data(withJSONObject: arr, options: [.prettyPrinted]) {
         try? data.write(to: URL(fileURLWithPath: CFG))
     }
-    DispatchQueue.main.async { reregisterHotkeys() }   // live — no agent restart
+}
+
+private func migrateExperimentalShortcutDefaultsIfNeeded(_ byAction: inout [String: HotkeyBinding]) -> Bool {
+    let legacy: [String: (keycode: UInt32, mods: UInt32)] = [
+        "add": (109, 0),             // F10
+        "comment": (109, 2048),      // Option-F10
+        "go": (0, 0),
+        "shotadd": (101, 0),         // F9
+        "shotcomment": (101, 2048),  // Option-F9
+        "shotgo": (0, 0),
+        "cliphistory": (100, 0),     // F8
+        "dictate": (115, 0),         // Home
+        "dictateadd": (115, 2048),   // Option-Home
+    ]
+    let knownActions = Set(COMMAND_ACTIONS.map(\.id))
+    guard Set(byAction.keys).isSubset(of: knownActions) else { return false }
+    for action in knownActions {
+        let expected = legacy[action] ?? (0, 0)
+        let actual = byAction[action] ?? HotkeyBinding(action: action, keycode: 0, mods: 0, enabled: true)
+        guard actual.keycode == expected.keycode, actual.mods == expected.mods, actual.enabled else {
+            return false
+        }
+    }
+    for def in DEFAULT_BINDINGS {
+        byAction[def.action] = HotkeyBinding(action: def.action, keycode: def.keycode, mods: def.mods, enabled: true)
+    }
+    return true
 }
 
 let CUSTOM_ACTIONS_PATH = (NSHomeDirectory() as NSString)

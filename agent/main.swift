@@ -1070,21 +1070,12 @@ let picker = ClipPicker()
 struct HK { let action: String; let keycode: UInt32; let mods: UInt32 }
 
 func loadHotkeys() -> [HK] {
-    let validActions = Set(COMMAND_ACTIONS.map(\.id))
     let clipboardEnabled = UserDefaults.standard.bool(forKey: "cliphistoryEnabled")
-    guard let data = FileManager.default.contents(atPath: CFG),
-          let arr = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
-        // No user file — fall back to built-in defaults.
-        return DEFAULT_BINDINGS
-            .filter { $0.action != "cliphistory" || clipboardEnabled }
-            .map { HK(action: $0.action, keycode: $0.keycode, mods: $0.mods) }
-    }
-    return arr.compactMap { d in
-        guard let a = d["action"] as? String,
-              let k = d["keycode"] as? Int, let m = d["mods"] as? Int else { return nil }
-        let enabled = (d["enabled"] as? Bool) ?? true
-        guard enabled, validActions.contains(a), a != "cliphistory" || clipboardEnabled else { return nil }
-        return HK(action: a, keycode: UInt32(k), mods: UInt32(m))
+    return loadBindings().compactMap { binding in
+        guard binding.enabled,
+              binding.keycode != 0,
+              binding.action != "cliphistory" || clipboardEnabled else { return nil }
+        return HK(action: binding.action, keycode: binding.keycode, mods: binding.mods)
     }
 }
 
