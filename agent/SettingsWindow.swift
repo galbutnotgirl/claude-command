@@ -512,6 +512,7 @@ struct CheckAction { let label: String; let run: () -> Void }
 struct SetupView: View {
     @ObservedObject var model: SettingsModel
     private let refreshTimer = Timer.publish(every: 2, on: .main, in: .common).autoconnect()
+    @State private var pendingRestart = false
 
     var body: some View {
         ScrollView {
@@ -555,12 +556,17 @@ struct SetupView: View {
                     Button("Restart Command") { restartApp() }
                     Spacer()
                 }
+                if pendingRestart {
+                    Text("Restarting Command so macOS can apply the new permission grant...")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
 
                 VStack(alignment: .leading, spacing: 6) {
                     Divider()
                     Text("Grant still red after enabling? Restart Command — macOS applies grants on relaunch.")
                         .font(.caption).foregroundColor(.secondary)
-                    Text("If macOS asks again after a rebuild, re-grant permissions for Command.")
+                    Text("If macOS asks again after a rebuild, the app was signed with a different identity. The installer now blocks that unless you opt in.")
                         .font(.caption).foregroundColor(.secondary)
                     Text("Function-key shortcuts don't fire? Enable standard function keys in macOS Keyboard settings, or rebind prompt and dictation shortcuts.")
                         .font(.caption).foregroundColor(.secondary)
@@ -575,14 +581,16 @@ struct SetupView: View {
     private func permAction(for title: String) -> CheckAction? {
         switch title {
         case "Accessibility":
-            return CheckAction(label: "Enable") {
+            return CheckAction(label: "Open & Restart") {
                 requestAccessibility()
                 openPrivacyPane("Privacy_Accessibility")
+                restartAfterPermissionDelay()
             }
         case "Screen Recording":
-            return CheckAction(label: "Enable") {
+            return CheckAction(label: "Open & Restart") {
                 requestScreenRecording()
                 openPrivacyPane("Privacy_ScreenCapture")
+                restartAfterPermissionDelay()
             }
         case let t where t.hasPrefix("Microphone"):
             return CheckAction(label: "Enable") {
@@ -591,6 +599,13 @@ struct SetupView: View {
             }
         default:
             return nil
+        }
+    }
+
+    private func restartAfterPermissionDelay() {
+        pendingRestart = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+            restartApp()
         }
     }
 

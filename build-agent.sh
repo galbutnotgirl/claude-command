@@ -122,16 +122,22 @@ if [ -f "$ICON_SRC" ] && command -v iconutil >/dev/null 2>&1; then
   rm -rf "$(dirname "$ISET")"
 fi
 
-# Code signing identity. Default is ad-hoc ("-"), which is fine for a local build.
-# To make TCC grants (Accessibility, Screen Recording) survive rebuilds, create a
-# self-signed code-signing cert in Keychain Access and export its name/SHA-1:
-#   SIGN_ID="My Cert Name" ./build-agent.sh
-# For a distributable build, use a Developer ID Application identity.
-# Use a stable signing identity so TCC grants survive rebuilds.
-# Check (in order): env override, any valid codesigning cert in Keychain, ad-hoc.
+# Code signing identity. TCC grants (Accessibility, Screen Recording) survive
+# rebuilds only when the bundle id and designated requirement stay stable.
+# Check (in order): env override, preferred local cert names, any valid
+# codesigning cert in Keychain, ad-hoc fallback.
 if [[ -z "${SIGN_ID:-}" ]]; then
-    EXISTING="$(security find-identity -v -p codesigning 2>/dev/null \
-        | grep -o '"[^"]*"' | head -1 | tr -d '"')"
+    EXISTING=""
+    for preferred in "Command" "ClaudeCommandDev"; do
+        EXISTING="$(security find-identity -v -p codesigning 2>/dev/null \
+            | grep "\"${preferred}\"" \
+            | grep -o '"[^"]*"' | head -1 | tr -d '"')"
+        [[ -n "$EXISTING" ]] && break
+    done
+    if [[ -z "$EXISTING" ]]; then
+        EXISTING="$(security find-identity -v -p codesigning 2>/dev/null \
+            | grep -o '"[^"]*"' | head -1 | tr -d '"')"
+    fi
     if [[ -n "$EXISTING" ]]; then
         SIGN_ID="$EXISTING"
         print -- "[agent] using keychain cert: $SIGN_ID"
@@ -145,6 +151,9 @@ fi
 codesign --force --sign "$SIGN_ID" --identifier "$BUNDLE_ID" "$APP" \
   && print -- "[agent] codesigned ($SIGN_ID)" \
   || { print -- "[agent] ERROR codesign failed (SIGN_ID=$SIGN_ID)"; exit 1; }
+
+REQ="$(codesign -dr - "$APP" 2>&1 | sed -n 's/^.*designated => /designated => /p')"
+[[ -n "$REQ" ]] && print -- "[agent] requirement $REQ"
 
 print -- "[agent] built: $APP"
 print -- "First run prompts for Accessibility for 'Command' — allow once, covers all hotkeys + keystrokes."

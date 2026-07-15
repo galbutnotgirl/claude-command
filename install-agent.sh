@@ -31,6 +31,15 @@ FRESH_INSTALL=false
 # while the bundle stays at the same path with the same identity → grants persist.
 mkdir -p "$INSTALL_DIR"
 if [ -d "$APP" ]; then
+old_req="$(codesign -dr - "$APP" 2>&1 | sed -n 's/^.*designated => //p')"
+new_req="$(codesign -dr - "$SRC_APP" 2>&1 | sed -n 's/^.*designated => //p')"
+if [[ -n "$old_req" && -n "$new_req" && "$old_req" != "$new_req" && "${COMMAND_ALLOW_TCC_IDENTITY_CHANGE:-0}" != "1" ]]; then
+  print -- "[agent] ERROR signing identity changed; install stopped to preserve macOS permissions"
+  print -- "[agent] old requirement: $old_req"
+  print -- "[agent] new requirement: $new_req"
+  print -- "[agent] Fix by signing with the same Command certificate, or set COMMAND_ALLOW_TCC_IDENTITY_CHANGE=1 to accept re-granting permissions."
+  exit 1
+fi
 rsync -a --delete "${SRC_APP}/" "${APP}/"
 if [ -d "$OLD_APP" ]; then
   rm -rf "$OLD_APP"
