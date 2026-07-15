@@ -14,24 +14,24 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     func install() { if !UserDefaults.standard.bool(forKey: "hideMenuBarIcon") { showIcon() } }
 
     func setRecording(_ on: Bool) {
-        statusItem?.length = on ? activeIconWidth : NSStatusItem.variableLength
+        statusItem?.length = statusIconWidth
         statusItem?.button?.image = on ? waveformIcon(level: 0) : brandIcon()
     }
 
     // Called ~15fps by DictationOverlay while recording; drives the reactive waveform icon.
     func updateAudioLevel(_ level: Float) {
-        statusItem?.length = activeIconWidth
+        statusItem?.length = statusIconWidth
         statusItem?.button?.image = waveformIcon(level: level)
     }
 
-    private var activeIconWidth: CGFloat { max(30, NSStatusBar.system.thickness * 1.35) }
+    private var statusIconWidth: CGFloat { max(24, NSStatusBar.system.thickness) }
 
     // Active recording state: compact solid-purple voice indicator.
     // White animated bars carry the motion; the shape stays close to macOS mic/camera
     // status icons without becoming a wide banner in the menu bar.
     private func waveformIcon(level: Float) -> NSImage {
         let h = NSStatusBar.system.thickness
-        let w = activeIconWidth
+        let w = statusIconWidth
         let img = NSImage(size: NSSize(width: w, height: h), flipped: false) { rect in
             let purple = NSColor(red: 0.44, green: 0.00, blue: 0.96, alpha: 1.0)
             let phase = CGFloat(Date().timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 0.96) / 0.96)
@@ -83,7 +83,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
 
     func showIcon() {
         guard statusItem == nil else { return }
-        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        let item = NSStatusBar.system.statusItem(withLength: statusIconWidth)
         if let btn = item.button { btn.image = brandIcon() }
         let menu = buildMenu()
         menu.delegate = self
