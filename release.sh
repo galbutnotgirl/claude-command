@@ -173,7 +173,7 @@ ZIP_LIST="$(unzip -Z1 "$ZIP" 2>/dev/null)"
 if print -r -- "$ZIP_LIST" | grep -Eq '(^|/)(\._|__MACOSX(/|$))'; then
   fail "packaged zip contains AppleDouble metadata files — release assets should not include ._* or __MACOSX entries."
 fi
-for internal_doc in STATUS.md RELEASE_CHECKLIST.md release.html ICON_TREATMENTS.md icon-treatments.html; do
+for internal_doc in STATUS.md RELEASE_CHECKLIST.md release.html ICON_TREATMENTS.md icon-treatments.html BACKGROUND_TRIGGER_INTEGRATION.md icon-treatment-bold-animated.svg icon-treatment-green-voice.svg icon-treatment-options-animated.svg icon-treatment-options.svg; do
   if print -r -- "$ZIP_LIST" | grep -qx "Command.app/Contents/Resources/docs/${internal_doc}"; then
     fail "packaged zip contains internal docs/${internal_doc} — release assets should bundle user documentation only."
   fi

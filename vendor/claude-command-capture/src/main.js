@@ -1,6 +1,6 @@
 'use strict';
 
-// ClaudeCommand — background capture to a Claude Code CLI skill.
+// Command — background capture to a Claude Code CLI skill.
 //
 // This app owns capture + handoff only: it grabs text / clipboard /
 // highlighted selection / screenshot, renders a prompt from the
@@ -52,7 +52,7 @@ async function handleCapture(source) {
     // snips gets discarded.
     const settings = loadSettings(dirs.base);
     if (!settings.skill || !settings.skill.trim()) {
-      notify('ClaudeCommand', 'No skill configured yet — opening Settings.');
+      notify('Command', 'No skill configured yet — opening Settings.');
       openSettings();
       return;
     }
@@ -83,10 +83,10 @@ function registerHotkeys(settings) {
     try {
       const ok = globalShortcut.register(accelerator, () => handleCapture(source));
       if (!ok) {
-        notify('ClaudeCommand', `Could not register hotkey "${accelerator}" (already in use?)`);
+        notify('Command', `Could not register hotkey "${accelerator}" (already in use?)`);
       }
     } catch (err) {
-      notify('ClaudeCommand', `Invalid hotkey "${accelerator}": ${err.message}`);
+      notify('Command', `Invalid hotkey "${accelerator}": ${err.message}`);
     }
   }
 }
@@ -125,7 +125,7 @@ function buildTrayMenu() {
     { label: 'Open Data Folder', click: () => shell.openPath(dirs.base) },
     { type: 'separator' },
     { label: 'Settings…', click: openSettings },
-    { label: 'Quit ClaudeCommand', click: () => app.quit() },
+    { label: 'Quit Command', click: () => app.quit() },
   ]);
 }
 
@@ -145,7 +145,7 @@ function createTray() {
   if (process.platform === 'darwin') icon.setTemplateImage(true);
 
   tray = new Tray(icon);
-  tray.setToolTip('ClaudeCommand — capture to a Claude Code skill');
+  tray.setToolTip('Command — capture to a Claude Code skill');
   rebuildTrayMenu();
   // Rebuild lazily so "Recent Submissions" is fresh when the menu opens.
   tray.on('click', rebuildTrayMenu);

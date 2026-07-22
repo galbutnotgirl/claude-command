@@ -31,8 +31,8 @@ function redactArgs(args) {
 // Convention for a structured result, with no per-call configuration needed:
 // if the prompt told claude -p to end its output with one line like
 // "TASK_ID=abc123" or "ERROR=reason" (a common contract for background/
-// unattended prompts — see docs/BACKGROUND_TRIGGER_INTEGRATION.md's Custom
-// Handoffs section), that line becomes the submission's `result`. Only the
+// unattended prompts — see docs/BACKGROUND_ACTIONS.md's Results And History
+// section), that line becomes the submission's `result`. Only the
 // last non-empty line is checked — a KEY=value pair buried in the middle of
 // prose isn't a result, it's the model talking about something.
 const RESULT_LINE = /^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/;

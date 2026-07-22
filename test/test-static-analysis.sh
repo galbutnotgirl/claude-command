@@ -78,5 +78,12 @@ else
   ok
 fi
 
+if git grep -n -E "ClaudeCommand Settings|notify\('ClaudeCommand'|Quit ClaudeCommand|setToolTip\('ClaudeCommand" \
+    -- vendor/claude-command-capture/src >/dev/null; then
+  bad "legacy ClaudeCommand label found in bundled background UI"
+else
+  ok
+fi
+
 printf '\nstatic analysis: %d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

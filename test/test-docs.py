@@ -102,7 +102,7 @@ REQUIRED_RELEASE_PATTERNS = [
     "built Info.plist bundle id",
     "LSMinimumSystemVersion",
     "built Info.plist minimum macOS",
-    "for internal_doc in STATUS.md RELEASE_CHECKLIST.md release.html ICON_TREATMENTS.md icon-treatments.html",
+    "for internal_doc in STATUS.md RELEASE_CHECKLIST.md release.html ICON_TREATMENTS.md icon-treatments.html BACKGROUND_TRIGGER_INTEGRATION.md icon-treatment-bold-animated.svg icon-treatment-green-voice.svg icon-treatment-options-animated.svg icon-treatment-options.svg",
     "packaged zip contains internal docs/${internal_doc}",
     "gh release create \"$TAG\" \"$ZIP\" \"$SHA256\"",
     "packaged zip missing bundled docs asset",
@@ -150,9 +150,12 @@ REQUIRED_PAGES_WORKFLOW_PATTERNS = [
 ]
 REQUIRED_TEST_WORKFLOW_PATTERNS = [
     "actions/checkout@v7",
+    "permissions:",
+    "contents: read",
     "actions/setup-node@v7",
     'node-version: "24"',
     "macos-14",
+    "timeout-minutes: 30",
     "maxim-lobanov/setup-xcode",
     "Swift unit tests",
     "swift test",
@@ -172,8 +175,12 @@ REQUIRED_TEST_WORKFLOW_PATTERNS = [
     "./test/test-static-analysis.sh",
     "Docs quality tests",
     "python3 ./test/test-docs.py",
+    "GitHub Pages quality tests",
+    "python3 ./test/test-pages.py",
     "String review round-trip tests",
     "python3 ./test/test_string_review.py",
+    "Repository whitespace checks",
+    "git diff --check",
     "Release asset smoke test",
     "./release.sh --skip-checks",
     "./test/test-release-asset.sh",
@@ -734,7 +741,7 @@ REQUIRED_TEXT = {
         "17 isolated release-transaction",
         "25 isolated install-state",
         "9 restart-handoff",
-        "72 static",
+        "73 static",
         "test/test-installed-runtime.sh",
         "python3 ./test/test-docs.py",
         "compact solid-purple voice-lines",
@@ -1636,7 +1643,7 @@ REQUIRED_TEXT = {
         "bundled docs/support.html missing feature requests sidebar anchor",
         "bundled docs/${linked_doc} missing sibling Security Policy link",
         "bundled docs/${linked_doc} still links outside bundled docs",
-        "for internal_doc in STATUS.md RELEASE_CHECKLIST.md release.html ICON_TREATMENTS.md icon-treatments.html",
+        "for internal_doc in STATUS.md RELEASE_CHECKLIST.md release.html ICON_TREATMENTS.md icon-treatments.html BACKGROUND_TRIGGER_INTEGRATION.md icon-treatment-bold-animated.svg icon-treatment-green-voice.svg icon-treatment-options-animated.svg icon-treatment-options.svg",
         "zip contains internal docs/${internal_doc}",
         "checksum file malformed",
         "bundled README.md missing neutral local-development wording",
@@ -2664,7 +2671,18 @@ def validate_build_agent_doc_assets(failures: list[str]) -> None:
 
 
 def validate_required_doc_assets_cover_docs_dir(failures: list[str]) -> None:
-    for name in ["STATUS.md", "RELEASE_CHECKLIST.md", "release.html", "ICON_TREATMENTS.md", "icon-treatments.html"]:
+    for name in [
+        "STATUS.md",
+        "RELEASE_CHECKLIST.md",
+        "release.html",
+        "ICON_TREATMENTS.md",
+        "icon-treatments.html",
+        "BACKGROUND_TRIGGER_INTEGRATION.md",
+        "icon-treatment-bold-animated.svg",
+        "icon-treatment-green-voice.svg",
+        "icon-treatment-options-animated.svg",
+        "icon-treatment-options.svg",
+    ]:
         if (ROOT / "docs" / name).exists():
             failures.append(f"docs/{name}: internal maintainer doc must live outside docs/")
     shareable_suffixes = {".html", ".md", ".css", ".txt", ".xml", ".svg"}

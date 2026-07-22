@@ -52,7 +52,7 @@ function showSettings({ baseDir, onSaved }) {
   settingsWindow = new BrowserWindow({
     width: 640,
     height: 720,
-    title: 'ClaudeCommand Settings',
+    title: 'Command Settings',
     show: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload-settings.js'),

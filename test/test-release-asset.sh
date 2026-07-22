@@ -46,7 +46,7 @@ if print -r -- "$ZIP_LIST" | grep -Eq '(^|/)(\._|__MACOSX(/|$)|\.DS_Store$|com\.
   fail "zip contains metadata junk (__MACOSX, .DS_Store, quarantine, or AppleDouble)"
 fi
 
-for internal_doc in STATUS.md RELEASE_CHECKLIST.md release.html ICON_TREATMENTS.md icon-treatments.html; do
+for internal_doc in STATUS.md RELEASE_CHECKLIST.md release.html ICON_TREATMENTS.md icon-treatments.html BACKGROUND_TRIGGER_INTEGRATION.md icon-treatment-bold-animated.svg icon-treatment-green-voice.svg icon-treatment-options-animated.svg icon-treatment-options.svg; do
   if print -r -- "$ZIP_LIST" | grep -qx "Command.app/Contents/Resources/docs/${internal_doc}"; then
     fail "zip contains internal docs/${internal_doc}"
   fi

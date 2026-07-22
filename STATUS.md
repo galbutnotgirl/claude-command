@@ -11,6 +11,10 @@ recent change if something in there needs undoing).
 
 ## Latest release hardening (2026-07-22)
 
+- GitHub test workflow now runs same Pages validator as local release preflight, enforces
+  read-only repository permissions, checks whitespace, and times out after 30 minutes.
+- Package and docs validators reject maintainer architecture plus icon-treatment experiments
+  from public bundles. Dormant vendored background UI now uses Command for every visible label.
 - Command no longer invokes external automation scripting. Notifications, browser URL context,
   clipboard image detection, and vendored background-core calls now use native AppKit,
   Accessibility, and Command's owner-only Unix socket. Static analysis prevents regressions.
@@ -170,7 +174,7 @@ detail — that doc is current as of alpha.6 and is the one to read before touch
 - **Test suites**: 143 Swift (`cd agent && swift test`), 58 Node
   (`cd vendor/claude-command-capture && node --test`), 61 shell (`./test/test-shell.sh`),
   15 isolated build-transaction, 17 isolated release-transaction, 25 isolated install-state,
-  11 updater rollback/restart, 9 restart-handoff, 7 release-policy, 72 static,
+  11 updater rollback/restart, 9 restart-handoff, 7 release-policy, 73 static,
   string-review, and docs
   validation checks. All green. Local release verification also checks current installed
   Claude/ChatGPT contracts. CI runs portable suites plus a macOS release-asset smoke test
