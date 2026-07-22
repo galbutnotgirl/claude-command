@@ -111,6 +111,7 @@ for required_resource in \
   send-to-claude-lib.sh \
   match-enrich-rule.py \
   clipwatch.py \
+  update-swap.sh \
   capture-handoff.sh \
   claude-command-capture/bin/submit-cli.js \
   claude-command-capture/src/submit.js \

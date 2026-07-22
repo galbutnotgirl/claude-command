@@ -7,7 +7,7 @@ set -uo pipefail
 
 DIR="${0:A:h}"
 LABEL="com.claudecommand"
-SRC_APP="${DIR}/Command.app"
+SRC_APP="${COMMAND_SOURCE_APP:-${DIR}/Command.app}"
 # Install to ~/Applications so macOS Login Items shows the correct app icon.
 # Apps outside /Applications or ~/Applications get a generic executable icon.
 INSTALL_DIR="${HOME}/Applications"
@@ -53,7 +53,9 @@ fi
 
 # Register with Launch Services so the app icon shows in System Settings privacy panes.
 LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/LaunchServices.framework/Versions/A/Support/lsregister"
-[ -x "$LSREGISTER" ] && "$LSREGISTER" -f "$APP" 2>/dev/null || true
+if [[ "${COMMAND_SKIP_LSREGISTER:-0}" != "1" ]]; then
+    [ -x "$LSREGISTER" ] && "$LSREGISTER" -f "$APP" 2>/dev/null || true
+fi
 
 mkdir -p "${HOME}/.claude/logs" "${HOME}/.claude/state"
 
@@ -77,6 +79,7 @@ sleep 0.2
 
 # Write the LaunchAgent plist. BIN is the absolute path so launchd resolves it
 # correctly regardless of what directory it was bootstrapped from.
+mkdir -p "${HOME}/Library/LaunchAgents"
 cat > "$PLIST" <<APLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -99,8 +102,10 @@ print -- "[agent] wrote ${PLIST}"
 launchctl bootstrap "gui/${UID_NUM}" "$PLIST"
 launchctl kickstart "gui/${UID_NUM}/${LABEL}"
 
-# Wait for socket (launchd-started instance binds it on startup).
-for _i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
+# Wait for socket (launchd-started instance binds it on startup). Tests can set
+# zero attempts while exercising install-state logic in an isolated HOME.
+SOCKET_WAIT_ATTEMPTS="${COMMAND_SOCKET_WAIT_ATTEMPTS:-15}"
+for (( _i = 0; _i < SOCKET_WAIT_ATTEMPTS; _i++ )); do
     [ -S "${HOME}/.claude/state/command-agent.sock" ] && break
     sleep 0.2
 done

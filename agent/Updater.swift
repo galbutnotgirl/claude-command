@@ -1,13 +1,12 @@
 // Updater.swift — check GitHub Releases for a newer build and install it.
 //
 // Flow:
-//   1. check()    → GET /repos/OWNER/REPO/releases/latest, compare tag to our
-//                   CFBundleShortVersionString. Surfaces "up to date" / "update
-//                   available" / "failed" without blocking the UI.
+//   1. check()    → GET release list, choose highest accepted SemVer for selected
+//                   channel, compare with CFBundleShortVersionString, and surface
+//                   "up to date" / "update available" / "failed" asynchronously.
 //   2. install()  → download the release's .app zip, hand off to a detached
 //                   swapper script that waits for us to quit, replaces the
-//                   installed bundle, strips the quarantine flag, and reopens.
-//                   The LaunchAgent's KeepAlive also relaunches us on exit.
+//                   installed bundle atomically, validates it again, and reopens.
 //
 // No third-party framework (Sparkle): the app is ad-hoc/locally signed and built
 // from source, so a plain Releases check keeps the trust model simple and the
@@ -130,6 +129,53 @@ func currentAppVersion() -> String {
     (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "0.0.0"
 }
 
+private let COMMAND_BUNDLE_ID = "com.claudecommand"
+
+func appDesignatedRequirement(at appPath: String) -> String? {
+    let result = runShell("/usr/bin/codesign", ["-dr", "-", appPath])
+    guard result.code == 0 else { return nil }
+    for line in result.out.components(separatedBy: .newlines) {
+        guard let marker = line.range(of: "designated => ") else { continue }
+        let requirement = line[marker.upperBound...].trimmingCharacters(in: .whitespacesAndNewlines)
+        if !requirement.isEmpty { return requirement }
+    }
+    return nil
+}
+
+private func validateUpdateBundle(
+    at appPath: String,
+    expectedVersion: String,
+    expectedRequirement: String
+) -> String? {
+    let infoPath = (appPath as NSString).appendingPathComponent("Contents/Info.plist")
+    guard let data = FileManager.default.contents(atPath: infoPath),
+          let info = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any]
+    else { return "Update app is missing valid bundle metadata." }
+
+    guard info["CFBundleIdentifier"] as? String == COMMAND_BUNDLE_ID else {
+        return "Update app has wrong bundle identifier."
+    }
+    guard info["CFBundleShortVersionString"] as? String == expectedVersion else {
+        return "Update app version does not match release metadata."
+    }
+    guard let executable = info["CFBundleExecutable"] as? String, !executable.isEmpty else {
+        return "Update app is missing executable metadata."
+    }
+    let executablePath = (appPath as NSString).appendingPathComponent("Contents/MacOS/\(executable)")
+    guard FileManager.default.isExecutableFile(atPath: executablePath) else {
+        return "Update app executable is missing."
+    }
+
+    let signature = runShell(
+        "/usr/bin/codesign",
+        ["--verify", "--deep", "--strict", "-R=\(expectedRequirement)", appPath]
+    )
+    guard signature.code == 0 else {
+        return "Update signature does not match installed Command app."
+    }
+    return nil
+}
+
 // ── Daily background check ──────────────────────────────────────────────────
 // Silent unless an update is actually available — then a system notification
 // points at Settings → About, same place the manual "Check for Updates"
@@ -191,13 +237,12 @@ final class Updater {
                       let arr = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
                     completion(.failed("Update check failed (HTTP \(http.statusCode)).")); return
                 }
-                // First release (list is newest-first) that this channel accepts
-                // and that isn't a draft.
-                let match = arr.first { rel in
-                    guard (rel["draft"] as? Bool) != true, let tag = rel["tag_name"] as? String
-                    else { return false }
-                    return channel.accepts.contains(UpdateChannel.of(tag: tag))
-                }
+                // GitHub sorts by publish time, not SemVer. Filter compatible
+                // channel releases, then choose highest version deterministically.
+                let published = arr.filter { ($0["draft"] as? Bool) != true }
+                let tags = published.compactMap { $0["tag_name"] as? String }
+                let newestTag = newestAcceptedReleaseTag(from: tags, channel: channel)
+                let match = published.first { ($0["tag_name"] as? String) == newestTag }
                 guard let rel = match, let tag = rel["tag_name"] as? String else {
                     completion(.failed("No \(channel.label) release published yet.")); return
                 }
@@ -259,19 +304,35 @@ final class Updater {
             // ditto -xk unzips; the archive should contain Command.app at top level.
             let unzipDir = work + "/extracted"
             let (_, code) = runShell("/usr/bin/ditto", ["-xk", zipPath, unzipDir])
-            guard code == 0,
-                  let appName = (try? FileManager.default.contentsOfDirectory(atPath: unzipDir))?
-                      .first(where: { $0.hasSuffix(".app") }) else {
+            let appNames = (try? FileManager.default.contentsOfDirectory(atPath: unzipDir))?
+                .filter { $0.hasSuffix(".app") } ?? []
+            guard code == 0, appNames == ["Command.app"] else {
                 DispatchQueue.main.async { done(false, "Update archive didn't contain an app bundle.") }
                 return
             }
-            let newApp = unzipDir + "/" + appName
+            let newApp = unzipDir + "/Command.app"
+            guard let requirement = appDesignatedRequirement(at: Bundle.main.bundlePath) else {
+                DispatchQueue.main.async { done(false, "Could not verify installed Command signing identity.") }
+                return
+            }
+            if let validationError = validateUpdateBundle(
+                at: newApp,
+                expectedVersion: info.latestVersion,
+                expectedRequirement: requirement
+            ) {
+                DispatchQueue.main.async { done(false, validationError) }
+                return
+            }
             DispatchQueue.main.async {
                 status("Installing… the app will restart.")
-                if self.handOffSwap(newApp: newApp) {
+                if self.handOffSwap(
+                    newApp: newApp,
+                    expectedVersion: info.latestVersion,
+                    expectedRequirement: requirement
+                ) {
                     done(true, "Updated to v\(info.latestVersion). Restarting…")
-                    // Give the message a beat to render, then quit so the swapper
-                    // (and the LaunchAgent KeepAlive) bring up the new build.
+                    // Successful exit does not trigger launchd's restart-on-failure
+                    // rule. Swapper reopens exactly once after verified replacement.
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { exit(0) }
                 } else {
                     done(false, "Couldn't start the installer.")
@@ -280,33 +341,31 @@ final class Updater {
         }.resume()
     }
 
-    // Write a detached swapper that waits for us to exit, replaces the installed
-    // bundle, clears the quarantine flag, and reopens. Returns false if it can't
-    // even be launched.
-    private func handOffSwap(newApp: String) -> Bool {
+    // Launch bundled detached swapper. Paths and signing requirement are argv,
+    // never interpolated into shell source. Helper restores prior bundle on any
+    // copy, metadata, executable, or signature failure.
+    private func handOffSwap(
+        newApp: String,
+        expectedVersion: String,
+        expectedRequirement: String
+    ) -> Bool {
         let pid = ProcessInfo.processInfo.processIdentifier
-        let script = """
-        #!/bin/zsh
-        # Detached updater swapper. Args are baked in below.
-        PID=\(pid)
-        NEW="\(newApp)"
-        DEST="\(INSTALL_PATH)"
-        # Wait (≤15s) for the running agent to quit so we can replace its bundle.
-        for i in {1..75}; do /bin/kill -0 $PID 2>/dev/null || break; sleep 0.2; done
-        /bin/rm -rf "$DEST.old"
-        if [ -d "$DEST" ]; then /bin/mv "$DEST" "$DEST.old"; fi
-        /usr/bin/ditto "$NEW" "$DEST"
-        /usr/bin/xattr -dr com.apple.quarantine "$DEST" 2>/dev/null
-        /bin/rm -rf "$DEST.old"
-        /usr/bin/open "$DEST"
-        """
-        let swapPath = NSTemporaryDirectory() + "claudecommand-swap.sh"
-        do { try script.write(toFile: swapPath, atomically: true, encoding: .utf8) }
-        catch { NSLog("[updater] could not write swapper: \(error)"); return false }
-        chmod(swapPath, 0o700)
+        guard let swapPath = Bundle.main.path(forResource: "update-swap", ofType: "sh") else {
+            NSLog("[updater] bundled update-swap.sh missing")
+            return false
+        }
         let p = Process()
         p.executableURL = URL(fileURLWithPath: "/bin/zsh")
-        p.arguments = [swapPath]
+        p.arguments = [
+            swapPath,
+            "\(pid)",
+            newApp,
+            INSTALL_PATH,
+            COMMAND_BUNDLE_ID,
+            expectedVersion,
+            expectedRequirement,
+            "1",
+        ]
         do { try p.run() } catch { NSLog("[updater] could not launch swapper: \(error)"); return false }
         return true
     }

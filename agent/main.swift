@@ -1922,12 +1922,42 @@ func offerMoveToApplicationsIfNeeded() -> Bool {
     guard alert.runModal() == .alertFirstButtonReturn else { return false }
 
     let destination = userApplications.appendingPathComponent("Command.app", isDirectory: true)
+    let staging = userApplications.appendingPathComponent(".Command.installing-\(UUID().uuidString).app", isDirectory: true)
+    let backup = userApplications.appendingPathComponent(".Command.previous-\(UUID().uuidString).app", isDirectory: true)
     do {
         try fm.createDirectory(at: userApplications, withIntermediateDirectories: true)
-        if fm.fileExists(atPath: destination.path) {
-            try fm.removeItem(at: destination)
+        try fm.copyItem(at: current, to: staging)
+
+        let signature = runShell("/usr/bin/codesign", ["--verify", "--deep", "--strict", staging.path])
+        guard signature.code == 0 else {
+            throw NSError(
+                domain: "CommandInstall",
+                code: 1,
+                userInfo: [NSLocalizedDescriptionKey: "Downloaded Command signature could not be verified."]
+            )
         }
-        try fm.copyItem(at: current, to: destination)
+
+        if fm.fileExists(atPath: destination.path) {
+            guard let existingRequirement = appDesignatedRequirement(at: destination.path),
+                  let incomingRequirement = appDesignatedRequirement(at: staging.path),
+                  existingRequirement == incomingRequirement else {
+                throw NSError(
+                    domain: "CommandInstall",
+                    code: 2,
+                    userInfo: [NSLocalizedDescriptionKey: "Downloaded Command signing identity does not match installed copy."]
+                )
+            }
+            try fm.moveItem(at: destination, to: backup)
+        }
+        do {
+            try fm.moveItem(at: staging, to: destination)
+        } catch {
+            if fm.fileExists(atPath: backup.path) {
+                try? fm.moveItem(at: backup, to: destination)
+            }
+            throw error
+        }
+        try? fm.removeItem(at: backup)
         NSWorkspace.shared.openApplication(
             at: destination,
             configuration: NSWorkspace.OpenConfiguration()
@@ -1935,6 +1965,10 @@ func offerMoveToApplicationsIfNeeded() -> Bool {
         NSApp.terminate(nil)
         return true
     } catch {
+        try? fm.removeItem(at: staging)
+        if !fm.fileExists(atPath: destination.path), fm.fileExists(atPath: backup.path) {
+            try? fm.moveItem(at: backup, to: destination)
+        }
         let failure = NSAlert()
         failure.alertStyle = .warning
         failure.messageText = "Command couldn't move itself"

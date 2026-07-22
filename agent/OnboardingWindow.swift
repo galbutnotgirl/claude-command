@@ -65,12 +65,21 @@ private enum OnboardingDefaultsKey {
 
 private func onboardingInitialStep() -> OnbStep {
     let defaults = UserDefaults.standard
-    guard defaults.bool(forKey: OnboardingDefaultsKey.primaryAssistantSelected) else { return .welcome }
-    guard axTrusted() else { return .accessibility }
-    guard screenRecordingOK() else { return .screenRecording }
-    guard defaults.bool(forKey: OnboardingDefaultsKey.microphoneStepCompleted) else { return .microphone }
-    guard defaults.bool(forKey: OnboardingDefaultsKey.clipboardStepCompleted) else { return .clipboard }
-    return .done
+    let progress = OnboardingProgress(
+        primaryAssistantSelected: defaults.bool(forKey: OnboardingDefaultsKey.primaryAssistantSelected),
+        accessibilityGranted: axTrusted(),
+        screenRecordingGranted: screenRecordingOK(),
+        microphoneStepCompleted: defaults.bool(forKey: OnboardingDefaultsKey.microphoneStepCompleted),
+        clipboardStepCompleted: defaults.bool(forKey: OnboardingDefaultsKey.clipboardStepCompleted)
+    )
+    switch progress.resumeStep {
+    case .welcome: return .welcome
+    case .accessibility: return .accessibility
+    case .screenRecording: return .screenRecording
+    case .microphone: return .microphone
+    case .clipboard: return .clipboard
+    case .done: return .done
+    }
 }
 
 // ---- root view --------------------------------------------------------------

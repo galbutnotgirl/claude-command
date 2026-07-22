@@ -27,6 +27,14 @@ final class UpdateLogicTests: XCTestCase {
     func testAlphaSuffixNumberStillComparesWithinSameBase() {
         XCTAssertTrue(versionGreater("1.2.0-alpha.2", "1.2.0-alpha.1"))
         XCTAssertFalse(versionGreater("1.2.0-alpha.1", "1.2.0-alpha.2"))
+        XCTAssertTrue(versionGreater("1.2.0-alpha.10", "1.2.0-alpha.2"))
+    }
+
+    func testStableAndBetaBeatLessStableBuildsAtSameCoreVersion() {
+        XCTAssertTrue(versionGreater("1.2.0", "1.2.0-beta.9"))
+        XCTAssertTrue(versionGreater("1.2.0-beta.1", "1.2.0-alpha.99"))
+        XCTAssertFalse(versionGreater("1.2.0-alpha.8", "1.2.0"))
+        XCTAssertFalse(versionGreater("1.2.0-alpha.8", "1.2.0-beta.1"))
     }
 
     // Regression guard for the isNewer fix in Updater.swift's check(): a
@@ -65,6 +73,18 @@ final class UpdateLogicTests: XCTestCase {
         XCTAssertTrue(UpdateChannel.beta.accepts.contains(.stable))
     }
 
+    func testNewestAcceptedReleaseUsesSemVerInsteadOfPublishOrder() {
+        let tags = ["v1.2.0-alpha.2", "v1.2.0", "v1.2.0-alpha.10", "v1.1.9"]
+        XCTAssertEqual(newestAcceptedReleaseTag(from: tags, channel: .alpha), "v1.2.0")
+        XCTAssertEqual(newestAcceptedReleaseTag(from: tags, channel: .stable), "v1.2.0")
+    }
+
+    func testNewestAcceptedReleaseHonorsChannel() {
+        let tags = ["v2.0.0-alpha.1", "v1.9.0-beta.2", "v1.8.0"]
+        XCTAssertEqual(newestAcceptedReleaseTag(from: tags, channel: .beta), "v1.9.0-beta.2")
+        XCTAssertEqual(newestAcceptedReleaseTag(from: tags, channel: .stable), "v1.8.0")
+    }
+
     // ---- Release assets --------------------------------------------------------
 
     func testDownloadableZipAssetSkipsChecksumAndChoosesAppZip() {
@@ -87,5 +107,12 @@ final class UpdateLogicTests: XCTestCase {
             browserDownloadURL: "https://example.com/Command-1.2.0-alpha.6.zip")
 
         XCTAssertNil(downloadableZipAsset(from: [renamedZip, misleadingURL]))
+    }
+
+    func testDownloadableZipAssetRejectsUnrelatedZip() {
+        let unrelated = ReleaseAssetInfo(
+            name: "debug-symbols.zip",
+            browserDownloadURL: "https://example.com/debug-symbols.zip")
+        XCTAssertNil(downloadableZipAsset(from: [unrelated]))
     }
 }

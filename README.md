@@ -180,6 +180,8 @@ It stops any running `Command`, builds `Command.app`, launches the fresh local b
 cd agent && swift test
 cd ../vendor/claude-command-capture && node --test
 cd ../.. && ./test/test-shell.sh
+./test/test-install-state.sh
+./test/test-updater-swap.sh
 python3 ./test/test-docs.py
 ./release.sh --skip-checks
 ./test/test-release-asset.sh

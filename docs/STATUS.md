@@ -8,6 +8,20 @@ Repo: `galbutnotgirl/command`. Current version: **1.2.0-alpha.8**
 (`git checkout checkpoint-before-trigger-refactor` rolls back to just before the biggest
 recent change if something in there needs undoing).
 
+## Latest release hardening (2026-07-21)
+
+- In-app updater now selects highest compatible SemVer, validates exact app name,
+  bundle ID, version, executable, code signature, and current designated signing
+  requirement before replacement, then repeats validation after copy.
+- Bundled `update-swap.sh` receives paths as arguments, preserves prior app, and rolls
+  back on copy, metadata, executable, version, or signature failure. Eight isolated
+  swap tests plus a real production-signature rehearsal pass.
+- Fresh/incremental installer test runs in isolated HOME. It found and fixed missing
+  `~/Library/LaunchAgents` directory creation; updates preserve onboarding and Clipboard
+  History preferences. Eight install-state tests pass.
+- Onboarding resume order is now pure core logic with tests for clean start, every
+  interrupted step, and stale later-step flags.
+
 ## What this app is
 
 A native macOS menu-bar agent (`agent/*.swift`, SwiftUI/AppKit, not Electron) that:

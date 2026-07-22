@@ -34,6 +34,12 @@ jobs:
       - name: Shell tests (prompt/context matching)
         run: ./test/test-shell.sh
 
+      - name: Fresh and incremental install state tests
+        run: ./test/test-install-state.sh
+
+      - name: Updater install and rollback tests
+        run: ./test/test-updater-swap.sh
+
       - name: Release signing policy tests
         run: ./test/test-release-policy.sh
 

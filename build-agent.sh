@@ -75,6 +75,14 @@ if [ -f "$CLIPWATCH" ]; then
   cp "$CLIPWATCH" "${APP}/Contents/Resources/clipwatch.py"
   print -- "[agent] bundled clipwatch.py"
 fi
+UPDATE_SWAPPER="${DIR}/update-swap.sh"
+if [ -f "$UPDATE_SWAPPER" ]; then
+  cp "$UPDATE_SWAPPER" "${APP}/Contents/Resources/update-swap.sh"
+  chmod +x "${APP}/Contents/Resources/update-swap.sh"
+  print -- "[agent] bundled update-swap.sh"
+else
+  print -- "[agent] ERROR missing update-swap.sh"; exit 1
+fi
 
 # Bundle end-user docs so About's docs buttons work before a release is pushed
 # and when the user is offline.

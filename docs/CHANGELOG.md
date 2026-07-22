@@ -12,6 +12,10 @@
 - Added Codex foreground existing/new-task delivery, configured workspace, screenshots, clipboard sends, dictation, popup, voice, and auto-submit paths.
 - Added provider-specific background settings and `codex exec -` delivery with image attachments, safe execution presets, provider-tagged history, retry, diagnostics, and schema-v2 migration.
 - Fresh installations default to ChatGPT with Recent as the destination; existing installations and provider-less records keep their saved assistant. Bundle ID and local support paths stay unchanged.
+- Hardened in-app updates: only `Command-*.zip` assets are accepted, extracted app metadata/version/signing identity are verified, replacement is staged, and failed copies or validation restore prior app automatically.
+- Fixed update ordering so stable beats beta and beta beats alpha at same version, and highest compatible SemVer is selected instead of newest publish timestamp.
+- Added isolated fresh/incremental install tests; fresh profiles now create a missing `~/Library/LaunchAgents` directory while updates preserve onboarding and Clipboard History preferences.
+- Added onboarding resume tests so interrupted setup returns to first incomplete permission or opt-in step without skipping required setup.
 
 ## 1.2.0-alpha.6
 
