@@ -10,6 +10,42 @@ import ClaudeCommandCore
 
 enum DictMode: Equatable { case insert, claude, claude2, customAction(actionID: String, triggerID: String) }
 
+// AVAudioEngine owns tap buffers and may reuse them as soon as its callback
+// returns. Deep-copy before crossing the AsyncStream boundary so transcription
+// always reads stable bytes owned by this session.
+private struct OwnedAudioBuffer: @unchecked Sendable {
+    let value: AVAudioPCMBuffer
+}
+
+private func copyAudioBuffer(_ source: AVAudioPCMBuffer) -> OwnedAudioBuffer? {
+    guard let copy = AVAudioPCMBuffer(
+        pcmFormat: source.format,
+        frameCapacity: source.frameLength
+    ) else { return nil }
+    copy.frameLength = source.frameLength
+
+    let sourceBuffers = UnsafeMutableAudioBufferListPointer(
+        UnsafeMutablePointer(mutating: source.audioBufferList)
+    )
+    let destinationBuffers = UnsafeMutableAudioBufferListPointer(copy.mutableAudioBufferList)
+    guard sourceBuffers.count == destinationBuffers.count else { return nil }
+
+    for index in 0..<sourceBuffers.count {
+        let byteCount = min(
+            Int(sourceBuffers[index].mDataByteSize),
+            Int(destinationBuffers[index].mDataByteSize)
+        )
+        guard byteCount == 0 || (
+            sourceBuffers[index].mData != nil && destinationBuffers[index].mData != nil
+        ) else { return nil }
+        if byteCount > 0 {
+            memcpy(destinationBuffers[index].mData, sourceBuffers[index].mData, byteCount)
+        }
+        destinationBuffers[index].mDataByteSize = UInt32(byteCount)
+    }
+    return OwnedAudioBuffer(value: copy)
+}
+
 // ─── Global recorder singleton ─────────────────────────────────────────────────
 // @MainActor: Recorder is @MainActor-isolated; annotation ensures init runs on main actor.
 
@@ -44,7 +80,7 @@ final class Recorder: ObservableObject {
     private var sessionID = 0
     private var stopRequestedDuringStart = false
     private var streamTask: Task<Void, Never>?
-    private var audioContinuation: AsyncStream<AVAudioPCMBuffer>.Continuation?
+    private var audioContinuation: AsyncStream<OwnedAudioBuffer>.Continuation?
     private var bufferFeederTask: Task<Void, Never>?
     private let stopTailPolicy = DEFAULT_DICTATION_STOP_TAIL_POLICY
     private var totalAudioSeconds: Double = 0
@@ -175,10 +211,10 @@ final class Recorder: ObservableObject {
             // so stop() can deterministically drain every enqueued buffer — including
             // the last 1-2 captured during the post-stop grace window below — instead
             // of guessing how long in-flight Tasks need to land.
-            let (bufStream, bufContinuation) = AsyncStream<AVAudioPCMBuffer>.makeStream()
+            let (bufStream, bufContinuation) = AsyncStream<OwnedAudioBuffer>.makeStream()
             self.audioContinuation = bufContinuation
             self.bufferFeederTask = Task {
-                for await buf in bufStream { await mgr.streamAudio(buf) }
+                for await buf in bufStream { await mgr.streamAudio(buf.value) }
                 self.log("buffer feeder drained")
             }
             inputNode.installTap(onBus: 0, bufferSize: 4096, format: hwFormat) { [weak self] buf, _ in
@@ -190,7 +226,11 @@ final class Recorder: ObservableObject {
                     let seconds = hwFormat.sampleRate > 0 ? Double(buf.frameLength) / hwFormat.sampleRate : 0
                     Task { @MainActor in self?.observeAudioFrame(rms: rms, seconds: seconds) }
                 }
-                bufContinuation.yield(buf)
+                if let ownedBuffer = copyAudioBuffer(buf) {
+                    bufContinuation.yield(ownedBuffer)
+                } else {
+                    Task { @MainActor in self?.log("audio buffer copy failed") }
+                }
             }
 
             do {

@@ -171,15 +171,18 @@ func runWorker(_ action: String, source: String, captured: String = "", customPr
     if customSession == "add" { env["CUSTOM_SESSION"] = "add" }
     if !customIncludeSource { env["CUSTOM_INCLUDE_SOURCE"] = "0" }
     if let builtInAutoSubmit { env["BUILTIN_AUTO_SUBMIT"] = builtInAutoSubmit ? "1" : "0" }
-    let effectiveProvider = provider ?? AIProvider(rawValue: settingsModel.defaultProvider) ?? .codex
-    let providerDefaultDestination = effectiveProvider == .claude ? settingsModel.claudeDestination : settingsModel.codexDestination
+    let effectiveProvider = provider ?? selectedProvider()
+    let providerDefaultDestination = effectiveProvider == .claude
+        ? (UserDefaults.standard.string(forKey: "claudeDestination") ?? "recent")
+        : (UserDefaults.standard.string(forKey: "codexDestination") ?? "recent")
     let requestedDestination = destination ?? providerDefaultDestination
     let effectiveDestination = effectiveProvider == .codex && requestedDestination == "cowork"
         ? providerDefaultDestination : requestedDestination
     env["CLAUDE_DESTINATION"] = effectiveDestination
     env["OPENAI_DESTINATION"] = effectiveDestination
     env["COMMAND_PROVIDER"] = effectiveProvider.rawValue
-    env["CODEX_WORKSPACE"] = settingsModel.codexWorkspace
+    let codexWorkspace = configuredCodexWorkspace()
+    env["CODEX_WORKSPACE"] = codexWorkspace
     p.environment = env
     let errPipe = Pipe()
     p.standardError = errPipe
@@ -193,12 +196,12 @@ func runWorker(_ action: String, source: String, captured: String = "", customPr
                 appendForegroundCommandHistory(action: action, source: source, destination: effectiveDestination,
                                                status: "failed", prompt: customPrompt.isEmpty ? nil : customPrompt,
                                                error: String(out.prefix(400)), provider: effectiveProvider,
-                                               workspace: effectiveProvider == .codex ? settingsModel.codexWorkspace : nil)
+                                               workspace: effectiveProvider == .codex ? codexWorkspace : nil)
             } else {
                 appendForegroundCommandHistory(action: action, source: source, destination: effectiveDestination,
                                                status: "succeeded", prompt: customPrompt.isEmpty ? nil : customPrompt,
                                                error: nil, provider: effectiveProvider,
-                                               workspace: effectiveProvider == .codex ? settingsModel.codexWorkspace : nil)
+                                               workspace: effectiveProvider == .codex ? codexWorkspace : nil)
             }
         }
     } catch {
@@ -206,7 +209,7 @@ func runWorker(_ action: String, source: String, captured: String = "", customPr
         appendForegroundCommandHistory(action: action, source: source, destination: effectiveDestination,
                                        status: "failed", prompt: customPrompt.isEmpty ? nil : customPrompt,
                                        error: String(describing: error), provider: effectiveProvider,
-                                       workspace: effectiveProvider == .codex ? settingsModel.codexWorkspace : nil)
+                                       workspace: effectiveProvider == .codex ? codexWorkspace : nil)
     }
 }
 
@@ -346,7 +349,11 @@ let CLAUDE_BUNDLE = "com.anthropic.claudefordesktop"
 let CODEX_BUNDLE = "com.openai.codex"
 
 func selectedProvider() -> AIProvider {
-    AIProvider(rawValue: settingsModel.defaultProvider) ?? .codex
+    AIProvider(rawValue: UserDefaults.standard.string(forKey: "defaultProvider") ?? "codex") ?? .codex
+}
+
+func configuredCodexWorkspace() -> String {
+    UserDefaults.standard.string(forKey: "codexWorkspace") ?? NSHomeDirectory()
 }
 
 func dictationAssistantProvider() -> AIProvider {
@@ -1058,7 +1065,7 @@ final class ClipPicker: NSObject, NSWindowDelegate {
             let bundle = provider.appBundleIdentifier
             if provider == .codex, let codex = codexExecutablePath() {
                 let p = Process(); p.executableURL = URL(fileURLWithPath: codex)
-                p.arguments = ["app", settingsModel.codexWorkspace]
+                p.arguments = ["app", configuredCodexWorkspace()]
                 try? p.run()
             } else { openBundle(bundle) }
             whenActive(bundle) {

@@ -110,11 +110,22 @@ struct HandoffConfig {
 // ClaudeCommandCore/HandoffModels.swift (unit-tested there); this file only
 // does the disk I/O.
 
-private let handoffISO: ISO8601DateFormatter = {
+private func makeHandoffISOFormatter(fractionalSeconds: Bool = true) -> ISO8601DateFormatter {
     let f = ISO8601DateFormatter()
-    f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    f.formatOptions = fractionalSeconds
+        ? [.withInternetDateTime, .withFractionalSeconds]
+        : [.withInternetDateTime]
     return f
-}()
+}
+
+private func parseHandoffDate(_ value: String) -> Date? {
+    makeHandoffISOFormatter().date(from: value)
+        ?? makeHandoffISOFormatter(fractionalSeconds: false).date(from: value)
+}
+
+private func formatHandoffDate(_ date: Date) -> String {
+    makeHandoffISOFormatter().string(from: date)
+}
 
 // limit: nil = every record (Settings > Command History); the menu bar passes a small
 // limit since it only ever shows the last few.
@@ -128,8 +139,8 @@ func loadHandoffSubmissions(limit: Int? = 8) -> [HandoffSubmission] {
               let id = d["id"] as? String else { continue }
         records.append(HandoffSubmission(
             id: id,
-            createdAt: handoffISO.date(from: d["createdAt"] as? String ?? "") ?? .distantPast,
-            finishedAt: (d["finishedAt"] as? String).flatMap { handoffISO.date(from: $0) },
+            createdAt: parseHandoffDate(d["createdAt"] as? String ?? "") ?? .distantPast,
+            finishedAt: (d["finishedAt"] as? String).flatMap(parseHandoffDate),
             source: d["source"] as? String ?? "?",
             kind: d["kind"] as? String ?? "text",
             skill: d["skill"] as? String,
@@ -172,7 +183,7 @@ func markHandoffSubmissionFailed(_ s: HandoffSubmission, reason: String = "Marke
           var d = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return }
     d["status"] = "failed"
     d["error"] = reason
-    d["finishedAt"] = handoffISO.string(from: Date())
+    d["finishedAt"] = formatHandoffDate(Date())
     guard let out = try? JSONSerialization.data(withJSONObject: d, options: [.prettyPrinted]) else { return }
     try? out.write(to: URL(fileURLWithPath: path), options: .atomic)
 }
@@ -225,8 +236,6 @@ func pruneHandoffSubmissions() -> Int {
     return removed
 }
 
-private var foregroundISO: ISO8601DateFormatter { handoffISO }
-
 func appendForegroundCommandHistory(action: String, source: String, destination: String,
                                     status: String, prompt: String?, error: String?,
                                     provider: AIProvider = .claude, workspace: String? = nil) {
@@ -235,7 +244,7 @@ func appendForegroundCommandHistory(action: String, source: String, destination:
     let id = UUID().uuidString.lowercased()
     var d: [String: Any] = [
         "id": id,
-        "createdAt": foregroundISO.string(from: Date()),
+        "createdAt": formatHandoffDate(Date()),
         "action": action,
         "source": source,
         "destination": destination,
@@ -259,7 +268,7 @@ func loadForegroundCommandHistory(limit: Int? = nil) -> [ForegroundCommandRecord
               let id = d["id"] as? String else { continue }
         records.append(ForegroundCommandRecord(
             id: id,
-            createdAt: foregroundISO.date(from: d["createdAt"] as? String ?? "") ?? .distantPast,
+            createdAt: parseHandoffDate(d["createdAt"] as? String ?? "") ?? .distantPast,
             action: d["action"] as? String ?? "?",
             source: d["source"] as? String ?? "?",
             destination: d["destination"] as? String ?? "code",

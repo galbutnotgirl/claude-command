@@ -15,6 +15,7 @@ cd ../.. && ./test/test-shell.sh
 ./test/test-install-state.sh
 ./test/test-updater-swap.sh
 ./test/test-release-policy.sh
+./test/test-static-analysis.sh
 python3 ./test/test-docs.py
 python3 ./test/test-pages.py
 python3 ./test/test_string_review.py
@@ -114,9 +115,13 @@ Preserve user settings for incremental tests. Use clean install only for onboard
 ## Current Evidence (2026-07-21)
 
 - Automated local suites: 124 Swift, 56 Node, 50 shell, 16 install-state, 8 updater,
-  7 release-policy, 2 string-review; docs, Pages, provider contract, and release asset pass.
+  7 release-policy, static syntax/configuration, and 2 string-review; docs, Pages, provider
+  contract, and release asset pass.
 - Cached-model streaming probe retains generated speech's distinctive final words after immediate
   stream drain and Parakeet `finish()`.
+- Microphone tap frames are deep-copied before crossing the async transcription stream, preventing
+  AVAudioEngine buffer reuse from changing audio while Parakeet reads it. Isolated strict-concurrency
+  diagnostics no longer report the recorder's non-Sendable buffer transfer.
 - Installed ChatGPT 26.707.72221 and Claude 1.24012.0 contract check passes 12/12:
   packaged shortcuts, live menus, and Claude Chat/Cowork/Code `/new` handlers match routes.
 - Installed Codex projectless route passed non-submitting live smoke test.
@@ -124,3 +129,7 @@ Preserve user settings for incremental tests. Use clean install only for onboard
   clean onboarding remain manual release gates.
 - Developer ID/notarization remains blocked until valid Apple signing identity and notary
   Keychain profile are available. Ad hoc signing cannot remove Gatekeeper download warning.
+- Full Swift 6 strict-concurrency migration remains post-release engineering work: current SDK
+  diagnostics still flag legacy AppKit globals/controllers even though normal Swift 5 release builds
+  and tests pass. Run strict diagnostics with a separate `--scratch-path` so flags do not pollute
+  normal SwiftPM products.

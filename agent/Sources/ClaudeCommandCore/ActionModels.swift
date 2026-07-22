@@ -6,7 +6,7 @@
 
 import Foundation
 
-public struct CommandAction {
+public struct CommandAction: Sendable {
     public let id: String      // worker ACTION value (also the hotkey-config "action")
     public let name: String    // display name
     public let detail: String  // one-line description

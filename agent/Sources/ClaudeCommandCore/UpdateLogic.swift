@@ -8,7 +8,7 @@ import Foundation
 // alpha = "vX.Y.Z-alpha.N". A channel sees its own builds AND everything more
 // stable (alpha -> alpha+beta+stable, beta -> beta+stable, stable -> stable only), so a
 // tester always lands on the newest build they've opted into.
-public enum UpdateChannel: String, CaseIterable {
+public enum UpdateChannel: String, CaseIterable, Sendable {
     case alpha
     case beta
     case stable = "prod"
@@ -83,7 +83,7 @@ public func versionGreater(_ a: String, _ b: String) -> Bool {
     }
 }
 
-public struct ReleaseAssetInfo: Equatable {
+public struct ReleaseAssetInfo: Equatable, Sendable {
     public var name: String
     public var browserDownloadURL: String
 

@@ -110,7 +110,7 @@ func securityAdvisoryURL() -> URL? {
     return URL(string: "https://github.com/\(GH_OWNER)/\(GH_REPO)/security/advisories/new")
 }
 
-struct UpdateInfo {
+struct UpdateInfo: Sendable {
     let latestVersion: String
     let currentVersion: String
     let isNewer: Bool
@@ -119,7 +119,7 @@ struct UpdateInfo {
     let notes: String
 }
 
-enum UpdateCheckResult {
+enum UpdateCheckResult: Sendable {
     case upToDate(current: String)
     case available(UpdateInfo)
     case failed(String)

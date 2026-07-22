@@ -18,7 +18,7 @@ import Foundation
 // {source} is auto-prepended at the top if you leave it out, so it still guides Claude
 // even in a template you haven't touched — same "use it if present, sensible fallback if
 // not" rule for both, rather than two different behaviors to remember.
-public struct TemplateVariable: Identifiable {
+public struct TemplateVariable: Identifiable, Sendable {
     public let token: String; public let label: String; public let detail: String
     public var id: String { token }
     public init(token: String, label: String, detail: String) {
@@ -36,7 +36,7 @@ public let TEMPLATE_VARIABLES: [TemplateVariable] = [
                       detail: "The raw source URL, if the source app had one — empty string otherwise."),
 ]
 
-public struct CommandTemplate: Identifiable, Equatable {
+public struct CommandTemplate: Identifiable, Equatable, Sendable {
     public let action: String   // "add" | "comment" | "go" plus screenshot aliases
     public var template: String
     public var id: String { action }
@@ -63,7 +63,7 @@ public let DEFAULT_COMMAND_TEMPLATES: [CommandTemplate] = [
 // "This came from Slack / a Google Doc / Gong" — the hint send-to-claude.sh feeds
 // Claude so it knows to pull the source thread/doc via the matching MCP.
 
-public enum EnrichMatchType: String, CaseIterable, Identifiable {
+public enum EnrichMatchType: String, CaseIterable, Identifiable, Sendable {
     case bundle   // exact app bundle ID, e.g. com.tinyspeck.slackmacgap
     case host     // URL host, glob-style ("*.atlassian.net")
     case app      // frontmost app display name, e.g. "Granola"
@@ -77,7 +77,7 @@ public enum EnrichMatchType: String, CaseIterable, Identifiable {
     }
 }
 
-public struct EnrichRule: Identifiable {
+public struct EnrichRule: Identifiable, Sendable {
     public let id = UUID()
     public var match: EnrichMatchType
     public var pattern: String     // supports * glob for host; exact match otherwise

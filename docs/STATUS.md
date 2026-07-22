@@ -1225,6 +1225,24 @@ detail — that doc is current as of alpha.6 and is the one to read before touch
 - **Release smoke install/build wording guard**: release asset validation now checks bundled
   README and Install Guide for neutral local-development wording and rejects Codex-specific
   build labels, so packaged docs cannot regress after source copy is fixed.
+- **Owned dictation audio frames**: Recorder now deep-copies every AVAudioEngine tap buffer before
+  yielding it across the async Parakeet feeder. Tap buffers can be reused after their callback;
+  retaining the original buffer let transcription race changing audio bytes and could contribute
+  to intermittent missing tail words. An isolated strict-concurrency build no longer flags this
+  recorder transfer, 124 Swift tests pass, and the cached-model probe retains `bright yellow lantern`.
+- **Background routing state isolation**: foreground workers now read provider, destination, and
+  Codex workspace from persisted UserDefaults rather than touching the SwiftUI SettingsModel from
+  background queues. Clipboard-to-Codex launch uses the same persisted workspace source.
+- **History timestamp concurrency safety**: command/background history no longer shares one mutable
+  ISO8601DateFormatter across queues. Each parse/format operation owns its formatter and accepts
+  both fractional and whole-second legacy timestamps.
+- **Swift 6 diagnostic baseline**: strict-concurrency compilation was run in a separate scratch
+  build. Pure models now conform to Sendable and the recorder buffer warning is gone; legacy AppKit
+  globals/controllers still produce actor-isolation diagnostics and remain a deliberate post-release
+  migration. Normal Swift 5 release builds and tests remain green.
+- **Tracked-file static gate**: CI and normal release preflight now parse every tracked shell,
+  Python, JavaScript, JSON, property-list, and YAML file with platform-native tools. Syntax or
+  configuration corruption now fails before packaging instead of surfacing in an installed build.
 
 ## Next up (roughly in the order they came up)
 
