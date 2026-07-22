@@ -30,6 +30,16 @@ With installed Claude and ChatGPT apps available:
 ./test/test-assistant-contract.sh
 ```
 
+With Command installed and running under launchd:
+
+```bash
+./test/test-installed-runtime.sh
+```
+
+This performs a 15-second idle soak with repeated socket pings and verifies stable PID, bounded
+open descriptors, no new crash reports, and no new fatal or SwiftUI cycle diagnostics. Override
+duration with `COMMAND_SOAK_SECONDS` for longer release-candidate runs.
+
 With Parakeet models cached on release Mac:
 
 ```bash
@@ -124,9 +134,11 @@ Preserve user settings for incremental tests. Use clean install only for onboard
 ## Current Evidence (2026-07-22)
 
 - Automated local suites: 138 Swift, 58 Node, 50 shell, 25 install-state, 11 updater,
-  7 release-policy, 65 static syntax/configuration, and 2 string-review; docs, Pages, provider
+  7 release-policy, 66 static syntax/configuration, and 2 string-review; docs, Pages, provider
   contract, and release asset pass.
 - All 138 Swift tests also pass independently under AddressSanitizer and ThreadSanitizer.
+- Installed `main@2317d29` passes a 60-second launchd/socket runtime soak with stable PID, 61/61
+  socket pings, bounded descriptors, no new crashes, and no newly emitted critical diagnostics.
 - Legacy top-level settings, action, template, context, and standalone vocabulary imports are
   detected by testable core logic; dated export filenames use a fixed POSIX calendar format.
 - Cached-model streaming probe retains generated speech's distinctive final words after immediate

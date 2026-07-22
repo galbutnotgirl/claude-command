@@ -740,6 +740,7 @@ REQUIRED_TEXT = {
         "58 Node",
         "50 shell",
         "25 isolated install-state",
+        "test/test-installed-runtime.sh",
         "python3 ./test/test-docs.py",
         "compact solid-purple voice-lines",
         "compact active width",

@@ -168,7 +168,7 @@ detail — that doc is current as of alpha.6 and is the one to read before touch
 
 - **Test suites**: 138 Swift (`cd agent && swift test`), 58 Node
   (`cd vendor/claude-command-capture && node --test`), 50 shell (`./test/test-shell.sh`),
-  25 isolated install-state, 11 updater rollback/restart, 7 release-policy, 65 static,
+  25 isolated install-state, 11 updater rollback/restart, 7 release-policy, 66 static,
   string-review, and docs
   validation checks. All green. Local release verification also checks current installed
   Claude/ChatGPT contracts. CI runs portable suites plus a macOS release-asset smoke test
@@ -176,6 +176,9 @@ detail — that doc is current as of alpha.6 and is the one to read before touch
   (`.github/workflows/test.yml`).
 - **Sanitizers**: all 138 Swift tests pass under both AddressSanitizer and ThreadSanitizer using
   isolated scratch directories.
+- **Installed runtime soak**: `test/test-installed-runtime.sh` repeatedly pings launchd-owned
+  Command and fails on PID changes, descriptor growth, new crash reports, fatal diagnostics, or
+  new SwiftUI AttributeGraph cycles. Current installed build passes 60 seconds with 61/61 pings.
 - **Dictation model integration**: `./test/test-dictation-model.sh` generates local speech,
   feeds it through Parakeet's streaming manager in 4096-frame buffers, and verifies its final
   phrase survives immediate stream completion. It runs on release Mac with cached models, not CI.
