@@ -45,6 +45,8 @@ python3 ./test/test_string_review.py
 
 For provider-routing changes, launch current Claude and ChatGPT builds and run `./test/test-assistant-contract.sh`. It reads their URL schemes and native menu shortcuts without creating or submitting conversations.
 
+Use [TEST_PLAN.md](TEST_PLAN.md) for full automated and manual release gates.
+
 ## Docs Changes
 
 User docs live in `docs/*.md` and rendered `docs/*.html`. Keep paired Markdown and HTML pages aligned when changing user-facing guidance.
