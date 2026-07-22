@@ -15,6 +15,9 @@ recent change if something in there needs undoing).
 - Dictation hotkey ownership, Fn-arrow navigation normalization, and one-time experimental
   default migration now live in testable core logic. Regression tests prove plain Left does
   not become Home and customized shortcuts are never overwritten by migration.
+- Incremental-install coverage now preserves custom actions, hotkeys, vocabulary, background
+  settings, Command History, and Clipboard History data, and rejects signing-identity changes
+  that would invalidate macOS privacy grants.
 - In-app updater now selects highest compatible SemVer, validates exact app name,
   bundle ID, version, executable, code signature, and current designated signing
   requirement before replacement, then repeats validation after copy.
@@ -139,7 +142,7 @@ detail — that doc is current as of alpha.6 and is the one to read before touch
 
 - **Test suites**: 121 Swift (`cd agent && swift test`), 56 Node
   (`cd vendor/claude-command-capture && node --test`), 47 shell (`./test/test-shell.sh`),
-  8 isolated install-state, 8 updater rollback, 7 release-policy, string-review, and docs
+  16 isolated install-state, 8 updater rollback, 7 release-policy, string-review, and docs
   validation checks. All green. Local release verification also checks current installed
   Claude/ChatGPT contracts. CI runs portable suites plus a macOS release-asset smoke test
   (`./release.sh --skip-checks` and `./test/test-release-asset.sh`) on push/PR

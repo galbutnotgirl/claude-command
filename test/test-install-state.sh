@@ -85,12 +85,35 @@ assert_contains "fresh install defaults Clipboard History off" "write com.claude
 assert_contains "fresh install clears onboarding completion" "delete com.claudecommand onboardingCompleted" "$FRESH_DEFAULTS"
 assert_contains "fresh install reports onboarding" "fresh install — onboarding will run on first launch" "$FRESH_OUTPUT"
 
+mkdir -p \
+  "$FAKE_HOME/.claude/state/cliphistory" \
+  "$FAKE_HOME/Library/Application Support/DictationLab" \
+  "$FAKE_HOME/Library/Application Support/claude-command/command-history"
+print 'custom-actions-sentinel' > "$FAKE_HOME/.claude/state/custom-actions.json"
+print 'hotkeys-sentinel' > "$FAKE_HOME/.claude/state/command-hotkeys.json"
+print 'vocabulary-sentinel' > "$FAKE_HOME/Library/Application Support/DictationLab/vocabulary.json"
+print 'background-settings-sentinel' > "$FAKE_HOME/Library/Application Support/claude-command/settings.json"
+print 'command-history-sentinel' > "$FAKE_HOME/Library/Application Support/claude-command/command-history/item.json"
+print 'clipboard-history-sentinel' > "$FAKE_HOME/.claude/state/cliphistory/index.json"
+
 : > "$DEFAULTS_LOG"
 INCREMENTAL_OUTPUT="$(run_install 1)"
 INCREMENTAL_DEFAULTS="$(cat "$DEFAULTS_LOG")"
 assert_contains "incremental install updates in place" "updated in-place" "$INCREMENTAL_OUTPUT"
 assert_not_contains "incremental install preserves onboarding" "delete com.claudecommand onboardingCompleted" "$INCREMENTAL_DEFAULTS"
 assert_not_contains "incremental install preserves Clipboard History preference" "write com.claudecommand cliphistoryEnabled" "$INCREMENTAL_DEFAULTS"
+assert_contains "incremental install preserves custom actions" "custom-actions-sentinel" "$(cat "$FAKE_HOME/.claude/state/custom-actions.json")"
+assert_contains "incremental install preserves hotkeys" "hotkeys-sentinel" "$(cat "$FAKE_HOME/.claude/state/command-hotkeys.json")"
+assert_contains "incremental install preserves vocabulary" "vocabulary-sentinel" "$(cat "$FAKE_HOME/Library/Application Support/DictationLab/vocabulary.json")"
+assert_contains "incremental install preserves background settings" "background-settings-sentinel" "$(cat "$FAKE_HOME/Library/Application Support/claude-command/settings.json")"
+assert_contains "incremental install preserves command history" "command-history-sentinel" "$(cat "$FAKE_HOME/Library/Application Support/claude-command/command-history/item.json")"
+assert_contains "incremental install preserves Clipboard History data" "clipboard-history-sentinel" "$(cat "$FAKE_HOME/.claude/state/cliphistory/index.json")"
+
+codesign --force --sign - --identifier com.example.different "$FAKE_HOME/Applications/Command.app" >/dev/null 2>&1
+MISMATCH_OUTPUT="$(run_install 1)"
+MISMATCH_STATUS=$?
+assert_true "incremental install rejects signing identity change" test "$MISMATCH_STATUS" -ne 0
+assert_contains "identity rejection explains permission protection" "install stopped to preserve macOS permissions" "$MISMATCH_OUTPUT"
 
 print -- ""
 print -- "install state tests: ${PASS} passed, ${FAIL} failed"
