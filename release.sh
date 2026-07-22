@@ -173,10 +173,12 @@ ZIP_LIST="$(unzip -Z1 "$ZIP" 2>/dev/null)"
 if print -r -- "$ZIP_LIST" | grep -Eq '(^|/)(\._|__MACOSX(/|$))'; then
   fail "packaged zip contains AppleDouble metadata files — release assets should not include ._* or __MACOSX entries."
 fi
-if print -r -- "$ZIP_LIST" | grep -qx "Command.app/Contents/Resources/docs/STATUS.md"; then
-  fail "packaged zip contains internal docs/STATUS.md — release assets should bundle shareable docs only."
-fi
-for required_doc in 404.html index.html install.html uninstall.html guide.html settings.html quick-reference.html examples.html faq.html changelog.html limitations.html updates.html permissions.html troubleshooting.html privacy.html support.html security.html icon-treatments.html background.html release.html site.css robots.txt sitemap.xml INSTALL.md UNINSTALL.md USER_GUIDE.md SETTINGS_REFERENCE.md QUICK_REFERENCE.md EXAMPLES.md FAQ.md CHANGELOG.md LIMITATIONS.md UPDATES.md PERMISSIONS.md TROUBLESHOOTING.md PRIVACY.md SUPPORT.md SECURITY.md ICON_TREATMENTS.md BACKGROUND_TRIGGER_INTEGRATION.md RELEASE_CHECKLIST.md icon-treatment-bold-animated.svg icon-treatment-green-voice.svg icon-treatment-options-animated.svg icon-treatment-options.svg; do
+for internal_doc in STATUS.md RELEASE_CHECKLIST.md release.html ICON_TREATMENTS.md icon-treatments.html; do
+  if print -r -- "$ZIP_LIST" | grep -qx "Command.app/Contents/Resources/docs/${internal_doc}"; then
+    fail "packaged zip contains internal docs/${internal_doc} — release assets should bundle user documentation only."
+  fi
+done
+for required_doc in 404.html index.html install.html uninstall.html guide.html settings.html quick-reference.html examples.html faq.html changelog.html limitations.html updates.html permissions.html troubleshooting.html privacy.html support.html security.html background.html site.css robots.txt sitemap.xml INSTALL.md UNINSTALL.md USER_GUIDE.md SETTINGS_REFERENCE.md QUICK_REFERENCE.md EXAMPLES.md FAQ.md CHANGELOG.md LIMITATIONS.md UPDATES.md PERMISSIONS.md TROUBLESHOOTING.md PRIVACY.md SUPPORT.md SECURITY.md BACKGROUND_ACTIONS.md; do
   print -r -- "$ZIP_LIST" | grep -qx "Command.app/Contents/Resources/docs/${required_doc}" \
     || fail "packaged zip missing bundled docs asset: docs/${required_doc}"
   cmp -s "${DIR}/docs/${required_doc}" <(unzip -p "$ZIP" "Command.app/Contents/Resources/docs/${required_doc}" 2>/dev/null) \

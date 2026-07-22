@@ -155,8 +155,8 @@ Background actions run local Claude CLI. Review prompts and CLI extra args befor
 | Screenshot fails | Grant Screen Recording, then restart Command. |
 | Dictation fails | Grant Microphone; download model in Dictation Settings. |
 | Claude opens wrong mode | Check global destination, action destination, trigger override. |
-| To-Do URL not captured | Select no text, use `Claude - To-Do` from Safari, Chrome, Brave, Chromium, or Arc, then check Command History -> Background. |
-| Background run fails | Open Command History -> Background, inspect log. |
+| To-Do URL not captured | Select no text, use `Claude - To-Do` from Safari, Chrome, Brave, Chromium, or Arc, then check Settings -> History. |
+| Background run fails | Open Settings -> History and inspect log. |
 
 For permission details and reset commands, see [PERMISSIONS.md](PERMISSIONS.md).
 

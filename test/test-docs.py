@@ -18,6 +18,9 @@ from urllib.parse import unquote
 ROOT = Path(__file__).resolve().parents[1]
 TRUST_MARKDOWN_FILES = [
     ROOT / "README.md",
+    ROOT / "RELEASE_CHECKLIST.md",
+    ROOT / "STATUS.md",
+    ROOT / "design" / "icon-treatments" / "README.md",
     ROOT / "SUPPORT.md",
     ROOT / "SECURITY.md",
     ROOT / "CONTRIBUTING.md",
@@ -43,9 +46,7 @@ REQUIRED_DOC_ASSETS = [
     "privacy.html",
     "support.html",
     "security.html",
-    "icon-treatments.html",
     "background.html",
-    "release.html",
     "site.css",
     "robots.txt",
     "sitemap.xml",
@@ -62,18 +63,12 @@ REQUIRED_DOC_ASSETS = [
     "PERMISSIONS.md",
     "TROUBLESHOOTING.md",
     "PRIVACY.md",
-    "RELEASE_CHECKLIST.md",
     "SUPPORT.md",
     "SECURITY.md",
-    "ICON_TREATMENTS.md",
-    "BACKGROUND_TRIGGER_INTEGRATION.md",
-    "icon-treatment-bold-animated.svg",
-    "icon-treatment-green-voice.svg",
-    "icon-treatment-options-animated.svg",
-    "icon-treatment-options.svg",
+    "BACKGROUND_ACTIONS.md",
 ]
 REQUIRED_BUNDLE_PATTERNS = [
-    "for doc_asset in 404.html index.html install.html uninstall.html guide.html settings.html quick-reference.html examples.html faq.html changelog.html limitations.html updates.html permissions.html troubleshooting.html privacy.html support.html security.html icon-treatments.html background.html release.html site.css robots.txt sitemap.xml INSTALL.md UNINSTALL.md USER_GUIDE.md SETTINGS_REFERENCE.md QUICK_REFERENCE.md EXAMPLES.md FAQ.md CHANGELOG.md LIMITATIONS.md UPDATES.md PERMISSIONS.md TROUBLESHOOTING.md PRIVACY.md SUPPORT.md SECURITY.md ICON_TREATMENTS.md BACKGROUND_TRIGGER_INTEGRATION.md RELEASE_CHECKLIST.md icon-treatment-bold-animated.svg icon-treatment-green-voice.svg icon-treatment-options-animated.svg icon-treatment-options.svg",
+    "for doc_asset in 404.html index.html install.html uninstall.html guide.html settings.html quick-reference.html examples.html faq.html changelog.html limitations.html updates.html permissions.html troubleshooting.html privacy.html support.html security.html background.html site.css robots.txt sitemap.xml INSTALL.md UNINSTALL.md USER_GUIDE.md SETTINGS_REFERENCE.md QUICK_REFERENCE.md EXAMPLES.md FAQ.md CHANGELOG.md LIMITATIONS.md UPDATES.md PERMISSIONS.md TROUBLESHOOTING.md PRIVACY.md SUPPORT.md SECURITY.md BACKGROUND_ACTIONS.md",
     "[agent] ERROR missing bundled docs asset: docs/${doc_asset}",
     'cp "${DOCS_SRC}/${doc_asset}" "${APP}/Contents/Resources/docs/"',
     'cp "$RESTART_HELPER" "${APP}/Contents/Resources/restart-app.sh"',
@@ -107,7 +102,8 @@ REQUIRED_RELEASE_PATTERNS = [
     "built Info.plist bundle id",
     "LSMinimumSystemVersion",
     "built Info.plist minimum macOS",
-    "packaged zip contains internal docs/STATUS.md",
+    "for internal_doc in STATUS.md RELEASE_CHECKLIST.md release.html ICON_TREATMENTS.md icon-treatments.html",
+    "packaged zip contains internal docs/${internal_doc}",
     "gh release create \"$TAG\" \"$ZIP\" \"$SHA256\"",
     "packaged zip missing bundled docs asset",
     "packaged zip missing bundled README.md",
@@ -129,7 +125,7 @@ REQUIRED_RELEASE_PATTERNS = [
     "Command.app/Contents/Resources/docs/${required_doc}",
     "Command.app/Contents/Resources/${required_resource}",
     "claude-command-capture/bin/submit-cli.js",
-    "404.html index.html install.html uninstall.html guide.html settings.html quick-reference.html examples.html faq.html changelog.html limitations.html updates.html permissions.html troubleshooting.html privacy.html support.html security.html icon-treatments.html background.html release.html site.css robots.txt sitemap.xml INSTALL.md UNINSTALL.md USER_GUIDE.md SETTINGS_REFERENCE.md QUICK_REFERENCE.md EXAMPLES.md FAQ.md CHANGELOG.md LIMITATIONS.md UPDATES.md PERMISSIONS.md TROUBLESHOOTING.md PRIVACY.md SUPPORT.md SECURITY.md ICON_TREATMENTS.md BACKGROUND_TRIGGER_INTEGRATION.md RELEASE_CHECKLIST.md icon-treatment-bold-animated.svg icon-treatment-green-voice.svg icon-treatment-options-animated.svg icon-treatment-options.svg",
+    "404.html index.html install.html uninstall.html guide.html settings.html quick-reference.html examples.html faq.html changelog.html limitations.html updates.html permissions.html troubleshooting.html privacy.html support.html security.html background.html site.css robots.txt sitemap.xml INSTALL.md UNINSTALL.md USER_GUIDE.md SETTINGS_REFERENCE.md QUICK_REFERENCE.md EXAMPLES.md FAQ.md CHANGELOG.md LIMITATIONS.md UPDATES.md PERMISSIONS.md TROUBLESHOOTING.md PRIVACY.md SUPPORT.md SECURITY.md BACKGROUND_ACTIONS.md",
 ]
 PAGES_WORKFLOW = ROOT / ".github/workflows/pages.yml"
 TEST_WORKFLOW = ROOT / ".github/workflows/test.yml"
@@ -331,28 +327,13 @@ HTML_MARKDOWN_PARITY = {
         "Command Checks",
         "Bug Reports",
     ],
-    ("docs/RELEASE_CHECKLIST.md", "docs/release.html"): [
-        "Version",
-        "Preflight",
-        "Publish",
-        "After Publish",
-        "Rollback",
-    ],
-    ("docs/ICON_TREATMENTS.md", "docs/icon-treatments.html"): [
-        "Current Recording Direction",
-        "Animated Previews",
-        "Options",
-        "Implementation Notes",
-    ],
-    ("docs/BACKGROUND_TRIGGER_INTEGRATION.md", "docs/background.html"): [
-        "Stack decision",
-        "Architecture",
-        "New pieces",
-        "Data layout & contract",
-        "Source mapping nuance",
-        "Using it",
-        "Native UI (agent/Handoff.swift + MenuBar.swift)",
-        "Background Custom Actions — building a structured background-prompt flow",
+    ("docs/BACKGROUND_ACTIONS.md", "docs/background.html"): [
+        "Before You Start",
+        "Configure A Provider",
+        "Create A Background Action",
+        "Prompt Inputs",
+        "Results And History",
+        "Troubleshooting",
     ],
     ("docs/CHANGELOG.md", "docs/changelog.html"): [
         "1.2.0-alpha.6",
@@ -409,8 +390,6 @@ REQUIRED_TEXT = {
         "ABOUT_HELP_DOCS",
         "validate_about_docs_reference_parity",
         "About docs label missing from",
-        "validate_release_checklist_about_docs_label_parity",
-        "release checklist About docs-button label missing",
         "validate_about_surface_label_parity",
         "About surface label missing",
         "validate_settings_sidebar_reference_parity",
@@ -428,6 +407,7 @@ REQUIRED_TEXT = {
         "build-agent.sh doc_asset list mismatch",
         "validate_required_doc_assets_cover_docs_dir",
         "REQUIRED_DOC_ASSETS missing shareable docs files",
+        "internal maintainer doc must live outside docs/",
         "validate_readme_docs_table_coverage",
         "README.md docs table missing public Markdown doc",
         "validate_readme_docs_table_label_parity",
@@ -576,6 +556,8 @@ REQUIRED_TEXT = {
         "cd agent && swift test",
         "cd ../vendor/claude-command-capture && node --test",
         "./test/test-shell.sh",
+        "./test/test-build-transaction.sh",
+        "./test/test-release-transaction.sh",
         "./test/test-install-state.sh",
         "./test/test-updater-swap.sh",
         "./test/test-restart-app.sh",
@@ -591,13 +573,13 @@ REQUIRED_TEXT = {
         "docs/QUICK_REFERENCE.md",
         "SUPPORT.md",
         "SECURITY.md",
-        "docs/RELEASE_CHECKLIST.md",
+        "RELEASE_CHECKLIST.md",
         "Claude Command",
         "Handoff History",
         "Templates",
         "local-first privacy behavior",
         "pull request template checklist",
-        "--skip-checks is only for local one-off packaging and CI packaging smoke tests",
+        "`--skip-checks` is only for local one-off packaging and CI packaging smoke tests",
     ],
     ".github/pull_request_template.md": [
         "## Summary",
@@ -680,9 +662,9 @@ REQUIRED_TEXT = {
         "mark-failed, retention, and parsed result",
         "Claude - To-Do",
         "Safari, Chrome, Brave, Chromium, and Arc send the current tab URL",
-        "Only the last non-empty stdout line is parsed",
+        "Only last non-empty stdout line is parsed",
         "prose containing <code>TASK_ID=abc123</code> does not count",
-        "Result text appears in the completion notification, Command History row, and diagnostic summary",
+        "Result text appears in completion notification, History row, and diagnostic summary",
         "<td>Stalled</td>",
         "updates.html",
         "troubleshooting.html",
@@ -744,7 +726,7 @@ REQUIRED_TEXT = {
         "GitHub",
         "Copy Diagnostic Info",
     ],
-    "docs/STATUS.md": [
+    "STATUS.md": [
         "143 Swift",
         "58 Node",
         "61 shell",
@@ -969,210 +951,51 @@ REQUIRED_TEXT = {
         "pgrep -fl Command",
         "install.html",
     ],
-    "docs/RELEASE_CHECKLIST.md": [
-        "404.html",
-        "install.html",
-        "uninstall.html",
-        "AppleDouble",
-        "STATUS.md",
-        ".zip.sha256",
-        "heading parity",
-        "About docs-button drift",
-        "docs-home coverage drift",
-        "README docs-table drift",
-        "Settings sidebar drift",
-        "local media assets",
-        "sidebar navigation links the full docs set",
-        "Find Your Path",
-        "install/update, configure prompts, write prompt text, use voice, run background actions, and fix/report",
-        "Settings -> About** docs button",
-        "User Guide",
-        "Install Guide",
-        "Uninstall",
-        "Settings Reference",
-        "Quick Reference",
-        "Troubleshooting",
-        "Support",
-        "Security Policy",
-        "Examples",
-        "FAQ",
-        "Updates",
-        "./test/test-assistant-contract.sh",
-        "Privacy",
-        "Changelog",
-        "Alpha Limitations",
-        "README.md",
-        "SUPPORT.md",
-        "SECURITY.md",
-        "CONTRIBUTING.md",
-        ".github/ISSUE_TEMPLATE/config.yml",
-        ".github/ISSUE_TEMPLATE/bug_report.md",
-        ".github/ISSUE_TEMPLATE/feature_request.md",
-        ".github/pull_request_template.md",
-        "GitHub repo surface opens",
-        "Feature request",
-        "Private security report",
-        "issue chooser routes install, troubleshooting, support, private security report, latest Alpha release, bug reports, and feature requests",
-        "Settings -> About** support action",
-        "Copy Diagnostic Info**, **Report a Bug**, and **Request Feature",
-        "public issue buttons open the right templates",
-        "public issue buttons open the right templates",
-        "Settings -> About -> GitHub",
-        "pull request template asks for user impact, docs parity, sensitive-report routing",
-        "issue-template/chooser parity",
-        "bundled-doc release smoke",
-        "updates.html",
-        "permissions.html",
-        "https://galbutnotgirl.github.io/command/updates.html",
-        "https://galbutnotgirl.github.io/command/permissions.html",
-        "troubleshooting.html",
-        "https://galbutnotgirl.github.io/command/troubleshooting.html",
-        "faq.html",
-        "permissions.html",
-        "PERMISSIONS.md",
-        "privacy.html",
-        "PRIVACY.md",
-        "support.html",
-        "icon-treatments.html",
-        "background.html",
-        "release.html",
-        ".zip.sha256",
-        "./test/test-release-asset.sh",
-        "byte-for-byte current with source",
-        "including `PRIVACY.md` and `SECURITY.md`",
-        "minimum macOS metadata is `14.0`",
-        "minimum macOS `14.0`",
-        "packaged executable exists and is executable",
-        "codesign metadata identifies `com.claudecommand`",
-        "stale bundled docs",
-        "required runtime resources",
-        "VERSION=\"$(cat ../VERSION)\"",
-        "shasum -a 256 -c \"Command-<version>.zip.sha256\"",
-        "unzip -l \"Command-<version>.zip\"",
-        "no matches and exit 1",
-        "sitemap.xml",
-        "robots.txt",
-        "canonical GitHub Pages base",
-        "old `/claude-command/` Pages path",
-        "redirect-only to `/command/`",
-        "Download Alpha",
-        "latest GitHub Release",
-        "https://github.com/galbutnotgirl/command/releases/latest",
-        "not the generic releases list",
-    ],
-    "docs/release.html": [
-        "every shareable bundled docs asset",
-        "required runtime resources",
-        "AppleDouble",
-        "STATUS.md",
-        ".sha256",
-        "swift test",
-        "node --test",
-        "./test/test-shell.sh",
+    "RELEASE_CHECKLIST.md": [
+        "Maintainer-only checklist",
+        "Version",
+        "Preflight",
+        "./test/test-build-transaction.sh",
+        "./test/test-release-transaction.sh",
         "./test/test-install-state.sh",
         "./test/test-updater-swap.sh",
         "./test/test-restart-app.sh",
+        "./test/test-release-policy.sh",
+        "./test/test-static-analysis.sh",
         "python3 ./test/test-docs.py",
-        "./release.sh --publish --notarize --notes=\"Short release notes here.\"",
-        "rendered HTML structure",
-        "heading parity",
-        "About docs-button drift",
-        "docs-home coverage drift",
-        "README docs-table drift",
-        "Settings sidebar drift",
-        "local media assets",
-        "sidebar navigation links the full docs set",
-        "Find Your Path",
-        "install/update, configure prompts, write prompt text, use voice, run background actions, and fix/report",
-        "Download Alpha",
-        "latest GitHub Release",
-        "canonical GitHub Pages base",
-        "old <code>/claude-command/</code> Pages path",
-        "redirect-only to <code>/command/</code>",
-        "https://github.com/galbutnotgirl/command/releases/latest",
-        "not the generic releases list",
-        "--skip-checks",
-        "./test/test-release-asset.sh",
+        "python3 ./test/test-pages.py",
+        "python3 ./test/test_string_review.py",
+        "./test/test-assistant-contract.sh",
+        "AppleDouble",
+        "STATUS.md",
+        ".zip.sha256",
+        "required runtime resources",
         "byte-for-byte current with source",
-        "including <code>PRIVACY.md</code> and <code>SECURITY.md</code>",
-        "minimum macOS metadata <code>14.0</code>",
-        "minimum macOS <code>14.0</code>",
-        "packaged executable exists and is executable",
-        "codesign metadata identifies <code>com.claudecommand</code>",
-        "stale bundled docs",
-        "https://github.com/galbutnotgirl/command/blob/main/SUPPORT.md",
-        "https://github.com/galbutnotgirl/command/blob/main/CONTRIBUTING.md",
-        "https://github.com/galbutnotgirl/command/issues/new?template=bug_report.md",
-        "https://github.com/galbutnotgirl/command/issues/new?template=feature_request.md",
-        "Manual spot checks",
-        "VERSION=\"$(cat ../VERSION)\"",
-        "shasum -a 256 -c \"Command-&lt;version&gt;.zip.sha256\"",
-        "unzip -l \"Command-&lt;version&gt;.zip\"",
-        "no matches and exit 1",
-        "install.html",
-        "uninstall.html",
-        "Settings -> About</strong> support action",
-        "Copy Diagnostic Info</strong>, <strong>Report a Bug</strong>, and <strong>Request Feature",
-        "<strong>Security Policy</strong>",
-        "public issue buttons open the right templates",
-        "public issue buttons open the right templates",
-        "Settings -> About</strong> docs button",
-        "User Guide",
-        "Install Guide",
-        "Uninstall",
-        "Quick Reference",
-        "Examples",
-        "FAQ",
-        "Updates",
-        "Privacy",
-        "Changelog",
-        "README.md",
-        "SUPPORT.md",
-        "SECURITY.md",
-        "CONTRIBUTING.md",
-        "issue chooser config",
-        "bug report template",
-        "Feature request",
-        "pull request template",
-        "GitHub repo surface opens",
-        "Private security report",
-        "issue chooser routes install, troubleshooting, support, private security report, latest Alpha release, bug reports, and feature requests",
-        "pull request template asks for user impact, docs parity, sensitive-report routing",
-        "issue-template/chooser parity",
-        "bundled-doc release smoke",
-        "404 fallback",
-        "sitemap.xml",
-        "robots.txt",
-        "faq.html",
-        "privacy.html",
-        "PRIVACY.md",
-        "support.html",
-        "icon-treatments.html",
-        "background.html",
-        "release.html",
-        "background architecture",
-        "release checklist",
+        "minimum macOS metadata is `14.0`",
+        "codesign metadata identifies `com.claudecommand`",
+        "Publish",
+        "Developer ID Application",
+        "--publish --notarize",
+        "Gatekeeper",
+        "After Publish",
+        "Website",
+        "Docs",
+        "GitHub",
+        "Copy Diagnostic Info",
+        "Report a Bug",
+        "Request Feature",
+        "Rollback",
     ],
-    "docs/ICON_TREATMENTS.md": [
+    "design/icon-treatments/README.md": [
+        "Command Icon Treatment Archive",
+        "Maintainer design archive",
         "Current Recording Direction",
-        "System mic/camera beacon",
-        "compact solid-purple voice-lines icon",
-        "agent/MenuBar.swift",
-    ],
-    "docs/icon-treatments.html": [
-        "<title>Command Icon Treatments</title>",
-        'href="#current-recording-direction"',
-        '<section id="current-recording-direction">',
-        'href="#animated-previews"',
-        '<section id="animated-previews">',
-        'href="#options"',
-        '<section id="options">',
-        'href="#implementation-notes"',
-        '<section id="implementation-notes">',
+        "Animated Previews",
         "icon-treatment-bold-animated.svg",
-        "System mic/camera beacon",
-        "compact solid-purple voice-lines icon",
-        "White mic-style badge",
+        "icon-treatment-green-voice.svg",
+        "icon-treatment-options-animated.svg",
+        "icon-treatment-options.svg",
+        "Implementation Notes",
         "agent/MenuBar.swift",
     ],
     "docs/PERMISSIONS.md": [
@@ -1227,7 +1050,7 @@ REQUIRED_TEXT = {
         "mark-failed, retention, and parsed result",
         "Only the last non-empty stdout line is parsed",
         "prose containing `TASK_ID=abc123` does not count",
-        "Result text appears in the completion notification, Command History row, and diagnostic summary",
+        "Result text appears in completion notification, History row, and diagnostic summary",
         "| Stalled | Record stayed running after process likely died.",
         "For vulnerabilities, exposed secrets, private logs, or sensitive diagnostics",
         "Security Policy",
@@ -1247,7 +1070,7 @@ REQUIRED_TEXT = {
         "Fresh defaults use F8/Command-F8",
         "Built-in Dictate shortcuts live in **Dictation Settings**",
         "voice prompt triggers live in **Shortcut Settings**",
-        "Also check **Background Settings**",
+        "Also check **Settings -> Background**",
         "Why did Claude - To-Do send text instead of the URL?",
         "Right-click Services prefer highlighted text",
         "Why do some local paths still say `claude-command`?",
@@ -1266,7 +1089,7 @@ REQUIRED_TEXT = {
         "id=\"updates\"",
         "updates.html",
         ".zip.sha256",
-        "Also check <strong>Background Settings</strong>",
+        "Also check <strong>Settings -&gt; Background</strong>",
         "Why did Claude - To-Do send text instead of the URL?",
         "Right-click Services prefer highlighted text",
         "Why do some local paths still say <code>claude-command</code>?",
@@ -1308,18 +1131,19 @@ REQUIRED_TEXT = {
         "Background actions use local",
     ],
     "docs/background.html": [
-        "Command is a native macOS menu-bar app, not Electron",
-        "CLAUDE_CAPTURE_HOME",
-        "~/.claude/state/command-hotkeys.json",
-        "source: \"selection\"",
-        "Settings -> Command History -> Background Settings",
-        "Settings -> Shortcuts -> Custom Actions",
-        "CustomActionTextEntryPanel",
-        "TASK_ID=&lt;id&gt;",
-        "ERROR=&lt;reason&gt;",
-        "last non-empty line is parsed",
-        "does not run follow-up actions",
-        "vendor/claude-command-capture/docs/HANDOFF.md",
+        "<title>Command Background Actions</title>",
+        "Settings -&gt; Background",
+        "Claude CLI",
+        "Codex CLI",
+        "Read-only",
+        "Settings -&gt; Shortcut Settings",
+        "Claude</strong>, <strong>ChatGPT</strong>, or <strong>Default",
+        "Destination and auto-submit do not apply",
+        "{selection}",
+        "Settings -&gt; History",
+        "TASK_ID=abc123",
+        "does not run another action",
+        "BACKGROUND_ACTIONS.md",
     ],
     "docs/QUICK_REFERENCE.md": [
         "Screenshot -> New conversation + auto-submit",
@@ -1765,7 +1589,7 @@ REQUIRED_TEXT = {
     "test/test-release-asset.sh": [
         "release asset ok",
         "Command.app/Contents/Resources/docs/${required_doc}",
-        "BACKGROUND_TRIGGER_INTEGRATION.md",
+        "BACKGROUND_ACTIONS.md",
         "security.html",
         "SECURITY.md",
         "Command.app/Contents/Resources/README.md",
@@ -1800,7 +1624,6 @@ REQUIRED_TEXT = {
         "The identifier remains <code>com.claudecommand</code>",
         "Why do some local paths still say <code>claude-command</code>",
         "command-export-",
-        "missing Feature request repo-surface check",
         "bundled docs/index.html missing auto-submit FAQ wording",
         "bundled docs/index.html still has stale Go behavior wording",
         "bundled docs/index.html missing neutral local-development wording",
@@ -1809,12 +1632,12 @@ REQUIRED_TEXT = {
         "bundled docs/404.html missing current FAQ card wording",
         "bundled docs/404.html still has rough missing-links preview wording",
         "bundled docs/updates.html missing rename compatibility sidebar anchor",
-        "bundled docs/release.html missing old Pages redirect guidance",
         "bundled docs/security.html missing local data scope sidebar anchor",
         "bundled docs/support.html missing feature requests sidebar anchor",
         "bundled docs/${linked_doc} missing sibling Security Policy link",
         "bundled docs/${linked_doc} still links outside bundled docs",
-        "zip contains internal docs/STATUS.md",
+        "for internal_doc in STATUS.md RELEASE_CHECKLIST.md release.html ICON_TREATMENTS.md icon-treatments.html",
+        "zip contains internal docs/${internal_doc}",
         "checksum file malformed",
         "bundled README.md missing neutral local-development wording",
         "bundled README.md still has Codex-specific local-development wording",
@@ -1940,27 +1763,17 @@ FORBIDDEN_TEXT = {
         "./build-agent.sh\n./build-helper.sh\n./install-agent.sh",
         "For local Codex development",
     ],
-    "docs/BACKGROUND_TRIGGER_INTEGRATION.md": [
-        "Background Trigger integration",
-        "Menu bar -> Command History -> Background Settings",
-        "Command History **menu bar** submenu",
-        "Text / Screenshot / Popup",
-        "**prompt template**",
-        "prompt templates",
-        "Prompt template",
-        "skill/prompt template",
-        "every handoff (Custom or Text)",
+    "docs/BACKGROUND_ACTIONS.md": [
+        "maintainer-oriented",
+        "Stack decision",
+        "vendor/claude-command-capture",
+        "Settings -> Command History -> Background Settings",
     ],
     "docs/background.html": [
-        "Background Trigger integration",
-        "prompt templates",
-        "every handoff (Custom or Text)",
-    ],
-    "docs/RELEASE_CHECKLIST.md": [
-        "[Uninstall Guide]",
-    ],
-    "docs/release.html": [
-        ">Uninstall Guide<",
+        "maintainer-oriented",
+        "Stack decision",
+        "vendor/claude-command-capture",
+        "Settings -&gt; Command History -&gt; Background Settings",
     ],
     "agent/MenuBar.swift": [
         "Command History",
@@ -2153,6 +1966,7 @@ GENERIC_RELEASE_URL = re.compile(r"https://github\.com/galbutnotgirl/command/rel
 RAW_URL = re.compile(r"https?://[^\s)>\\]]+")
 SITEMAP_LOC = re.compile(r"<loc>([^<]+)</loc>")
 PAGES_BASE_URL = "https://galbutnotgirl.github.io/command/"
+SUPPLEMENTAL_PUBLIC_PAGES = ["background.html"]
 OLD_PUBLIC_URLS = [
     "https://galbutnotgirl.github.io/claude-command",
     "https://github.com/galbutnotgirl/claude-command",
@@ -2557,7 +2371,7 @@ def validate_sitemap(failures: list[str]) -> None:
         return
     urls = set(SITEMAP_LOC.findall(sitemap.read_text(encoding="utf-8")))
     expected = {PAGES_BASE_URL}
-    for html in CORE_DOC_NAV_LINKS:
+    for html in [*CORE_DOC_NAV_LINKS, *SUPPLEMENTAL_PUBLIC_PAGES]:
         if html == "index.html":
             continue
         expected.add(f"{PAGES_BASE_URL}{html}")
@@ -2570,24 +2384,21 @@ def validate_sitemap(failures: list[str]) -> None:
 
 
 def validate_release_checklist_coverage(failures: list[str]) -> None:
-    release_md = (ROOT / "docs/RELEASE_CHECKLIST.md").read_text(encoding="utf-8")
-    release_html = (ROOT / "docs/release.html").read_text(encoding="utf-8")
+    release_md = (ROOT / "RELEASE_CHECKLIST.md").read_text(encoding="utf-8")
     for html in sorted((ROOT / "docs").glob("*.html")):
         if html.name in {"index.html", "404.html"}:
             continue
         if html.name not in release_md:
-            failures.append(f"docs/RELEASE_CHECKLIST.md: release checklist missing docs page: {html.name}")
-        if html.name not in release_html:
-            failures.append(f"docs/release.html: release checklist missing docs page: {html.name}")
+            failures.append(f"RELEASE_CHECKLIST.md: release checklist missing docs page: {html.name}")
 
 
 def validate_release_checklist_doc_label_parity(failures: list[str]) -> None:
     labels = list(CORE_DOC_NAV_LABELS.values()) + ["404 fallback"]
-    for rel in ["docs/RELEASE_CHECKLIST.md", "docs/release.html"]:
-        text = plain_topic((ROOT / rel).read_text(encoding="utf-8"))
-        for label in labels:
-            if label not in text:
-                failures.append(f"{rel}: release checklist missing docs label: {label}")
+    rel = "RELEASE_CHECKLIST.md"
+    text = plain_topic((ROOT / rel).read_text(encoding="utf-8"))
+    for label in labels:
+        if label not in text:
+            failures.append(f"{rel}: release checklist missing docs label: {label}")
 
 
 def validate_docs_home_coverage(failures: list[str]) -> None:
@@ -2662,15 +2473,6 @@ def validate_about_docs_reference_parity(failures: list[str]) -> None:
                 failures.append(f"{rel}: About docs label missing from Help & Documentation reference: {label}")
 
 
-def validate_release_checklist_about_docs_label_parity(failures: list[str]) -> None:
-    labels: list[str] = []
-    for rel in ["docs/RELEASE_CHECKLIST.md", "docs/release.html"]:
-        text = (ROOT / rel).read_text(encoding="utf-8")
-        for label in labels:
-            if label not in text:
-                failures.append(f"{rel}: release checklist About docs-button label missing: {label}")
-
-
 def validate_about_surface_label_parity(failures: list[str]) -> None:
     settings = (ROOT / "agent/SettingsWindow.swift").read_text(encoding="utf-8")
     for label in ABOUT_SUPPORT_LABELS + ABOUT_SECTION_LABELS + ["Check for Updates", "Import / Export"]:
@@ -2690,11 +2492,11 @@ def validate_about_surface_label_parity(failures: list[str]) -> None:
             if label not in text:
                 failures.append(f"{rel}: About surface label missing: {label}")
 
-    for rel in ["docs/RELEASE_CHECKLIST.md", "docs/release.html"]:
-        text = plain_topic((ROOT / rel).read_text(encoding="utf-8"))
-        for label in ABOUT_RELEASE_CHECK_LABELS:
-            if label not in text:
-                failures.append(f"{rel}: About surface label missing: {label}")
+    rel = "RELEASE_CHECKLIST.md"
+    text = plain_topic((ROOT / rel).read_text(encoding="utf-8"))
+    for label in ABOUT_RELEASE_CHECK_LABELS:
+        if label not in text:
+            failures.append(f"{rel}: About surface label missing: {label}")
 
 
 def validate_settings_sidebar_reference_parity(failures: list[str]) -> None:
@@ -2711,7 +2513,11 @@ def validate_settings_sidebar_reference_parity(failures: list[str]) -> None:
 
 
 def validate_svg_assets(failures: list[str]) -> None:
-    for path in sorted((ROOT / "docs").glob("*.svg")):
+    svg_paths = [
+        *sorted((ROOT / "docs").glob("*.svg")),
+        *sorted((ROOT / "design" / "icon-treatments").glob("*.svg")),
+    ]
+    for path in svg_paths:
         rel = path.relative_to(ROOT)
         try:
             root = ET.parse(path).getroot()
@@ -2753,12 +2559,7 @@ def validate_css_asset(failures: list[str]) -> None:
 
 
 def validate_markdown_source_links(failures: list[str]) -> None:
-    allowed_html_link_sources = {
-        ROOT / "docs/RELEASE_CHECKLIST.md",
-    }
     for md in sorted((ROOT / "docs").glob("*.md")):
-        if md in allowed_html_link_sources:
-            continue
         rel = md.relative_to(ROOT)
         for raw in MD_LINK.findall(md.read_text(encoding="utf-8")):
             if is_external(raw):
@@ -2863,12 +2664,14 @@ def validate_build_agent_doc_assets(failures: list[str]) -> None:
 
 
 def validate_required_doc_assets_cover_docs_dir(failures: list[str]) -> None:
-    ignored = {"STATUS.md"}
+    for name in ["STATUS.md", "RELEASE_CHECKLIST.md", "release.html", "ICON_TREATMENTS.md", "icon-treatments.html"]:
+        if (ROOT / "docs" / name).exists():
+            failures.append(f"docs/{name}: internal maintainer doc must live outside docs/")
     shareable_suffixes = {".html", ".md", ".css", ".txt", ".xml", ".svg"}
     actual = {
         path.name
         for path in (ROOT / "docs").iterdir()
-        if path.is_file() and path.suffix in shareable_suffixes and path.name not in ignored
+        if path.is_file() and path.suffix in shareable_suffixes
     }
     expected = set(REQUIRED_DOC_ASSETS)
     missing = sorted(actual - expected)
@@ -3117,7 +2920,7 @@ def main() -> int:
         text = path.read_text(encoding="utf-8")
         if path.suffix == ".html":
             validate_html_structure(path, text, failures)
-        if path.suffix == ".md" and path.parent == docs_dir and path.name not in {"SETTINGS_REFERENCE.md", "STATUS.md"}:
+        if path.suffix == ".md" and path.parent == docs_dir and path.name != "SETTINGS_REFERENCE.md":
             if "SETTINGS_REFERENCE.md" not in text and "Settings Reference" not in text:
                 failures.append(f"{rel}: Markdown doc should link to Settings Reference")
         for required in REQUIRED_TEXT.get(rel, []):
@@ -3214,7 +3017,6 @@ def main() -> int:
     validate_docs_home_repo_trust_routes(failures)
     validate_about_docs_button_coverage(failures)
     validate_about_docs_reference_parity(failures)
-    validate_release_checklist_about_docs_label_parity(failures)
     validate_about_surface_label_parity(failures)
     validate_settings_sidebar_reference_parity(failures)
     validate_svg_assets(failures)

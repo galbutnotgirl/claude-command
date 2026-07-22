@@ -46,11 +46,13 @@ if print -r -- "$ZIP_LIST" | grep -Eq '(^|/)(\._|__MACOSX(/|$)|\.DS_Store$|com\.
   fail "zip contains metadata junk (__MACOSX, .DS_Store, quarantine, or AppleDouble)"
 fi
 
-if print -r -- "$ZIP_LIST" | grep -qx "Command.app/Contents/Resources/docs/STATUS.md"; then
-  fail "zip contains internal docs/STATUS.md"
-fi
+for internal_doc in STATUS.md RELEASE_CHECKLIST.md release.html ICON_TREATMENTS.md icon-treatments.html; do
+  if print -r -- "$ZIP_LIST" | grep -qx "Command.app/Contents/Resources/docs/${internal_doc}"; then
+    fail "zip contains internal docs/${internal_doc}"
+  fi
+done
 
-for required_doc in 404.html index.html install.html uninstall.html guide.html settings.html quick-reference.html examples.html faq.html changelog.html limitations.html updates.html permissions.html troubleshooting.html privacy.html support.html security.html icon-treatments.html background.html release.html site.css robots.txt sitemap.xml INSTALL.md UNINSTALL.md USER_GUIDE.md SETTINGS_REFERENCE.md QUICK_REFERENCE.md EXAMPLES.md FAQ.md CHANGELOG.md LIMITATIONS.md UPDATES.md PERMISSIONS.md TROUBLESHOOTING.md PRIVACY.md SUPPORT.md SECURITY.md ICON_TREATMENTS.md BACKGROUND_TRIGGER_INTEGRATION.md RELEASE_CHECKLIST.md icon-treatment-bold-animated.svg icon-treatment-green-voice.svg icon-treatment-options-animated.svg icon-treatment-options.svg; do
+for required_doc in 404.html index.html install.html uninstall.html guide.html settings.html quick-reference.html examples.html faq.html changelog.html limitations.html updates.html permissions.html troubleshooting.html privacy.html support.html security.html background.html site.css robots.txt sitemap.xml INSTALL.md UNINSTALL.md USER_GUIDE.md SETTINGS_REFERENCE.md QUICK_REFERENCE.md EXAMPLES.md FAQ.md CHANGELOG.md LIMITATIONS.md UPDATES.md PERMISSIONS.md TROUBLESHOOTING.md PRIVACY.md SUPPORT.md SECURITY.md BACKGROUND_ACTIONS.md; do
   print -r -- "$ZIP_LIST" | grep -qx "Command.app/Contents/Resources/docs/${required_doc}" \
     || fail "missing bundled docs asset: docs/${required_doc}"
   if [ -f "${DIR}/docs/${required_doc}" ]; then
@@ -179,8 +181,6 @@ unzip -p "$ZIP" Command.app/Contents/Resources/docs/faq.html 2>/dev/null | grep 
   || fail "bundled docs/faq.html missing local-path compatibility answer"
 unzip -p "$ZIP" Command.app/Contents/Resources/docs/settings.html 2>/dev/null | grep -q "command-export-" \
   || fail "bundled docs/settings.html missing Command export filename"
-unzip -p "$ZIP" Command.app/Contents/Resources/docs/release.html 2>/dev/null | grep -q "Feature request" \
-  || fail "bundled docs/release.html missing Feature request repo-surface check"
 unzip -p "$ZIP" Command.app/Contents/Resources/docs/index.html 2>/dev/null | grep -Eqi "auto-submit (behavior|when)" \
   || fail "bundled docs/index.html missing auto-submit FAQ wording"
 unzip -p "$ZIP" Command.app/Contents/Resources/docs/index.html 2>/dev/null | grep -qv "Go behavior" \
@@ -197,8 +197,6 @@ unzip -p "$ZIP" Command.app/Contents/Resources/docs/404.html 2>/dev/null | grep 
   || fail "bundled docs/404.html still has rough missing-links preview wording"
 unzip -p "$ZIP" Command.app/Contents/Resources/docs/updates.html 2>/dev/null | grep -q 'href="#rename-compatibility"' \
   || fail "bundled docs/updates.html missing rename compatibility sidebar anchor"
-unzip -p "$ZIP" Command.app/Contents/Resources/docs/release.html 2>/dev/null | grep -q "redirect-only to <code>/command/</code>" \
-  || fail "bundled docs/release.html missing old Pages redirect guidance"
 unzip -p "$ZIP" Command.app/Contents/Resources/docs/security.html 2>/dev/null | grep -q 'href="#local-data-scope"' \
   || fail "bundled docs/security.html missing local data scope sidebar anchor"
 unzip -p "$ZIP" Command.app/Contents/Resources/docs/support.html 2>/dev/null | grep -q 'href="#feature-requests"' \

@@ -1,4 +1,6 @@
-# Command Background Architecture
+# Command Background Architecture (Maintainer Reference)
+
+Internal architecture record. Not bundled with Command or published as user documentation.
 
 ## Provider routing
 
@@ -145,8 +147,8 @@ render the same prompt, just captured differently. Delete a trigger with the row
 button (an action always needs at least one).
 
 The shared CLI config (command / working directory / extra args / notifications — applies to
-every background action, not per-action) lives in **Settings -> Command History -> Background
-Settings…**, editing `~/Library/Application Support/claude-command/settings.json`.
+every background action, not per-action) lives in **Settings -> Background**, editing
+`~/Library/Application Support/claude-command/settings.json`.
 
 ## Native UI (agent/Handoff.swift + MenuBar.swift)
 
@@ -157,7 +159,7 @@ Settings…**, editing `~/Library/Application Support/claude-command/settings.js
 - **`CustomActionTextEntryPanel`** — the popup trigger: floating panel, ⌘⏎ submits, Esc
   closes, title matches the action's name. One panel instance, re-shown/re-targeted per
   action rather than stacking a window per popup-kind action.
-- **Command History tab** (Settings -> Command History) — foreground commands plus every
+- **History tab** (Settings -> History) — foreground commands plus every
   background submission, filterable by
   status, with Retry (failed runs), a retention-days stepper (auto-deletes finished runs;
   default 7d, matches Clipboard History), and a "mark as failed" action for a run stuck at
@@ -199,7 +201,7 @@ contract, then acts on the result):
 
 3. **Permission flags** — a background run has no one at the keyboard to click through a
    permission prompt, so it needs a CLI invocation that doesn't stop and ask. That's
-   `cli.extraArgs` in `settings.json` (Settings -> Command History -> Background Settings…, or
+   `cli.extraArgs` in `settings.json` (Settings -> Background, or
    edit the file directly): add `--dangerously-skip-permissions` and, to scope what it can
    touch instead of trusting it with everything, `--allowedTools "Bash"` (or whatever
    MCP tools the prompt above actually needs, comma-separated). This is a global setting —

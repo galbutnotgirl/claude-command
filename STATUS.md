@@ -1,7 +1,8 @@
-# Command — Status Log
+# Command Maintainer Status Log
 
-Running log of what's been built, current state, and what's next. Written so a fresh
-agent (human or AI — Codex, Claude, whoever) can pick up this project cold. Update this
+Internal repo log, not bundled or published as user documentation. Running log of what's
+been built, current state, and what's next. Written so a fresh agent (human or AI — Codex,
+Claude, whoever) can pick up this project cold. Update this
 file at the end of any substantial work session; don't let it go stale.
 
 Repo: `galbutnotgirl/command`. Current version: **1.2.0-alpha.8**

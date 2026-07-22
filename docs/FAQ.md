@@ -4,7 +4,7 @@
 
 Choose **Default assistant** in **Settings -> Shortcuts**. Custom Actions and individual triggers can override it. Claude uses Recent/Chat/Cowork/Code destinations. ChatGPT uses Recent/Chat/Codex destinations inside the ChatGPT app, with Codex using your configured workspace. Set Up checks each app and CLI independently, and Command never silently falls back to another provider.
 
-For background delivery, open **Command History -> Background Settings**. Claude and Codex have separate command, working-directory, and argument settings. Codex defaults to read-only execution until you explicitly choose Workspace changes.
+For background delivery, open **Settings -> Background**. Claude and Codex have separate command, working-directory, and argument settings. Codex defaults to read-only execution until you explicitly choose Workspace changes.
 
 ## Why are auto-submit combinations unbound by default?
 
@@ -47,11 +47,11 @@ Command was previously named ClaudeCommand. Local support paths and the bundle i
 
 ## Why did a background action fail?
 
-Open **Settings -> Command History -> Background**, expand failed run, and inspect log. Also check **Background Settings** for CLI command, working directory, and extra args.
+Open **Settings -> History**, expand failed run, and inspect log. Also check **Settings -> Background** for CLI command, working directory, and extra args.
 
 ## Why did Claude - To-Do send text instead of the URL?
 
-Right-click Services prefer highlighted text. Clear the text selection first, then run **Claude - To-Do** from Safari, Chrome, Brave, Chromium, or Arc to send the current tab URL as a background action. Check **Command History -> Background** for the captured source.
+Right-click Services prefer highlighted text. Clear the text selection first, then run **Claude - To-Do** from Safari, Chrome, Brave, Chromium, or Arc to send the current tab URL as a background action. Check **Settings -> History** for the captured source.
 
 ## Why does dictation miss final words?
 

@@ -36,7 +36,7 @@ Background actions run local `claude -p`. Command does not control Claude CLI ac
 
 Structured `KEY=value` output is displayed in notifications and Command History. It does not run follow-up actions yet.
 
-See [BACKGROUND_TRIGGER_INTEGRATION.md](BACKGROUND_TRIGGER_INTEGRATION.md) for maintainer details.
+See [Background Actions](BACKGROUND_ACTIONS.md) for provider setup and troubleshooting.
 
 ## Updates
 

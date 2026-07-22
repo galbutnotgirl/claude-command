@@ -1,6 +1,6 @@
-# Command Release Checklist
+# Command Maintainer Release Checklist
 
-Use this before cutting an alpha, beta, or stable release.
+Maintainer-only checklist for cutting an alpha, beta, or stable release. This file is not bundled with Command or published on GitHub Pages.
 
 ## Version
 
@@ -13,8 +13,8 @@ Use this before cutting an alpha, beta, or stable release.
 | Stable | `v1.2.0` | Release |
 
 2. Update `VERSION`.
-3. Confirm shareable docs describe current defaults: [docs/index.html](index.html), [install.html](install.html), [uninstall.html](uninstall.html), [guide.html](guide.html), [settings.html](settings.html), [SETTINGS_REFERENCE.md](SETTINGS_REFERENCE.md), [quick-reference.html](quick-reference.html), [examples.html](examples.html), [faq.html](faq.html), [changelog.html](changelog.html), [limitations.html](limitations.html), [LIMITATIONS.md](LIMITATIONS.md), [updates.html](updates.html), [permissions.html](permissions.html), [PERMISSIONS.md](PERMISSIONS.md), [troubleshooting.html](troubleshooting.html), [privacy.html](privacy.html), [PRIVACY.md](PRIVACY.md), [support.html](support.html), [security.html](security.html), [SECURITY.md](SECURITY.md), [icon-treatments.html](icon-treatments.html), [background.html](background.html), [release.html](release.html), and [404.html](404.html).
-4. Confirm repo trust files are current: [README.md](../README.md), [SUPPORT.md](../SUPPORT.md), [SECURITY.md](../SECURITY.md), [CONTRIBUTING.md](../CONTRIBUTING.md), [.github/ISSUE_TEMPLATE/config.yml](../.github/ISSUE_TEMPLATE/config.yml), [.github/ISSUE_TEMPLATE/bug_report.md](../.github/ISSUE_TEMPLATE/bug_report.md), [.github/ISSUE_TEMPLATE/feature_request.md](../.github/ISSUE_TEMPLATE/feature_request.md), and [.github/pull_request_template.md](../.github/pull_request_template.md).
+3. Confirm shareable docs describe current defaults: [docs/index.html](docs/index.html), [install.html](docs/install.html), [uninstall.html](docs/uninstall.html), [guide.html](docs/guide.html), [settings.html](docs/settings.html), [SETTINGS_REFERENCE.md](docs/SETTINGS_REFERENCE.md), [quick-reference.html](docs/quick-reference.html), [examples.html](docs/examples.html), [faq.html](docs/faq.html), [changelog.html](docs/changelog.html), [limitations.html](docs/limitations.html), [LIMITATIONS.md](docs/LIMITATIONS.md), [updates.html](docs/updates.html), [permissions.html](docs/permissions.html), [PERMISSIONS.md](docs/PERMISSIONS.md), [troubleshooting.html](docs/troubleshooting.html), [privacy.html](docs/privacy.html), [PRIVACY.md](docs/PRIVACY.md), [support.html](docs/support.html), [security.html](docs/security.html), [SECURITY.md](docs/SECURITY.md), [background.html](docs/background.html), and [404.html](docs/404.html).
+4. Confirm repo trust files are current: [README.md](README.md), [SUPPORT.md](SUPPORT.md), [SECURITY.md](SECURITY.md), [CONTRIBUTING.md](CONTRIBUTING.md), [.github/ISSUE_TEMPLATE/config.yml](.github/ISSUE_TEMPLATE/config.yml), [.github/ISSUE_TEMPLATE/bug_report.md](.github/ISSUE_TEMPLATE/bug_report.md), [.github/ISSUE_TEMPLATE/feature_request.md](.github/ISSUE_TEMPLATE/feature_request.md), and [.github/pull_request_template.md](.github/pull_request_template.md).
 
 ## Preflight
 
@@ -24,6 +24,8 @@ Run:
 cd agent && swift test
 cd ../vendor/claude-command-capture && node --test
 cd ../.. && ./test/test-shell.sh
+./test/test-build-transaction.sh
+./test/test-release-transaction.sh
 ./test/test-install-state.sh
 ./test/test-updater-swap.sh
 ./test/test-restart-app.sh
@@ -97,7 +99,7 @@ For custom notes, append them to same release command:
 
 Publishing without notarization is blocked by default. `--allow-unnotarized` exists only as an explicit emergency override for alpha versions and leaves users with Gatekeeper warning. Never use override for beta or stable release.
 
-Normal release runs also execute `swift test`, `node --test`, `./test/test-shell.sh`, `./test/test-install-state.sh`, `./test/test-updater-swap.sh`, `./test/test-restart-app.sh`, `./test/test-release-policy.sh`, `./test/test-static-analysis.sh`, `python3 ./test/test-docs.py`, `python3 ./test/test-pages.py`, and `python3 ./test/test_string_review.py` before packaging, so app/core test failures, background runner failures, script regressions, fresh/incremental install-state regressions, updater copy/signature/rollback failures, restart handoff failures, signing/notarization policy regressions, tracked script/configuration syntax errors, broken docs links, metadata, rendered HTML structure, heading parity, shared CSS, local media assets, sitemap drift, docs-home coverage drift, README docs-table drift, Settings sidebar drift, About docs-button drift, stale bundled docs, missing bundled-doc guards, Pages install recovery regressions, or string review round-trip failures stop release. GitHub test workflow runs same suite plus `./release.sh --skip-checks` and `./test/test-release-asset.sh` as packaging smoke test on macOS. `--skip-checks` is only for local one-off packaging and CI packaging smoke tests.
+Normal release runs also execute `swift test`, `node --test`, `./test/test-shell.sh`, `./test/test-build-transaction.sh`, `./test/test-release-transaction.sh`, `./test/test-install-state.sh`, `./test/test-updater-swap.sh`, `./test/test-restart-app.sh`, `./test/test-release-policy.sh`, `./test/test-static-analysis.sh`, `python3 ./test/test-docs.py`, `python3 ./test/test-pages.py`, and `python3 ./test/test_string_review.py` before packaging. App/core failures, transactional build or package regressions, background runner failures, fresh/incremental install-state regressions, updater copy/signature/rollback failures, restart handoff failures, signing/notarization policy regressions, syntax errors, broken docs, or stale bundled assets stop release. GitHub test workflow runs same suite plus `./release.sh --skip-checks` and `./test/test-release-asset.sh` as packaging smoke test on macOS. `--skip-checks` is only for local one-off packaging and CI packaging smoke tests.
 
 ## After Publish
 
@@ -121,12 +123,10 @@ Normal release runs also execute `swift test`, `node --test`, `./test/test-shell
    - [Privacy](https://galbutnotgirl.github.io/command/privacy.html)
    - [Support](https://galbutnotgirl.github.io/command/support.html)
    - [Security Policy](https://galbutnotgirl.github.io/command/security.html)
-   - [Icon Treatments](https://galbutnotgirl.github.io/command/icon-treatments.html)
-   - [Background Architecture](https://galbutnotgirl.github.io/command/background.html)
-   - [Release Checklist](https://galbutnotgirl.github.io/command/release.html)
+   - [Background Actions](https://galbutnotgirl.github.io/command/background.html)
    - [404 fallback](https://galbutnotgirl.github.io/command/404.html)
 5. On the docs home, confirm **Find Your Path** routes common tasks: install/update, configure prompts, write prompt text, use voice, run background actions, and fix/report.
-6. On two or three Pages docs, confirm sidebar navigation links the full docs set: Overview, Install, Uninstall, User Guide, Settings Reference, Quick Reference, Examples, FAQ, Changelog, Alpha Limitations, Updates, Permissions, Privacy, Troubleshooting, Support, Security Policy, Icon Treatments, Background Architecture, and Release Checklist.
+6. On two or three Pages docs, confirm sidebar navigation links user documentation only: Overview, Install Guide, Uninstall, User Guide, Settings Reference, Quick Reference, Examples, FAQ, Changelog, Alpha Limitations, Updates, Permissions, Privacy, Troubleshooting, Support, and Security Policy.
 7. Confirm homepage **Download Alpha** and Install Guide download steps point to [latest GitHub Release](https://github.com/galbutnotgirl/command/releases/latest), not the generic releases list.
 8. Confirm the canonical GitHub Pages base is [galbutnotgirl.github.io/command](https://galbutnotgirl.github.io/command/) and no public release/docs/repo surface points users to the old `/claude-command/` Pages path.
 9. If an old `/claude-command/` Pages project remains online, confirm it is redirect-only to `/command/`, or disable it after checking no shared alpha links still depend on it.
@@ -137,10 +137,10 @@ Normal release runs also execute `swift test`, `node --test`, `./test/test-shell
 14. Confirm pull request template asks for user impact, docs parity, sensitive-report routing, issue-template/chooser parity, bundled-doc release smoke, release-note/checklist needs, and validation evidence.
 15. In installed app, open **Settings -> About -> Check for Updates**.
 16. Download update and confirm app relaunches.
-17. Open **Settings -> About -> GitHub** and confirm the project repository opens.
-18. Open each **Settings -> About** support action: **Copy Diagnostic Info**, **Report a Bug**, and **Request Feature**. Confirm diagnostics copy and public issue buttons open the right templates.
-19. Open each **Settings -> About** docs button: **Documentation**, **User Guide**, **Install Guide**, **Uninstall**, **Settings Reference**, **Quick Reference**, **Troubleshooting**, **Permissions**, **Support**, **Security Policy**, **Examples**, **FAQ**, **Updates**, **Privacy**, **Changelog**, **Alpha Limitations**, **Icon Treatments**, **Background Architecture**, and **Release Checklist**. Confirm bundled docs load offline.
-20. If testing a build without bundled docs, confirm those About docs buttons fall back to GitHub Pages, not raw Markdown.
+17. Open **Settings -> About -> Website** and confirm GitHub Pages opens.
+18. Open **Settings -> About -> Docs** and confirm bundled docs open offline. If testing a build without bundled docs, confirm Docs falls back to GitHub Pages.
+19. Open **Settings -> About -> GitHub** and confirm project repository opens.
+20. Open **Copy Diagnostic Info**, **Report a Bug**, and **Request Feature**. Confirm diagnostics copy and public issue buttons open correct templates.
 
 ## Rollback
 

@@ -168,16 +168,16 @@ Return:
 
       <section id="background">
         <h2>Background Actions</h2>
-        <p>Background delivery runs without opening Claude. Command renders prompt and sends it to <code>claude -p</code>. Runs appear under <strong>Command History -> Background</strong> with status, age, logs, retry, mark-failed, retention, and parsed result.</p>
+        <p>Background delivery runs without opening assistant app. Command renders prompt and sends it to <code>claude -p</code> or <code>codex exec -</code>. Runs appear under <strong>Settings -&gt; History</strong> with provider, status, age, logs, retry, mark-failed, retention, and parsed result. Read <a href="background.html">Background Actions</a> for provider setup.</p>
         <div class="callout">
-          If final non-empty output line matches <code>KEY=value</code>, Command shows it in notification and Command History.
+          If final non-empty output line matches <code>KEY=value</code>, Command shows it in notification and History.
         </div>
-        <p>Legacy right-click Services are optional for source installs. If installed, <strong>Claude - To-Do</strong> is a background action: selected text wins when highlighted; otherwise Safari, Chrome, Brave, Chromium, and Arc send the current tab URL. Confirm the captured source, result, and log under <strong>Command History -> Background</strong>.</p>
-        <p>Only the last non-empty stdout line is parsed. The whole trimmed line must be <code>KEY=value</code>; prose containing <code>TASK_ID=abc123</code> does not count. Common contracts are <code>TASK_ID=&lt;id&gt;</code> and <code>ERROR=&lt;reason&gt;</code>. Result text appears in the completion notification, Command History row, and diagnostic summary. Command does not run follow-up actions from that value yet.</p>
+        <p>Legacy right-click Services are optional for source installs. If installed, <strong>Claude - To-Do</strong> is a background action: selected text wins when highlighted; otherwise Safari, Chrome, Brave, Chromium, and Arc send the current tab URL. Confirm captured source, result, and log under <strong>Settings -&gt; History</strong>.</p>
+        <p>Only last non-empty stdout line is parsed. Whole trimmed line must be <code>KEY=value</code>; prose containing <code>TASK_ID=abc123</code> does not count. Common contracts are <code>TASK_ID=&lt;id&gt;</code> and <code>ERROR=&lt;reason&gt;</code>. Result text appears in completion notification, History row, and diagnostic summary. Command does not run follow-up action from that value yet.</p>
         <table>
           <thead><tr><th>Status</th><th>Meaning</th><th>What to do</th></tr></thead>
           <tbody>
-            <tr><td>Running</td><td>Local <code>claude -p</code> process has started.</td><td>Wait, or use Command History if it becomes stalled.</td></tr>
+            <tr><td>Running</td><td>Local CLI process has started.</td><td>Wait, or use History if it becomes stalled.</td></tr>
             <tr><td>Succeeded</td><td>CLI exited with code 0.</td><td>Review result and log.</td></tr>
             <tr><td>Failed</td><td>CLI failed, command was missing, or user marked the run failed.</td><td>Open log, fix prompt/settings, then Retry.</td></tr>
             <tr><td>Stalled</td><td>Record stayed running after process likely died.</td><td>Mark failed, then Retry if the prompt is still valid.</td></tr>
@@ -233,7 +233,7 @@ Return:
 
       <section id="command-history">
         <h2>Command History</h2>
-        <p>Open <strong>Settings -> Command History</strong> to review recent sends and background runs. Retention defaults to seven days.</p>
+        <p>Open <strong>Settings -&gt; History</strong> to review recent sends and background runs. Retention defaults to seven days.</p>
         <table>
           <thead><tr><th>Section</th><th>Includes</th></tr></thead>
           <tbody>
@@ -279,7 +279,7 @@ Return:
             <tr><td>Shortcut keys conflict</td><td>Rebind prompt shortcuts in Shortcuts; rebind dictation shortcuts in Dictation Settings.</td></tr>
             <tr><td>Screenshot fails</td><td>Grant Screen Recording, then restart Command.</td></tr>
             <tr><td>Dictation fails</td><td>Grant Microphone; download model in Dictation Settings.</td></tr>
-            <tr><td>Background run fails</td><td>Open Command History -> Background and inspect log.</td></tr>
+            <tr><td>Background run fails</td><td>Open Settings -&gt; History and inspect log.</td></tr>
           </tbody>
         </table>
         <p class="source-link">Need every symptom and log path? Read <a href="troubleshooting.html">Troubleshooting</a>. Need to file a bug, request a feature, or ask for help? Read <a href="support.html">Support</a>. For vulnerabilities, exposed secrets, private logs, or sensitive diagnostics, read <a href="security.html">Security Policy</a>.</p>

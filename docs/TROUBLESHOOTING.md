@@ -34,9 +34,9 @@ For binary installs, quit and reopen `~/Applications/Command.app`. From a repo c
 | Voice custom action records but does not send | Confirm trigger delivery/destination in **Settings -> Shortcuts** and inspect **Command History**. |
 | Clipboard History is empty | Confirm Clipboard History is enabled and running in **Settings -> Set Up**. Copy a normal text snippet from a non-password app. |
 | Right-click actions show as optional or missing | This is not a broken binary install. Global shortcuts do not need Services. Source installs can run `./install-quick-action.sh` if you want legacy macOS Services menu items. |
-| Right-click To-Do does not capture a browser URL | If text is selected, Command sends the selection. If no text is selected and the front app is Safari, Chrome, Brave, Chromium, or Arc, it sends the current tab URL. Check **Command History -> Background** for the captured source and result. |
+| Right-click To-Do does not capture a browser URL | If text is selected, Command sends the selection. If no text is selected and the front app is Safari, Chrome, Brave, Chromium, or Arc, it sends the current tab URL. Check **Settings -> History** for the captured source and result. |
 | Claude opens wrong surface | Check global destination, prompt/action destination, then trigger override. |
-| Background action fails | Open **Settings -> Command History -> Background**, expand failed run, inspect log, and check **Background Settings**. |
+| Background action fails | Open **Settings -> History**, expand failed run, inspect log, and check **Settings -> Background**. |
 | Import does not show expected content | Confirm file is a Command export or legacy settings/templates/vocabulary export. |
 | Update fails | Confirm channel in **Settings -> About**; try manual install from [Install Guide](INSTALL.md). |
 

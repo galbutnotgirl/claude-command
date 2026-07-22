@@ -31,6 +31,8 @@ Run the same checks CI and release preflight use:
 cd agent && swift test
 cd ../vendor/claude-command-capture && node --test
 cd ../.. && ./test/test-shell.sh
+./test/test-build-transaction.sh
+./test/test-release-transaction.sh
 ./test/test-install-state.sh
 ./test/test-updater-swap.sh
 ./test/test-restart-app.sh
@@ -43,7 +45,7 @@ python3 ./test/test_string_review.py
 ./test/test-release-asset.sh
 ```
 
-`test/test-docs.py` validates README/docs links, rendered HTML structure, metadata, sitemap, bundled-doc asset lists, release docs coverage, About docs buttons, Markdown/HTML parity, local media assets, and repo support/security policy links.
+`test/test-docs.py` validates README/docs links, rendered HTML structure, metadata, sitemap, bundled-doc asset lists, maintainer release coverage, About controls, Markdown/HTML parity, local media assets, and repo support/security policy links.
 
 For provider-routing changes, launch current Claude and ChatGPT builds and run `./test/test-assistant-contract.sh`. It reads their URL schemes and native menu shortcuts without creating or submitting conversations.
 
@@ -60,7 +62,7 @@ Update these when behavior changes:
 - [docs/SETTINGS_REFERENCE.md](docs/SETTINGS_REFERENCE.md) and [docs/settings.html](docs/settings.html) for Settings tabs.
 - [docs/QUICK_REFERENCE.md](docs/QUICK_REFERENCE.md) and [docs/quick-reference.html](docs/quick-reference.html) for shortcut defaults.
 - [docs/SUPPORT.md](docs/SUPPORT.md), [SUPPORT.md](SUPPORT.md), and [SECURITY.md](SECURITY.md) for support and sensitive-report routing.
-- [docs/RELEASE_CHECKLIST.md](docs/RELEASE_CHECKLIST.md) and [docs/release.html](docs/release.html) for ship checks.
+- [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md) for maintainer ship checks. It is not published or bundled as user documentation.
 
 Run `python3 ./test/test-docs.py` before committing docs.
 
@@ -75,11 +77,11 @@ Run `python3 ./test/test-docs.py` before committing docs.
 
 ## Release
 
-Use [docs/RELEASE_CHECKLIST.md](docs/RELEASE_CHECKLIST.md). Normal release runs execute Swift, Node, shell, and docs tests before packaging.
+Use [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md). Normal release runs execute Swift, Node, shell, transaction, and docs tests before packaging.
 
 ```bash
 ./release.sh --skip-checks
-./release.sh --publish
+./release.sh --publish --notarize
 ```
 
---skip-checks is only for local one-off packaging and CI packaging smoke tests. Use `./release.sh --publish` for real releases from a clean `main` branch.
+`--skip-checks` is only for local one-off packaging and CI packaging smoke tests. Use `./release.sh --publish --notarize` for real releases from clean `main` with Developer ID credentials.

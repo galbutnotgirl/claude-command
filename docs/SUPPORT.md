@@ -41,7 +41,7 @@ Add the detail that matches the failure:
 | Screenshot | Whether Screen Recording is green in **Set Up**; whether selection capture or window capture failed. |
 | Clipboard History | Whether `~/.claude/logs/clipwatch.err` has recent errors; source app copied from. |
 | Background action | Failed run status, parsed result if shown, and relevant log from Command History. |
-| Claude - To-Do URL capture | Whether text was highlighted, which browser was frontmost, current tab URL if safe to share, captured source/result in **Command History -> Background**. |
+| Claude - To-Do URL capture | Whether text was highlighted, which browser was frontmost, current tab URL if safe to share, captured source/result in **Settings -> History**. |
 | Update | Update channel, target version, and whether manual install from [Install Guide](INSTALL.md) worked. |
 
 ## Logs

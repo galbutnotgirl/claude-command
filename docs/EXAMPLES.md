@@ -125,7 +125,7 @@ Source-only right-click variant:
 | Service | Claude - To-Do |
 | Text selected | Sends selected text to the background action. |
 | No text selected in supported browser | Sends current tab URL from Safari, Chrome, Brave, Chromium, or Arc. |
-| Result check | Open Command History -> Background. |
+| Result check | Open Settings -> History. |
 
 ## Google Docs Context Rule
 

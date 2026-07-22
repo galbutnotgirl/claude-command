@@ -2,7 +2,7 @@
 
 Command is a native macOS menu-bar app for sending selected text, screenshots, typed notes, and dictated notes to Claude or ChatGPT. ChatGPT includes Chat and Codex destinations. It also supports background commands through `claude -p` or `codex exec -`, clipboard history, dictation history, import/export, and local troubleshooting.
 
-This guide is written for end users. For a shorter cheat sheet, see [QUICK_REFERENCE.md](QUICK_REFERENCE.md). For ready-to-copy workflow setups, see [EXAMPLES.md](EXAMPLES.md). Maintainer and architecture notes live in [BACKGROUND_TRIGGER_INTEGRATION.md](BACKGROUND_TRIGGER_INTEGRATION.md).
+This guide is written for end users. For a shorter cheat sheet, see [QUICK_REFERENCE.md](QUICK_REFERENCE.md). For ready-to-copy workflow setups, see [EXAMPLES.md](EXAMPLES.md). For provider setup and background troubleshooting, see [BACKGROUND_ACTIONS.md](BACKGROUND_ACTIONS.md).
 
 ## Quick Start
 
@@ -168,7 +168,7 @@ More complete setups live in [EXAMPLES.md](EXAMPLES.md).
 
 ## Background Actions
 
-Background delivery runs without opening assistant app. Command renders prompt and passes it to `claude -p` or `codex exec -`. Runs appear under **Command History -> Background** with provider, status, age, logs, retry, mark-failed, retention, and parsed result when available.
+Background delivery runs without opening assistant app. Command renders prompt and passes it to `claude -p` or `codex exec -`. Runs appear under **Settings -> History** with provider, status, age, logs, retry, mark-failed, retention, and parsed result when available. Use [Background Actions](BACKGROUND_ACTIONS.md) for full provider setup.
 
 Use background actions for:
 
@@ -178,7 +178,7 @@ Use background actions for:
 - Processing a screenshot without switching apps.
 - Any workflow where visible chat is not needed.
 
-Legacy right-click Services are optional for source installs. If installed, **Claude - To-Do** is a background action: selected text wins when highlighted; otherwise Safari, Chrome, Brave, Chromium, and Arc send the current tab URL. Confirm the captured source, result, and log under **Command History -> Background**.
+Legacy right-click Services are optional for source installs. If installed, **Claude - To-Do** is a background action: selected text wins when highlighted; otherwise Safari, Chrome, Brave, Chromium, and Arc send the current tab URL. Confirm captured source, result, and log under **Settings -> History**.
 
 Background action fields:
 
@@ -202,14 +202,14 @@ Rules:
 - Only the last non-empty stdout line is parsed.
 - The whole trimmed line must be `KEY=value`; prose containing `TASK_ID=abc123` does not count.
 - Common keys are `TASK_ID=<id>` and `ERROR=<reason>`, but any uppercase/lowercase key that starts with a letter or underscore works.
-- Result text appears in the completion notification, Command History row, and diagnostic summary.
+- Result text appears in completion notification, History row, and diagnostic summary.
 - Command does not run a follow-up action from that value yet.
 
 Status meanings:
 
 | Status | Meaning | What to do |
 |---|---|---|
-| Running | Local `claude -p` process has started. | Wait, or use Command History if it becomes stalled. |
+| Running | Local CLI process has started. | Wait, or use History if it becomes stalled. |
 | Succeeded | CLI exited with code 0. | Review result and log. |
 | Failed | CLI failed, command was missing, or user marked the run failed. | Open log, fix prompt/settings, then Retry. |
 | Stalled | Record stayed running after process likely died. | Mark failed, then Retry if the prompt is still valid. |
@@ -284,9 +284,9 @@ If final words are missing, compare **Dictation History** raw text, processed te
 
 ## Command History
 
-Open **Settings -> Command History**.
+Open **Settings -> History**.
 
-Command History shows:
+History shows:
 
 | Section | Includes |
 |---|---|
@@ -343,7 +343,7 @@ Review background prompts and CLI extra args before sharing an export with anoth
 
 ## Troubleshooting
 
-Start with **Settings -> Set Up** for permission and component status. Use **Settings -> Command History** for foreground/background command logs, and **Settings -> Dictation Settings** for microphone/model checks.
+Start with **Settings -> Set Up** for permission and component status. Use **Settings -> History** for foreground/background command logs, and **Settings -> Dictation Settings** for microphone/model checks.
 
 See [Troubleshooting](TROUBLESHOOTING.md) for symptom-first fixes, log locations, command checks, and support details. For vulnerabilities, exposed secrets, private logs, or sensitive diagnostics, use [Security Policy](SECURITY.md) instead of a public issue.
 

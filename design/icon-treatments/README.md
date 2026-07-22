@@ -1,6 +1,6 @@
-# Command Icon Treatments
+# Command Icon Treatment Archive
 
-Shareable visual reference for active menu-bar states. Use this when reviewing whether recording, capture, or background activity is visible enough on busy macOS menu bars.
+Maintainer design archive for active menu-bar states. This material is not bundled with Command or published as user documentation.
 
 ## Current Recording Direction
 
@@ -16,6 +16,7 @@ Design goals:
 ## Animated Previews
 
 - [Bolder active-state treatments](icon-treatment-bold-animated.svg)
+- [Green voice treatment](icon-treatment-green-voice.svg)
 - [Original animated options](icon-treatment-options-animated.svg)
 - [Static option sheet](icon-treatment-options.svg)
 
@@ -32,4 +33,4 @@ Design goals:
 
 Runtime drawing lives in `agent/MenuBar.swift`. The installed app currently uses a compact active width, pure purple rounded-square backing, and four white voice bars driven by recorder audio level.
 
-For where users enable dictation sounds and menu-bar visibility, see [SETTINGS_REFERENCE.md](SETTINGS_REFERENCE.md).
+For where users enable dictation sounds and menu-bar visibility, see [Settings Reference](../../docs/SETTINGS_REFERENCE.md).
