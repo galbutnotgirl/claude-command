@@ -167,7 +167,7 @@ detail — that doc is current as of alpha.6 and is the one to read before touch
 ## Current state (alpha.8)
 
 - **Test suites**: 143 Swift (`cd agent && swift test`), 58 Node
-  (`cd vendor/claude-command-capture && node --test`), 50 shell (`./test/test-shell.sh`),
+  (`cd vendor/claude-command-capture && node --test`), 54 shell (`./test/test-shell.sh`),
   25 isolated install-state, 11 updater rollback/restart, 9 restart-handoff,
   7 release-policy, 70 static,
   string-review, and docs
@@ -178,6 +178,10 @@ detail — that doc is current as of alpha.6 and is the one to read before touch
 - **Accessibility labels**: Settings pickers and toggles expose specific hidden labels to
   VoiceOver, and static analysis rejects future empty labels. Full keyboard and VoiceOver
   traversal remains a manual release gate.
+- **Transactional app builds**: `build-agent.sh` assembles and signs in a same-volume staging
+  directory, then replaces `Command.app` only after signing succeeds. A locked-Keychain failure
+  preserves the previous valid artifact byte-for-byte; successful replacement and both cleanup
+  paths leave no staging debris.
 - **Sanitizers**: all 143 Swift tests pass under both AddressSanitizer and ThreadSanitizer using
   isolated scratch directories.
 - **Installed runtime soak**: `test/test-installed-runtime.sh` repeatedly pings launchd-owned

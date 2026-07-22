@@ -346,6 +346,18 @@ PY
 )" \
   "ok"
 
+# ---- build artifact transaction --------------------------------------------
+# Failed compilation/signing must leave last valid Command.app untouched.
+BUILD_AGENT_SOURCE="$(<"${DIR}/build-agent.sh")"
+assert_contains "build assembles app in a same-volume staging directory" "$BUILD_AGENT_SOURCE" \
+  'BUILD_ROOT="$(mktemp -d "${DIR}/.command-build.XXXXXX")"'
+assert_contains "build signs staged app before replacing final artifact" "$BUILD_AGENT_SOURCE" \
+  'codesign "${CODESIGN_ARGS[@]}" "$APP"'
+assert_contains "build restores previous artifact when staged install fails" "$BUILD_AGENT_SOURCE" \
+  'previous build restored'
+assert_not_contains "build never deletes final app during assembly" "$BUILD_AGENT_SOURCE" \
+  'rm -rf "$FINAL_APP"'
+
 print -r -- ""
 print -r -- "shell tests: ${PASS} passed, ${FAIL} failed"
 [ "$FAIL" -eq 0 ]

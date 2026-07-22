@@ -7,9 +7,23 @@ set -uo pipefail
 
 DIR="${0:A:h}"
 SRC_DIR="${DIR}/agent"
-APP="${DIR}/Command.app"
+FINAL_APP="${DIR}/Command.app"
+BUILD_ROOT="$(mktemp -d "${DIR}/.command-build.XXXXXX")" || {
+  print -- "[agent] ERROR could not create staging directory"
+  exit 1
+}
+APP="${BUILD_ROOT}/Command.app"
 BIN_DIR="${APP}/Contents/MacOS"
 BUNDLE_ID="com.claudecommand"
+BACKUP_APP=""
+
+cleanup_build_root() {
+  if [ -n "$BACKUP_APP" ] && [ -d "$BACKUP_APP" ] && [ ! -d "$FINAL_APP" ]; then
+    mv "$BACKUP_APP" "$FINAL_APP" 2>/dev/null || true
+  fi
+  rm -rf "$BUILD_ROOT"
+}
+trap cleanup_build_root EXIT HUP INT TERM
 
 [ -f "${SRC_DIR}/main.swift" ] || { print -- "[agent] missing ${SRC_DIR}/main.swift"; exit 1; }
 
@@ -29,7 +43,6 @@ if command -v git >/dev/null 2>&1 && git -C "$DIR" rev-parse --is-inside-work-tr
 fi
 [ -n "$GIT_BRANCH" ] && print -- "[agent] branch ${GIT_BRANCH}"
 
-rm -rf "$APP"
 mkdir -p "$BIN_DIR"
 
 print -- "[agent] compiling (swift build)…"
@@ -179,5 +192,25 @@ codesign "${CODESIGN_ARGS[@]}" "$APP" \
 REQ="$(codesign -dr - "$APP" 2>&1 | sed -n 's/^.*designated => /designated => /p')"
 [[ -n "$REQ" ]] && print -- "[agent] requirement $REQ"
 
-print -- "[agent] built: $APP"
+if [ -d "$FINAL_APP" ]; then
+  BACKUP_APP="${DIR}/.Command.app.previous.$$"
+  rm -rf "$BACKUP_APP"
+  mv "$FINAL_APP" "$BACKUP_APP" || {
+    print -- "[agent] ERROR could not move previous app aside"
+    exit 1
+  }
+fi
+if ! mv "$APP" "$FINAL_APP"; then
+  if [ -n "$BACKUP_APP" ] && mv "$BACKUP_APP" "$FINAL_APP" 2>/dev/null; then
+    print -- "[agent] ERROR could not install staged app; previous build restored"
+  else
+    print -- "[agent] ERROR could not install staged app; previous build remains at ${BACKUP_APP:-none}"
+  fi
+  exit 1
+fi
+if [ -n "$BACKUP_APP" ]; then
+  rm -rf "$BACKUP_APP"
+fi
+
+print -- "[agent] built: $FINAL_APP"
 print -- "First run prompts for Accessibility for 'Command' — allow once, covers all hotkeys + keystrokes."
