@@ -187,4 +187,10 @@ final class ActionModelsTests: XCTestCase {
         let b = HotkeyBinding(action: "add", keycode: 100, mods: 0, enabled: true)
         XCTAssertEqual(b.human, "F8")
     }
+
+    func testOnlyEnabledBoundHotkeysAreVisibleInMenu() {
+        XCTAssertTrue(HotkeyBinding(action: "add", keycode: 100, mods: 0, enabled: true).isVisibleInMenu)
+        XCTAssertFalse(HotkeyBinding(action: "go", keycode: 0, mods: 0, enabled: true).isVisibleInMenu)
+        XCTAssertFalse(HotkeyBinding(action: "add", keycode: 100, mods: 0, enabled: false).isVisibleInMenu)
+    }
 }

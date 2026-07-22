@@ -166,7 +166,7 @@ detail — that doc is current as of alpha.6 and is the one to read before touch
 
 ## Current state (alpha.8)
 
-- **Test suites**: 138 Swift (`cd agent && swift test`), 58 Node
+- **Test suites**: 139 Swift (`cd agent && swift test`), 58 Node
   (`cd vendor/claude-command-capture && node --test`), 50 shell (`./test/test-shell.sh`),
   25 isolated install-state, 11 updater rollback/restart, 7 release-policy, 66 static,
   string-review, and docs
@@ -174,14 +174,15 @@ detail — that doc is current as of alpha.6 and is the one to read before touch
   Claude/ChatGPT contracts. CI runs portable suites plus a macOS release-asset smoke test
   (`./release.sh --skip-checks` and `./test/test-release-asset.sh`) on push/PR
   (`.github/workflows/test.yml`).
-- **Sanitizers**: all 138 Swift tests pass under both AddressSanitizer and ThreadSanitizer using
+- **Sanitizers**: all 139 Swift tests pass under both AddressSanitizer and ThreadSanitizer using
   isolated scratch directories.
 - **Installed runtime soak**: `test/test-installed-runtime.sh` repeatedly pings launchd-owned
   Command and fails on PID changes, descriptor growth, new crash reports, fatal diagnostics, or
   new SwiftUI AttributeGraph cycles. Current installed build passes 60 seconds with 61/61 pings.
 - **Dictation model integration**: `./test/test-dictation-model.sh` generates local speech,
   feeds it through Parakeet's streaming manager in 4096-frame buffers, and verifies its final
-  phrase survives immediate stream completion. It runs on release Mac with cached models, not CI.
+  phrase survives immediate stream completion. It rejects zero-audio fixtures before invoking
+  Parakeet. It runs on release Mac with cached models, not CI.
 - **Installed provider contract**: ChatGPT 26.707.72221 and Claude 1.24012.0 pass 9/9
   packaged-resource and Claude Chat/Cowork/Code deep-link checks. Actual prompt
   insertion remains a manual release gate because contract inspection does not prove field focus.
@@ -889,8 +890,9 @@ detail — that doc is current as of alpha.6 and is the one to read before touch
   Guide. Docs validation guards the `URLComponents` fragment path.
 - **Menu-bar menu filtering docs**: Quick Reference Markdown/HTML now explains that the
   menu-bar menu only shows enabled, bound prompt/action shortcuts; unbound combinations
-  such as Go stay editable in Settings but do not appear in the menu. Docs validation also
-  guards `MenuBar.swift` against reintroducing dead Command History/Handoffs/Go menu rows.
+  such as Go stay editable in Settings but do not appear in the menu. Core unit coverage guards
+  enabled/bound visibility, and docs validation guards `MenuBar.swift` against reintroducing dead
+  Command History/Handoffs/Go menu rows.
 - **About View on GitHub parity**: Settings Reference Markdown/HTML now documents About's
   **View on GitHub** control, and Release Checklist Markdown/HTML now tells maintainers to
   spot-check that button after publishing. Docs validation guards the Settings and Release

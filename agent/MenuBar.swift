@@ -122,7 +122,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         while menu.numberOfItems > 3 {
             menu.removeItem(at: 0)
         }
-        let bindings = loadBindings().filter { $0.enabled && $0.keycode != 0 }
+        let bindings = loadBindings().filter(\.isVisibleInMenu)
         for (i, b) in bindings.enumerated() {
             let it = NSMenuItem()
             it.title = b.name

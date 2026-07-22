@@ -736,7 +736,7 @@ REQUIRED_TEXT = {
         "Copy Diagnostic Info",
     ],
     "docs/STATUS.md": [
-        "138 Swift",
+        "139 Swift",
         "58 Node",
         "50 shell",
         "25 isolated install-state",
@@ -1483,7 +1483,7 @@ REQUIRED_TEXT = {
         "compact solid-purple voice indicator",
         "White animated bars carry the motion",
         "wide banner",
-        "loadBindings().filter { $0.enabled && $0.keycode != 0 }",
+        "loadBindings().filter(\\.isVisibleInMenu)",
         "NSMenuItemPlainView",
         "NSMenuItemPlainView(title: \"Settings\", shortcut: \"⌘,\")",
         "selectedMenuItemTextColor",

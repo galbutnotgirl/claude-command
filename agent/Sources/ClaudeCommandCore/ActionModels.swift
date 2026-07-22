@@ -44,6 +44,7 @@ public struct HotkeyBinding: Identifiable {
     public var human: String { keycode == 0 ? "—" : humanShortcut(keycode: keycode, mods: mods) }
     public var name: String { actionName(action) }
     public var detail: String { actionDetail(action) }
+    public var isVisibleInMenu: Bool { enabled && keycode != 0 }
 
     public init(action: String, keycode: UInt32, mods: UInt32, enabled: Bool) {
         self.action = action; self.keycode = keycode; self.mods = mods; self.enabled = enabled
