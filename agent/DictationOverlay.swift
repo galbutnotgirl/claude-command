@@ -30,7 +30,7 @@ final class DictationOverlay: NSObject {
             hide()
             return
         }
-        playUISound(settingsModel.startSound)
+        playUISound(settingsModel.startSound, role: .start)
         startLevelUpdates()
     }
 
@@ -96,7 +96,7 @@ final class DictationOverlay: NSObject {
     }
 
     private func playStopSound() {
-        playUISound(settingsModel.stopSound)
+        playUISound(settingsModel.stopSound, role: .stop)
     }
 
     // MARK: - Dispatch final text

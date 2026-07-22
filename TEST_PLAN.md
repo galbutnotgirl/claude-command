@@ -29,6 +29,12 @@ With installed Claude and ChatGPT apps available:
 ./test/test-assistant-contract.sh
 ```
 
+With Parakeet models cached on release Mac:
+
+```bash
+./test/test-dictation-model.sh
+```
+
 Pass criteria: every command exits 0, release zip checksum exists, worktree remains clean,
 and GitHub Test, Pages, and Pages deployment workflows pass for release commit.
 
@@ -107,8 +113,10 @@ Preserve user settings for incremental tests. Use clean install only for onboard
 
 ## Current Evidence (2026-07-21)
 
-- Automated local suites: 121 Swift, 56 Node, 50 shell, 16 install-state, 8 updater,
+- Automated local suites: 124 Swift, 56 Node, 50 shell, 16 install-state, 8 updater,
   7 release-policy, 2 string-review; docs, Pages, provider contract, and release asset pass.
+- Cached-model streaming probe retains generated speech's distinctive final words after immediate
+  stream drain and Parakeet `finish()`.
 - Installed ChatGPT 26.707.72221 and Claude 1.24012.0 contract check passes 12/12:
   packaged shortcuts, live menus, and Claude Chat/Cowork/Code `/new` handlers match routes.
 - Installed Codex projectless route passed non-submitting live smoke test.

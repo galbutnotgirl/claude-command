@@ -20,7 +20,7 @@ let recorder = Recorder()
 
 @MainActor
 final class Recorder: ObservableObject {
-    enum State: String { case idle, loading, starting, listening, error }
+    typealias State = DictationCapturePhase
     enum ModelStatus { case notDownloaded, downloading(Double), ready, error(String) }
 
     @Published var state: State = .idle
@@ -114,12 +114,12 @@ final class Recorder: ObservableObject {
     // MARK: - Recording lifecycle
 
     func toggle(mode: DictMode) {
-        if state == .listening || state == .starting { stop() }
-        else if state == .idle { start(mode: mode) }
+        if state.canStop { stop() }
+        else if state.canStart { start(mode: mode) }
     }
 
     func start(mode: DictMode) {
-        guard state == .idle || state == .error else { return }
+        guard state.canStart else { return }
         guard loadedModels != nil else {
             fail("models not loaded")
             DispatchQueue.main.async {
@@ -223,18 +223,21 @@ final class Recorder: ObservableObject {
                     self.log("partial: \"\(update.text)\"")
                 }
                 self.log("transcriptionUpdates stream ended")
+            } catch is CancellationError {
+                self.log("stream task cancelled")
             } catch {
                 guard self.sessionID == session else { return }
                 self.fail("streaming error: \(error.localizedDescription)")
             }
             engine.stop(); inputNode.removeTap(onBus: 0)
-            self.audioEngine = nil
+            if self.audioEngine === engine { self.audioEngine = nil }
             self.log("engine stopped, buf total=\(bufCount)")
         }
     }
 
     func stop() {
-        guard state == .listening || state == .starting else { return }
+        guard state.canStop else { return }
+        let finishingSession = sessionID
         let mode = currentMode
         let wasListening = state == .listening
         log("■ stop wasListening=\(wasListening)")
@@ -245,7 +248,7 @@ final class Recorder: ObservableObject {
             return
         }
         let mgr = currentMgr; currentMgr = nil
-        state = .idle
+        state = .finishing
 
         let capturedStreamTask = streamTask
         streamTask = nil
@@ -261,6 +264,8 @@ final class Recorder: ObservableObject {
         audioEngine = nil
         let capturedFeederTask = bufferFeederTask
         bufferFeederTask = nil
+        let capturedContinuation = audioContinuation
+        audioContinuation = nil
 
         Task {
             try? await Task.sleep(nanoseconds: stopTailNanoseconds)
@@ -271,8 +276,7 @@ final class Recorder: ObservableObject {
             // the feeder's queue. Finishing the continuation and awaiting the feeder
             // drains every one of them deterministically — no sleep, no guessing how
             // long delivery to the ASR manager takes under system load.
-            self.audioContinuation?.finish()
-            self.audioContinuation = nil
+            capturedContinuation?.finish()
             await capturedFeederTask?.value
             capturedStreamTask?.cancel()   // now safe to end the update loop
             do {
@@ -282,7 +286,11 @@ final class Recorder: ObservableObject {
                 // Use whichever is longer: finish() should be complete, but if it
                 // returns less than the last partial (e.g. model flush gap), keep the
                 // partial — it's less likely to have dropped tail words than finish().
-                let best = text.count >= self.lastTranscript.count ? text : self.lastTranscript
+                let best = preferredDictationTranscript(final: text, lastPartial: self.lastTranscript)
+                await capturedStreamTask?.value
+                guard self.sessionID == finishingSession else { return }
+                self.state = .idle
+                self.audioLevel = 0
                 if self.shouldDispatchDictation(best) {
                     self.onFinal?(best, mode)
                 } else {
@@ -291,6 +299,10 @@ final class Recorder: ObservableObject {
                 }
             } catch {
                 self.log("finish() threw: \(error)")
+                await capturedStreamTask?.value
+                guard self.sessionID == finishingSession else { return }
+                self.state = .idle
+                self.audioLevel = 0
                 if self.shouldDispatchDictation(self.lastTranscript) {
                     self.onFinal?(self.lastTranscript, mode)
                 } else {
@@ -302,6 +314,7 @@ final class Recorder: ObservableObject {
 
     func cancel() {
         log("cancel")
+        sessionID += 1
         stopRequestedDuringStart = false
         audioEngine?.inputNode.removeTap(onBus: 0)
         audioEngine?.stop(); audioEngine = nil

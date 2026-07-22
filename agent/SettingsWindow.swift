@@ -381,9 +381,10 @@ private final class UISoundPlayer: NSObject, AVAudioPlayerDelegate {
     private var preparedPlayers: [String: AVAudioPlayer] = [:]
     private var warmupPlayers: [AVAudioPlayer] = []
 
-    func preload(_ names: [String]) {
-        for name in Set(names) {
-            guard preparedPlayer(for: name, volume: 0) != nil,
+    func preload(_ cues: [(DictationCueRole, String)]) {
+        var seen = Set<String>()
+        for (role, name) in cues where seen.insert(role.cacheKey(soundName: name)).inserted {
+            guard preparedPlayer(for: name, role: role, volume: 0) != nil,
                   let warmup = makePlayer(for: name, volume: 0) else { continue }
             // Let a separate silent player render briefly. Stopping in the same
             // run-loop turn never opens the audio route, which made first cue
@@ -399,9 +400,9 @@ private final class UISoundPlayer: NSObject, AVAudioPlayerDelegate {
         }
     }
 
-    func play(_ name: String, volume: Float) {
+    func play(_ name: String, role: DictationCueRole = .preview, volume: Float) {
         let clampedVolume = min(max(volume, 0), 1)
-        if let player = preparedPlayer(for: name, volume: clampedVolume) {
+        if let player = preparedPlayer(for: name, role: role, volume: clampedVolume) {
             player.volume = clampedVolume
             player.currentTime = 0
             if !player.play() {
@@ -411,14 +412,15 @@ private final class UISoundPlayer: NSObject, AVAudioPlayerDelegate {
         }
     }
 
-    private func preparedPlayer(for name: String, volume: Float) -> AVAudioPlayer? {
-        if let player = preparedPlayers[name] {
+    private func preparedPlayer(for name: String, role: DictationCueRole, volume: Float) -> AVAudioPlayer? {
+        let key = role.cacheKey(soundName: name)
+        if let player = preparedPlayers[key] {
             player.volume = volume
             return player
         }
 
         guard let player = makePlayer(for: name, volume: volume) else { return nil }
-        preparedPlayers[name] = player
+        preparedPlayers[key] = player
         return player
     }
 
@@ -452,18 +454,18 @@ private final class UISoundPlayer: NSObject, AVAudioPlayerDelegate {
 }
 
 // Global helper — respects soundsEnabled + soundVolume from settingsModel.
-func playUISound(_ name: String) {
+func playUISound(_ name: String, role: DictationCueRole = .preview) {
     guard settingsModel.soundsEnabled else { return }
-    UISoundPlayer.shared.play(name, volume: Float(settingsModel.soundVolume))
+    UISoundPlayer.shared.play(name, role: role, volume: Float(settingsModel.soundVolume))
 }
 
 func preloadUISounds() {
     UISoundPlayer.shared.preload([
-        settingsModel.startSound,
-        settingsModel.stopSound,
-        VoiceSettingsDefaults.startSound,
-        VoiceSettingsDefaults.stopSound,
-        "Ping", "Pop", "Submarine"
+        (.start, settingsModel.startSound),
+        (.stop, settingsModel.stopSound),
+        (.start, VoiceSettingsDefaults.startSound),
+        (.stop, VoiceSettingsDefaults.stopSound),
+        (.preview, "Ping"), (.preview, "Pop"), (.preview, "Submarine")
     ])
 }
 
@@ -4147,7 +4149,7 @@ struct SoundRow: View {
         HStack(spacing: 8) {
             Button {
                 playing = true
-                UISoundPlayer.shared.play(name, volume: Float(model.soundVolume))
+                UISoundPlayer.shared.play(name, role: .preview, volume: Float(model.soundVolume))
                 DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { playing = false }
             } label: {
                 Image(systemName: playing ? "speaker.wave.2.fill" : "play.circle")

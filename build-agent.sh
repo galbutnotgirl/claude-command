@@ -34,7 +34,7 @@ mkdir -p "$BIN_DIR"
 
 print -- "[agent] compiling (swift build)…"
 # SPM build — FluidAudio dependency requires Package.swift resolution.
-if ! ( cd "${SRC_DIR}" && swift build -c release 2>&1 ); then
+if ! ( cd "${SRC_DIR}" && swift build -c release --product ClaudeCommand 2>&1 ); then
   print -- "[agent] ERROR swift build failed"; exit 1
 fi
 cp "${SRC_DIR}/.build/release/ClaudeCommand" "${BIN_DIR}/Command"

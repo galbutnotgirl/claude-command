@@ -73,4 +73,32 @@ final class VoiceSettingsTests: XCTestCase {
         XCTAssertEqual(policy.tailNanoseconds(for: 0.035), 250_000_000)
         XCTAssertEqual(policy.tailNanoseconds(for: 0.036), 850_000_000)
     }
+
+    func testDictationCapturePhaseBlocksRestartWhileFinishing() {
+        XCTAssertTrue(DictationCapturePhase.idle.canStart)
+        XCTAssertTrue(DictationCapturePhase.error.canStart)
+        XCTAssertTrue(DictationCapturePhase.starting.canStop)
+        XCTAssertTrue(DictationCapturePhase.listening.canStop)
+        XCTAssertFalse(DictationCapturePhase.finishing.canStart)
+        XCTAssertFalse(DictationCapturePhase.finishing.canStop)
+    }
+
+    func testPreferredTranscriptKeepsLongerTail() {
+        XCTAssertEqual(
+            preferredDictationTranscript(final: "finish this", lastPartial: "finish this sentence"),
+            "finish this sentence"
+        )
+        XCTAssertEqual(
+            preferredDictationTranscript(final: "finish this sentence cleanly", lastPartial: "finish this"),
+            "finish this sentence cleanly"
+        )
+    }
+
+    func testStartAndStopCuesNeverSharePreparedPlayer() {
+        XCTAssertNotEqual(
+            DictationCueRole.start.cacheKey(soundName: "Purr"),
+            DictationCueRole.stop.cacheKey(soundName: "Purr")
+        )
+        XCTAssertEqual(DictationCueRole.preview.cacheKey(soundName: "Purr"), "preview:Purr")
+    }
 }

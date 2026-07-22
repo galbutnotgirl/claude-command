@@ -730,7 +730,7 @@ REQUIRED_TEXT = {
         "Copy Diagnostic Info",
     ],
     "docs/STATUS.md": [
-        "121 Swift",
+        "124 Swift",
         "56 Node",
         "50 shell",
         "16 isolated install-state",

@@ -29,6 +29,23 @@ public enum VoiceSettingsDefaults {
     public static let dictationAssistant2Provider = "codex"
 }
 
+public enum DictationCapturePhase: String, Equatable, Sendable {
+    case idle, loading, starting, listening, finishing, error
+
+    public var canStart: Bool { self == .idle || self == .error }
+    public var canStop: Bool { self == .starting || self == .listening }
+}
+
+public func preferredDictationTranscript(final: String, lastPartial: String) -> String {
+    final.count >= lastPartial.count ? final : lastPartial
+}
+
+public enum DictationCueRole: String, Equatable, Sendable {
+    case start, stop, preview
+
+    public func cacheKey(soundName: String) -> String { "\(rawValue):\(soundName)" }
+}
+
 public struct DictationActivityGate: Equatable, Sendable {
     public let minimumDuration: Double
     public let minimumRMS: Float

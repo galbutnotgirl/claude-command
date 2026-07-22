@@ -20,6 +20,11 @@ recent change if something in there needs undoing).
   that would invalidate macOS privacy grants.
 - Installed assistant contract checks now verify ChatGPT New Task/projectless-task, Claude
   Chat/Cowork/Code deep-link handlers, and live menu shortcuts before route testing.
+- Dictation finalization now owns its stream resources through an explicit finishing phase,
+  preventing a rapid follow-up trigger or cancellation from replacing or clearing tail buffers.
+  A cached-model probe streams generated speech in app-sized buffers and asserts final-word retention.
+- Dictation Start and Stop cues now use separate prepared players even when both select Purr,
+  preventing a quick stop from rewinding or suppressing the first cue.
 - In-app updater now selects highest compatible SemVer, validates exact app name,
   bundle ID, version, executable, code signature, and current designated signing
   requirement before replacement, then repeats validation after copy.
@@ -142,13 +147,16 @@ detail — that doc is current as of alpha.6 and is the one to read before touch
 
 ## Current state (alpha.8)
 
-- **Test suites**: 121 Swift (`cd agent && swift test`), 56 Node
+- **Test suites**: 124 Swift (`cd agent && swift test`), 56 Node
   (`cd vendor/claude-command-capture && node --test`), 50 shell (`./test/test-shell.sh`),
   16 isolated install-state, 8 updater rollback, 7 release-policy, string-review, and docs
   validation checks. All green. Local release verification also checks current installed
   Claude/ChatGPT contracts. CI runs portable suites plus a macOS release-asset smoke test
   (`./release.sh --skip-checks` and `./test/test-release-asset.sh`) on push/PR
   (`.github/workflows/test.yml`).
+- **Dictation model integration**: `./test/test-dictation-model.sh` generates local speech,
+  feeds it through Parakeet's streaming manager in 4096-frame buffers, and verifies its final
+  phrase survives immediate stream completion. It runs on release Mac with cached models, not CI.
 - **Installed provider contract**: ChatGPT 26.707.72221 and Claude 1.24012.0 pass 12/12
   packaged-resource, live-menu, and Claude Chat/Cowork/Code deep-link checks. Actual prompt
   insertion remains a manual release gate because contract inspection does not prove field focus.

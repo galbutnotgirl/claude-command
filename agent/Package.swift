@@ -25,10 +25,18 @@ let package = Package(
                 "ClaudeCommandCore",
             ],
             path: ".",
-            exclude: ["icon.png", "Sources", "Tests"],
+            exclude: ["icon.png", "Sources", "Tests", "Tools"],
             linkerSettings: [
                 .linkedFramework("Carbon"),
             ]
+        ),
+        .executableTarget(
+            name: "DictationModelProbe",
+            dependencies: [
+                .product(name: "FluidAudio", package: "FluidAudio"),
+                "ClaudeCommandCore",
+            ],
+            path: "Tools/DictationModelProbe"
         ),
         .testTarget(
             name: "ClaudeCommandCoreTests",
