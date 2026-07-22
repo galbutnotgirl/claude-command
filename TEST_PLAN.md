@@ -115,7 +115,7 @@ Preserve user settings for incremental tests. Use clean install only for onboard
 ## Current Evidence (2026-07-22)
 
 - Automated local suites: 129 Swift, 58 Node, 50 shell, 25 install-state, 11 updater,
-  7 release-policy, 63 static syntax/configuration, and 2 string-review; docs, Pages, provider
+  7 release-policy, 65 static syntax/configuration, and 2 string-review; docs, Pages, provider
   contract, and release asset pass.
 - Cached-model streaming probe retains generated speech's distinctive final words after immediate
   stream drain and Parakeet `finish()`.

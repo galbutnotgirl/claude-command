@@ -1407,7 +1407,7 @@ REQUIRED_TEXT = {
         "loadHandoffSubmissions(limit: 5)",
         "log=\\(logFile)",
         "Recent dictation entries (last 3, truncated)",
-        "\(HOME)/.claude/logs/clipwatch.err",
+        "\\(HOME)/.claude/logs/clipwatch.err",
         "App path:",
         "Bundle ID:",
         "Minimum macOS:",

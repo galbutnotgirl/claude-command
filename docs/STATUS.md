@@ -10,7 +10,7 @@ recent change if something in there needs undoing).
 
 ## Latest release hardening (2026-07-22)
 
-- Command no longer invokes AppleScript or `osascript`. Notifications, browser URL context,
+- Command no longer invokes external automation scripting. Notifications, browser URL context,
   clipboard image detection, and vendored background-core calls now use native AppKit,
   Accessibility, and Command's owner-only Unix socket. Static analysis prevents regressions.
 - Import now validates every selected section before writing and applies file mutations as one
@@ -159,7 +159,7 @@ detail — that doc is current as of alpha.6 and is the one to read before touch
 
 - **Test suites**: 129 Swift (`cd agent && swift test`), 58 Node
   (`cd vendor/claude-command-capture && node --test`), 50 shell (`./test/test-shell.sh`),
-  25 isolated install-state, 11 updater rollback/restart, 7 release-policy, 63 static,
+  25 isolated install-state, 11 updater rollback/restart, 7 release-policy, 65 static,
   string-review, and docs
   validation checks. All green. Local release verification also checks current installed
   Claude/ChatGPT contracts. CI runs portable suites plus a macOS release-asset smoke test
