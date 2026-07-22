@@ -25,11 +25,28 @@ DIR="${0:A:h}"
 VERSION="$( [ -f "${DIR}/VERSION" ] && tr -d ' \t\n' < "${DIR}/VERSION" || echo "1.0.0" )"
 APP="${DIR}/Command.app"
 DIST="${DIR}/dist"
-ZIP="${DIST}/Command-${VERSION}.zip"
-SHA256="${ZIP}.sha256"
+FINAL_ZIP="${DIST}/Command-${VERSION}.zip"
+FINAL_SHA256="${FINAL_ZIP}.sha256"
+ZIP="$FINAL_ZIP"
+SHA256="$FINAL_SHA256"
 TAG="v${VERSION}"
 EXPECTED_BUNDLE_ID="com.claudecommand"
 EXPECTED_MIN_MACOS="14.0"
+PACKAGE_ROOT=""
+PACKAGE_SWAP_STARTED=0
+PACKAGE_COMMITTED=0
+PREVIOUS_ZIP=""
+PREVIOUS_SHA256=""
+
+cleanup_package_staging() {
+  if [ "$PACKAGE_SWAP_STARTED" = "1" ] && [ "$PACKAGE_COMMITTED" = "0" ]; then
+    rm -f "$FINAL_ZIP" "$FINAL_SHA256"
+    [ -n "$PREVIOUS_ZIP" ] && [ -f "$PREVIOUS_ZIP" ] && mv "$PREVIOUS_ZIP" "$FINAL_ZIP" 2>/dev/null || true
+    [ -n "$PREVIOUS_SHA256" ] && [ -f "$PREVIOUS_SHA256" ] && mv "$PREVIOUS_SHA256" "$FINAL_SHA256" 2>/dev/null || true
+  fi
+  [ -n "$PACKAGE_ROOT" ] && rm -rf "$PACKAGE_ROOT"
+}
+trap cleanup_package_staging EXIT HUP INT TERM
 
 PUBLISH=0
 SKIP_CHECKS=0
@@ -131,7 +148,9 @@ BUILT_MIN_MACOS="$(/usr/libexec/PlistBuddy -c "Print :LSMinimumSystemVersion" "$
 [ "$BUILT_MIN_MACOS" = "$EXPECTED_MIN_MACOS" ] || fail "built Info.plist minimum macOS ${BUILT_MIN_MACOS:-missing}, expected ${EXPECTED_MIN_MACOS} — wrong deployment floor?"
 
 mkdir -p "$DIST"
-rm -f "$ZIP" "$SHA256"
+PACKAGE_ROOT="$(mktemp -d "${DIST}/.command-release.XXXXXX")" || fail "could not create package staging directory"
+ZIP="${PACKAGE_ROOT}/Command-${VERSION}.zip"
+SHA256="${ZIP}.sha256"
 # COPYFILE_DISABLE + --norsrc prevents AppleDouble ._* metadata from leaking
 # into release zips. ditto -ck --keepParent → zip contains Command.app at
 # top level, which is what Updater.install expects to find after 'ditto -xk'.
@@ -199,13 +218,29 @@ elif [ "$ALLOW_UNNOTARIZED" = "1" ]; then
 fi
 
 (
-  cd "$DIST" || exit 1
+  cd "${ZIP:h}" || exit 1
   shasum -a 256 "${ZIP:t}" > "${SHA256:t}"
 ) || fail "checksum failed"
 
 if ! grep -Eq "^[0-9a-f]{64}  ${ZIP:t}$" "$SHA256"; then
   fail "checksum file malformed: $SHA256"
 fi
+
+# Replace zip + checksum only after every package/notarization check succeeds.
+# Keep previous pair inside staging so signal or move failure can restore it.
+PREVIOUS_ZIP="${PACKAGE_ROOT}/previous.zip"
+PREVIOUS_SHA256="${PACKAGE_ROOT}/previous.zip.sha256"
+PACKAGE_SWAP_STARTED=1
+[ -f "$FINAL_ZIP" ] && mv "$FINAL_ZIP" "$PREVIOUS_ZIP"
+[ -f "$FINAL_SHA256" ] && mv "$FINAL_SHA256" "$PREVIOUS_SHA256"
+if ! mv "$ZIP" "$FINAL_ZIP" || ! mv "$SHA256" "$FINAL_SHA256"; then
+  fail "could not commit packaged zip and checksum; previous release assets will be restored"
+fi
+PACKAGE_COMMITTED=1
+ZIP="$FINAL_ZIP"
+SHA256="$FINAL_SHA256"
+rm -rf "$PACKAGE_ROOT"
+PACKAGE_ROOT=""
 
 print -- "[release] packaged: ${ZIP} ($(du -h "$ZIP" | cut -f1))"
 print -- "[release] checksum: ${SHA256}"

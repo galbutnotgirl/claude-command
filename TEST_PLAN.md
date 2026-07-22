@@ -145,7 +145,7 @@ Preserve user settings for incremental tests. Use clean install only for onboard
 
 ## Current Evidence (2026-07-22)
 
-- Automated local suites: 143 Swift, 58 Node, 54 shell, 25 install-state, 11 updater,
+- Automated local suites: 143 Swift, 58 Node, 59 shell, 25 install-state, 11 updater,
   9 restart-handoff, 7 release-policy, 70 static syntax/configuration, and 2 string-review;
   docs, Pages, provider contract, installed restart/runtime, and release asset pass.
 - Settings pickers and toggles have explicit hidden accessibility labels, and static analysis
@@ -153,6 +153,8 @@ Preserve user settings for incremental tests. Use clean install only for onboard
 - App builds assemble and sign in a same-volume staging directory. A reproduced locked-Keychain
   signing failure left the previous signed `Command.app` byte-identical and removed all staging
   files; an ad-hoc success run replaced the staged build cleanly with no leftovers.
+- Release zip and checksum are also staged and committed as a pair only after validation and
+  optional notarization complete; interrupted or failed packaging restores prior assets.
 - All 143 Swift tests also pass independently under AddressSanitizer and ThreadSanitizer.
 - Current accessibility-label build passes a 60-second launchd/socket runtime soak with stable
   PID, 61/61 socket pings, flat 50 open descriptors, declining RSS, no new crashes, and no newly

@@ -358,6 +358,18 @@ assert_contains "build restores previous artifact when staged install fails" "$B
 assert_not_contains "build never deletes final app during assembly" "$BUILD_AGENT_SOURCE" \
   'rm -rf "$FINAL_APP"'
 
+RELEASE_SOURCE="$(<"${DIR}/release.sh")"
+assert_contains "release builds package in a same-volume staging directory" "$RELEASE_SOURCE" \
+  'PACKAGE_ROOT="$(mktemp -d "${DIST}/.command-release.XXXXXX")"'
+assert_contains "release marks package swap before replacing prior assets" "$RELEASE_SOURCE" \
+  'PACKAGE_SWAP_STARTED=1'
+assert_contains "release marks zip and checksum committed as one pair" "$RELEASE_SOURCE" \
+  'PACKAGE_COMMITTED=1'
+assert_contains "release computes checksum beside staged zip" "$RELEASE_SOURCE" \
+  'cd "${ZIP:h}"'
+assert_contains "release move failure restores prior package pair" "$RELEASE_SOURCE" \
+  'previous release assets will be restored'
+
 print -r -- ""
 print -r -- "shell tests: ${PASS} passed, ${FAIL} failed"
 [ "$FAIL" -eq 0 ]
