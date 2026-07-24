@@ -2118,7 +2118,11 @@ private func canonicalJSON(_ value: Any) -> String {
 
 private func hotkeyJSON(_ bindings: [HotkeyBinding]) -> [[String: Any]] {
     bindings.map {
-        ["action": $0.action, "keycode": Int($0.keycode), "mods": Int($0.mods), "enabled": $0.enabled]
+        ["action": $0.action,
+         "keycode": Int($0.keycode),
+         "mods": Int($0.mods),
+         "shortcuts": $0.shortcuts.map { ["keycode": Int($0.keycode), "mods": Int($0.mods)] },
+         "enabled": $0.enabled]
     }
 }
 
@@ -2445,7 +2449,7 @@ private func applyGlobalImport(_ bundle: GlobalImportBundle, modes: [GlobalBundl
     if let mode = modes[.shortcutBindings], mode != .skip {
         let incoming = try validatedImportArray(.shortcutBindings, object: obj)
         let value = mode == .merge
-            ? mergeDictionaryArrays(current: hotkeyJSON(loadBindings()), incoming: incoming, key: "action")
+            ? mergeShortcutBindingArrays(current: hotkeyJSON(loadBindings()), incoming: incoming)
             : incoming
         try appendMutation(value, path: CFG)
     }

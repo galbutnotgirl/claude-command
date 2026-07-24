@@ -9,6 +9,22 @@ import ClaudeCommandCore
 import AppKit
 #endif
 
+private func decodeShortcuts(_ value: Any?) -> [KeyboardShortcut] {
+    guard let rows = value as? [[String: Any]] else { return [] }
+    return normalizedShortcuts(rows.compactMap { row in
+        guard let keycode = row["keycode"] as? Int,
+              let mods = row["mods"] as? Int,
+              keycode > 0 else { return nil }
+        return KeyboardShortcut(keycode: UInt32(keycode), mods: UInt32(mods))
+    })
+}
+
+private func encodeShortcuts(_ values: [KeyboardShortcut]) -> [[String: Any]] {
+    normalizedShortcuts(values).map {
+        ["keycode": Int($0.keycode), "mods": Int($0.mods)]
+    }
+}
+
 // One binding per catalog action, in catalog order; unbound actions get keycode 0.
 func loadBindings() -> [HotkeyBinding] {
     var byAction: [String: HotkeyBinding] = [:]
@@ -17,9 +33,14 @@ func loadBindings() -> [HotkeyBinding] {
     if hasFile, let data = FileManager.default.contents(atPath: CFG),
        let arr = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] {
         for d in arr {
-            if let a = d["action"] as? String, let k = d["keycode"] as? Int, let m = d["mods"] as? Int {
+            if let a = d["action"] as? String {
                 let en = d["enabled"] as? Bool ?? true
-                byAction[a] = HotkeyBinding(action: a, keycode: UInt32(k), mods: UInt32(m), enabled: en)
+                let aliases = decodeShortcuts(d["shortcuts"])
+                if !aliases.isEmpty {
+                    byAction[a] = HotkeyBinding(action: a, shortcuts: aliases, enabled: en)
+                } else if let k = d["keycode"] as? Int, let m = d["mods"] as? Int {
+                    byAction[a] = HotkeyBinding(action: a, keycode: UInt32(k), mods: UInt32(m), enabled: en)
+                }
             }
         }
         shouldPersistMigration = migrateExperimentalShortcutDefaultsIfNeeded(&byAction)
@@ -42,8 +63,14 @@ func saveBindings(_ bindings: [HotkeyBinding]) {
 }
 
 private func writeBindings(_ bindings: [HotkeyBinding]) {
-    let arr = bindings.filter { $0.keycode != 0 }
-        .map { ["action": $0.action, "keycode": Int($0.keycode), "mods": Int($0.mods), "enabled": $0.enabled] as [String: Any] }
+    let arr = bindings.filter { !$0.shortcuts.isEmpty }
+        .map { binding -> [String: Any] in
+            ["action": binding.action,
+             "keycode": Int(binding.keycode),
+             "mods": Int(binding.mods),
+             "shortcuts": encodeShortcuts(binding.shortcuts),
+             "enabled": binding.enabled]
+        }
     if let data = try? JSONSerialization.data(withJSONObject: arr, options: [.prettyPrinted]) {
         try? FileManager.default.createDirectory(
             at: URL(fileURLWithPath: CFG).deletingLastPathComponent(),
@@ -71,9 +98,13 @@ private func decodeTrigger(_ d: [String: Any]) -> ActionTrigger? {
     let delivery = (d["deliveryOverride"] as? String).flatMap(ActionDelivery.init(rawValue:))
     let destination = (d["destinationOverride"] as? String).flatMap(ClaudeDestination.init(rawValue:))
     let provider = (d["providerOverride"] as? String).flatMap(AIProviderChoice.init(rawValue:))
+    let aliases = decodeShortcuts(d["shortcuts"])
     return ActionTrigger(
         id: id, kind: kind,
-        keycode: UInt32(d["keycode"] as? Int ?? 0), mods: UInt32(d["mods"] as? Int ?? 0),
+        shortcuts: aliases.isEmpty
+            ? normalizedShortcuts([KeyboardShortcut(keycode: UInt32(d["keycode"] as? Int ?? 0),
+                                                     mods: UInt32(d["mods"] as? Int ?? 0))])
+            : aliases,
         enabled: d["enabled"] as? Bool ?? true,
         isAutoSubmitOverride: d["isAutoSubmitOverride"] as? Bool,
         sessionModeOverride: d["sessionModeOverride"] as? String,
@@ -132,7 +163,8 @@ func loadCustomActions() -> [CustomAction] {
 
 private func encodeTrigger(_ t: ActionTrigger) -> [String: Any] {
     var d: [String: Any] = ["id": t.id, "kind": t.kind.rawValue,
-                             "keycode": Int(t.keycode), "mods": Int(t.mods), "enabled": t.enabled]
+                             "keycode": Int(t.keycode), "mods": Int(t.mods),
+                             "shortcuts": encodeShortcuts(t.shortcuts), "enabled": t.enabled]
     if let v = t.isAutoSubmitOverride { d["isAutoSubmitOverride"] = v }
     if let v = t.sessionModeOverride { d["sessionModeOverride"] = v }
     if let v = t.includeSourceOverride { d["includeSourceOverride"] = v }

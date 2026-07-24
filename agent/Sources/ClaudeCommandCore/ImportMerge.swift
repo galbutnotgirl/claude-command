@@ -89,6 +89,56 @@ public func mergeDictionaryArrays(current: [[String: Any]], incoming: [[String: 
     return order.compactMap { byKey[$0] }
 }
 
+public func mergeShortcutBindingArrays(
+    current: [[String: Any]],
+    incoming: [[String: Any]]
+) -> [[String: Any]] {
+    func aliases(_ row: [String: Any]) -> [[String: Any]] {
+        if let values = row["shortcuts"] as? [[String: Any]] { return values }
+        guard let keycode = row["keycode"] as? Int,
+              let mods = row["mods"] as? Int,
+              keycode > 0 else { return [] }
+        return [["keycode": keycode, "mods": mods]]
+    }
+
+    var incomingByAction: [String: [String: Any]] = [:]
+    for row in incoming {
+        if let action = row["action"] as? String { incomingByAction[action] = row }
+    }
+
+    var result: [[String: Any]] = []
+    var seenActions: Set<String> = []
+    for currentRow in current {
+        guard let action = currentRow["action"] as? String else { continue }
+        seenActions.insert(action)
+        guard let incomingRow = incomingByAction[action] else {
+            result.append(currentRow)
+            continue
+        }
+        var mergedAliases: [[String: Any]] = []
+        var seen: Set<String> = []
+        for alias in aliases(currentRow) + aliases(incomingRow) {
+            guard let keycode = alias["keycode"] as? Int,
+                  let mods = alias["mods"] as? Int,
+                  keycode > 0 else { continue }
+            let id = "\(keycode):\(mods)"
+            if seen.insert(id).inserted && mergedAliases.count < 2 {
+                mergedAliases.append(["keycode": keycode, "mods": mods])
+            }
+        }
+        var merged = incomingRow
+        merged["shortcuts"] = mergedAliases
+        merged["keycode"] = mergedAliases.first?["keycode"] ?? 0
+        merged["mods"] = mergedAliases.first?["mods"] ?? 0
+        result.append(merged)
+    }
+    result.append(contentsOf: incoming.filter {
+        guard let action = $0["action"] as? String else { return false }
+        return !seenActions.contains(action)
+    })
+    return result
+}
+
 public func mergeEnrichRuleDictionaries(current: [[String: Any]], incoming: [[String: Any]]) -> [[String: Any]] {
     func ruleKey(_ item: [String: Any]) -> String {
         let match = item["match"] as? String ?? ""

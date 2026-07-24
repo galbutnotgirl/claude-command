@@ -62,6 +62,15 @@ final class ImportValidationTests: XCTestCase {
         XCTAssertFalse(isValidImportPayload([
             ["action": "go", "keycode": "F8", "mods": 0]
         ], for: .shortcutBindings))
+        XCTAssertTrue(isValidImportPayload([
+            ["action": "go", "shortcuts": [
+                ["keycode": 100, "mods": 0],
+                ["keycode": 115, "mods": 0],
+            ]]
+        ], for: .shortcutBindings))
+        XCTAssertFalse(isValidImportPayload([
+            ["action": "go", "shortcuts": [["keycode": "Home", "mods": 0]]]
+        ], for: .shortcutBindings))
     }
 
     func testContextRulesRejectUnknownMatchType() {

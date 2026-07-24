@@ -1137,12 +1137,11 @@ struct HK { let action: String; let keycode: UInt32; let mods: UInt32 }
 func loadHotkeys() -> [HK] {
     let clipboardEnabled = UserDefaults.standard.bool(forKey: "cliphistoryEnabled")
     let dictationEnabled = UserDefaults.standard.bool(forKey: VoiceSettingsKeys.dictationEnabled)
-    return loadBindings().compactMap { binding in
+    return loadBindings().flatMap { binding -> [HK] in
         guard binding.enabled,
-              binding.keycode != 0,
               !isBuiltInVoiceAction(binding.action) || dictationEnabled,
-              binding.action != "cliphistory" || clipboardEnabled else { return nil }
-        return HK(action: binding.action, keycode: binding.keycode, mods: binding.mods)
+              binding.action != "cliphistory" || clipboardEnabled else { return [] }
+        return binding.shortcuts.map { HK(action: binding.action, keycode: $0.keycode, mods: $0.mods) }
     }
 }
 
@@ -1278,29 +1277,30 @@ func registerFromConfig() {
             hotkeyKeycodes.removeValue(forKey: hkID)
         }
     }
-    // Custom action hotkeys (stored in custom-actions.json) — one registration
-    // per enabled trigger, not per action, since one action can have several.
-    // IDs start at 100 to avoid collisions with the up-to-9 built-in slots above.
+    // Custom action aliases each receive their own registration and route back
+    // to the same owning trigger.
     var triggerSlot = 0
     for ca in loadCustomActions() where ca.enabled {
-        for trig in ca.triggers where trig.enabled && trig.keycode != 0 {
-            if trig.kind == .voice, eventTapOwnsVoiceHotkey(keycode: trig.keycode) { continue }
-            let hkID = UInt32(100 + triggerSlot)
-            triggerSlot += 1
-            let id = EventHotKeyID(signature: sig, id: hkID)
-            hotkeyActions[hkID] = ca.actionID(for: trig)
-            hotkeyKeycodes[hkID] = trig.keycode
-            var ref: EventHotKeyRef?
-            let status = RegisterEventHotKey(trig.keycode, trig.mods, id, GetApplicationEventTarget(), 0, &ref)
-            if status == noErr {
-                hotkeyRefs.append(ref)
-                if trig.kind == .voice {
-                    appendLog("[hotkeys] registered custom voice action=\(ca.name) keycode=\(trig.keycode) mods=\(trig.mods) via carbon")
+        for trig in ca.triggers where trig.enabled {
+            for shortcut in trig.shortcuts {
+                if trig.kind == .voice, eventTapOwnsVoiceHotkey(keycode: shortcut.keycode) { continue }
+                let hkID = UInt32(100 + triggerSlot)
+                triggerSlot += 1
+                let id = EventHotKeyID(signature: sig, id: hkID)
+                hotkeyActions[hkID] = ca.actionID(for: trig)
+                hotkeyKeycodes[hkID] = shortcut.keycode
+                var ref: EventHotKeyRef?
+                let status = RegisterEventHotKey(shortcut.keycode, shortcut.mods, id, GetApplicationEventTarget(), 0, &ref)
+                if status == noErr {
+                    hotkeyRefs.append(ref)
+                    if trig.kind == .voice {
+                        appendLog("[hotkeys] registered custom voice action=\(ca.name) keycode=\(shortcut.keycode) mods=\(shortcut.mods) via carbon")
+                    }
+                } else {
+                    appendLog("[hotkeys] RegisterEventHotKey failed custom=\(ca.name) trigger=\(trig.kind.rawValue) keycode=\(shortcut.keycode) mods=\(shortcut.mods) status=\(status)")
+                    hotkeyActions.removeValue(forKey: hkID)
+                    hotkeyKeycodes.removeValue(forKey: hkID)
                 }
-            } else {
-                appendLog("[hotkeys] RegisterEventHotKey failed custom=\(ca.name) trigger=\(trig.kind.rawValue) keycode=\(trig.keycode) mods=\(trig.mods) status=\(status)")
-                hotkeyActions.removeValue(forKey: hkID)
-                hotkeyKeycodes.removeValue(forKey: hkID)
             }
         }
     }
@@ -1535,7 +1535,8 @@ func fireMediaAction(_ carbon: UInt32, mods: UInt32 = 0) {
 // used by both the media-key path above and hotkey-conflict checks below.
 func triggerMatching(keycode: UInt32, mods: UInt32) -> (CustomAction, ActionTrigger)? {
     for ca in loadCustomActions() where ca.enabled {
-        if let t = ca.triggers.first(where: { $0.enabled && $0.keycode == keycode && $0.mods == mods }) {
+        let shortcut = KeyboardShortcut(keycode: keycode, mods: mods)
+        if let t = ca.triggers.first(where: { $0.enabled && $0.shortcuts.contains(shortcut) }) {
             return (ca, t)
         }
     }

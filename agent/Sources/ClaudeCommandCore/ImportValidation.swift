@@ -54,8 +54,13 @@ public func isValidImportPayload(_ payload: Any, for section: ImportPayloadSecti
     switch section {
     case .shortcutBindings:
         return (payload as? [[String: Any]])?.allSatisfy {
-            $0["action"] is String && $0["keycode"] is Int && $0["mods"] is Int
-                && ($0["enabled"] == nil || $0["enabled"] is Bool)
+            guard $0["action"] is String,
+                  $0["enabled"] == nil || $0["enabled"] is Bool else { return false }
+            let legacy = $0["keycode"] is Int && $0["mods"] is Int
+            let aliases = ($0["shortcuts"] as? [[String: Any]])?.allSatisfy {
+                $0["keycode"] is Int && $0["mods"] is Int
+            } == true
+            return legacy || aliases
         } == true
     case .customActions:
         return (payload as? [[String: Any]])?.allSatisfy {

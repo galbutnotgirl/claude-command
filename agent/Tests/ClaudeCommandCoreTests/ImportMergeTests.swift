@@ -158,4 +158,28 @@ final class ImportMergeTests: XCTestCase {
             ImportPreviewCounts(incoming: 7, current: 6, same: 3, added: 3, updated: 1, currentOnly: 2)
         )
     }
+
+    func testShortcutMergeKeepsCurrentThenAddsUniqueIncomingAlias() {
+        let merged = mergeShortcutBindingArrays(
+            current: [["action": "add", "keycode": 100, "mods": 0]],
+            incoming: [[
+                "action": "add", "keycode": 115, "mods": 0,
+                "shortcuts": [["keycode": 115, "mods": 0], ["keycode": 119, "mods": 0]],
+                "enabled": true,
+            ]]
+        )
+        let aliases = merged[0]["shortcuts"] as? [[String: Int]]
+        XCTAssertEqual(aliases?[0]["keycode"], 100)
+        XCTAssertEqual(aliases?[1]["keycode"], 115)
+        XCTAssertEqual(merged[0]["keycode"] as? Int, 100)
+    }
+
+    func testShortcutMergeDeduplicatesSameAlias() {
+        let row: [String: Any] = [
+            "action": "add", "keycode": 100, "mods": 0,
+            "shortcuts": [["keycode": 100, "mods": 0]],
+        ]
+        let merged = mergeShortcutBindingArrays(current: [row], incoming: [row])
+        XCTAssertEqual((merged[0]["shortcuts"] as? [[String: Any]])?.count, 1)
+    }
 }
