@@ -9,17 +9,17 @@ import ClaudeCommandCore
 import AppKit
 #endif
 
-private func decodeShortcuts(_ value: Any?) -> [KeyboardShortcut] {
+private func decodeShortcuts(_ value: Any?) -> [HotkeyShortcut] {
     guard let rows = value as? [[String: Any]] else { return [] }
     return normalizedShortcuts(rows.compactMap { row in
         guard let keycode = row["keycode"] as? Int,
               let mods = row["mods"] as? Int,
               keycode > 0 else { return nil }
-        return KeyboardShortcut(keycode: UInt32(keycode), mods: UInt32(mods))
+        return HotkeyShortcut(keycode: UInt32(keycode), mods: UInt32(mods))
     })
 }
 
-private func encodeShortcuts(_ values: [KeyboardShortcut]) -> [[String: Any]] {
+private func encodeShortcuts(_ values: [HotkeyShortcut]) -> [[String: Any]] {
     normalizedShortcuts(values).map {
         ["keycode": Int($0.keycode), "mods": Int($0.mods)]
     }
@@ -102,7 +102,7 @@ private func decodeTrigger(_ d: [String: Any]) -> ActionTrigger? {
     return ActionTrigger(
         id: id, kind: kind,
         shortcuts: aliases.isEmpty
-            ? normalizedShortcuts([KeyboardShortcut(keycode: UInt32(d["keycode"] as? Int ?? 0),
+            ? normalizedShortcuts([HotkeyShortcut(keycode: UInt32(d["keycode"] as? Int ?? 0),
                                                      mods: UInt32(d["mods"] as? Int ?? 0))])
             : aliases,
         enabled: d["enabled"] as? Bool ?? true,

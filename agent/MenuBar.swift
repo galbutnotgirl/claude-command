@@ -125,21 +125,14 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         let bindings = loadBindings().filter(\.isVisibleInMenu)
         for (i, b) in bindings.enumerated() {
             let it = NSMenuItem()
-            it.title = b.name
-            it.representedObject = b.action
-            it.isEnabled = true
-            it.target = self
-            it.action = #selector(runAction(_:))
-            if let kc = nsKeyChar(for: b.keycode) {
-                it.keyEquivalent = kc
-                it.keyEquivalentModifierMask = nsModifiers(from: b.mods)
+            it.view = NSMenuItemPlainView(title: b.name, shortcut: b.human) { [weak self] in
+                self?.runAction(b.action)
             }
             menu.insertItem(it, at: i)
         }
     }
 
-    @objc private func runAction(_ sender: NSMenuItem) {
-        guard let action = sender.representedObject as? String else { return }
+    private func runAction(_ action: String) {
         let front = NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? ""
         if action == "cliphistory" {
             DispatchQueue.main.async { picker.show(prev: front) }

@@ -36,7 +36,7 @@ public func actionDetail(_ id: String) -> String { COMMAND_ACTIONS.first { $0.id
 // `keycode`/`mods` remain first-shortcut compatibility accessors. New settings
 // persist up to two values in `shortcuts`, while old files continue to load.
 
-public struct KeyboardShortcut: Hashable, Sendable {
+public struct HotkeyShortcut: Hashable, Sendable {
     public var keycode: UInt32
     public var mods: UInt32
 
@@ -48,21 +48,21 @@ public struct KeyboardShortcut: Hashable, Sendable {
     public var human: String { humanShortcut(keycode: keycode, mods: mods) }
 }
 
-public func normalizedShortcuts(_ values: [KeyboardShortcut]) -> [KeyboardShortcut] {
-    var seen: Set<KeyboardShortcut> = []
+public func normalizedShortcuts(_ values: [HotkeyShortcut]) -> [HotkeyShortcut] {
+    var seen: Set<HotkeyShortcut> = []
     return values.filter { $0.keycode != 0 && seen.insert($0).inserted }.prefix(2).map { $0 }
 }
 
 public struct HotkeyBinding: Identifiable {
     public let action: String
-    public var shortcuts: [KeyboardShortcut]
+    public var shortcuts: [HotkeyShortcut]
     public var enabled: Bool
     public var id: String { action }
     public var keycode: UInt32 {
         get { shortcuts.first?.keycode ?? 0 }
         set {
             if newValue == 0 { shortcuts = [] }
-            else if shortcuts.isEmpty { shortcuts = [KeyboardShortcut(keycode: newValue, mods: 0)] }
+            else if shortcuts.isEmpty { shortcuts = [HotkeyShortcut(keycode: newValue, mods: 0)] }
             else { shortcuts[0].keycode = newValue }
         }
     }
@@ -80,11 +80,11 @@ public struct HotkeyBinding: Identifiable {
 
     public init(action: String, keycode: UInt32, mods: UInt32, enabled: Bool) {
         self.init(action: action,
-                  shortcuts: keycode == 0 ? [] : [KeyboardShortcut(keycode: keycode, mods: mods)],
+                  shortcuts: keycode == 0 ? [] : [HotkeyShortcut(keycode: keycode, mods: mods)],
                   enabled: enabled)
     }
 
-    public init(action: String, shortcuts: [KeyboardShortcut], enabled: Bool) {
+    public init(action: String, shortcuts: [HotkeyShortcut], enabled: Bool) {
         self.action = action
         self.shortcuts = normalizedShortcuts(shortcuts)
         self.enabled = enabled
@@ -218,7 +218,7 @@ public enum ActionDelivery: String, CaseIterable, Codable, Sendable {
 public struct ActionTrigger: Identifiable, Sendable {
     public var id: String
     public var kind: ActionKind
-    public var shortcuts: [KeyboardShortcut]
+    public var shortcuts: [HotkeyShortcut]
     public var enabled: Bool
     public var isAutoSubmitOverride: Bool?
     public var sessionModeOverride: String?
@@ -231,7 +231,7 @@ public struct ActionTrigger: Identifiable, Sendable {
         get { shortcuts.first?.keycode ?? 0 }
         set {
             if newValue == 0 { shortcuts = [] }
-            else if shortcuts.isEmpty { shortcuts = [KeyboardShortcut(keycode: newValue, mods: 0)] }
+            else if shortcuts.isEmpty { shortcuts = [HotkeyShortcut(keycode: newValue, mods: 0)] }
             else { shortcuts[0].keycode = newValue }
         }
     }
@@ -249,7 +249,7 @@ public struct ActionTrigger: Identifiable, Sendable {
                 includeSourceOverride: Bool? = nil, deliveryOverride: ActionDelivery? = nil,
                 destinationOverride: ClaudeDestination? = nil, providerOverride: AIProviderChoice? = nil) {
         self.id = id; self.kind = kind
-        self.shortcuts = keycode == 0 ? [] : [KeyboardShortcut(keycode: keycode, mods: mods)]
+        self.shortcuts = keycode == 0 ? [] : [HotkeyShortcut(keycode: keycode, mods: mods)]
         self.enabled = enabled
         self.isAutoSubmitOverride = isAutoSubmitOverride
         self.sessionModeOverride = sessionModeOverride
@@ -259,7 +259,7 @@ public struct ActionTrigger: Identifiable, Sendable {
         self.providerOverride = providerOverride
     }
 
-    public init(id: String = UUID().uuidString, kind: ActionKind, shortcuts: [KeyboardShortcut],
+    public init(id: String = UUID().uuidString, kind: ActionKind, shortcuts: [HotkeyShortcut],
                 enabled: Bool = true, isAutoSubmitOverride: Bool? = nil, sessionModeOverride: String? = nil,
                 includeSourceOverride: Bool? = nil, deliveryOverride: ActionDelivery? = nil,
                 destinationOverride: ClaudeDestination? = nil, providerOverride: AIProviderChoice? = nil) {

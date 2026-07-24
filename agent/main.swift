@@ -1535,7 +1535,7 @@ func fireMediaAction(_ carbon: UInt32, mods: UInt32 = 0) {
 // used by both the media-key path above and hotkey-conflict checks below.
 func triggerMatching(keycode: UInt32, mods: UInt32) -> (CustomAction, ActionTrigger)? {
     for ca in loadCustomActions() where ca.enabled {
-        let shortcut = KeyboardShortcut(keycode: keycode, mods: mods)
+        let shortcut = HotkeyShortcut(keycode: keycode, mods: mods)
         if let t = ca.triggers.first(where: { $0.enabled && $0.shortcuts.contains(shortcut) }) {
             return (ca, t)
         }

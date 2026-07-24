@@ -190,8 +190,8 @@ final class ActionModelsTests: XCTestCase {
 
     func testTwoHotkeysDisplayInStableOrder() {
         let b = HotkeyBinding(action: "add", shortcuts: [
-            KeyboardShortcut(keycode: 100, mods: 0),
-            KeyboardShortcut(keycode: 115, mods: 0),
+            HotkeyShortcut(keycode: 100, mods: 0),
+            HotkeyShortcut(keycode: 115, mods: 0),
         ], enabled: true)
         XCTAssertEqual(b.human, "F8 / Home")
         XCTAssertEqual(b.keycode, 100)
@@ -200,14 +200,14 @@ final class ActionModelsTests: XCTestCase {
 
     func testShortcutNormalizationDropsUnboundDuplicatesAndThirdAlias() {
         XCTAssertEqual(normalizedShortcuts([
-            KeyboardShortcut(keycode: 0, mods: 0),
-            KeyboardShortcut(keycode: 115, mods: 0),
-            KeyboardShortcut(keycode: 115, mods: 0),
-            KeyboardShortcut(keycode: 119, mods: 0),
-            KeyboardShortcut(keycode: 100, mods: 0),
+            HotkeyShortcut(keycode: 0, mods: 0),
+            HotkeyShortcut(keycode: 115, mods: 0),
+            HotkeyShortcut(keycode: 115, mods: 0),
+            HotkeyShortcut(keycode: 119, mods: 0),
+            HotkeyShortcut(keycode: 100, mods: 0),
         ]), [
-            KeyboardShortcut(keycode: 115, mods: 0),
-            KeyboardShortcut(keycode: 119, mods: 0),
+            HotkeyShortcut(keycode: 115, mods: 0),
+            HotkeyShortcut(keycode: 119, mods: 0),
         ])
     }
 

@@ -76,7 +76,7 @@ private enum ShortcutRowLayout {
     static let nestedLeading: CGFloat = 28
     static let icon: CGFloat = 16
     static let label: CGFloat = 130
-    static let shortcut: CGFloat = 74
+    static let shortcut: CGFloat = 150
 }
 
 private enum CustomActionSheetLayout {
@@ -118,6 +118,7 @@ final class SettingsModel: ObservableObject {
     @Published var bindings: [HotkeyBinding] = []
     @Published var customActions: [CustomAction] = []
     @Published var recordingAction: String? = nil
+    @Published var recordingShortcutIndex: Int = 0
     @Published var bindingConflict: String? = nil
     @Published var claudeDestination: String = UserDefaults.standard.string(forKey: "claudeDestination") ?? "recent"
     @Published var codexDestination: String = UserDefaults.standard.string(forKey: "codexDestination") ?? "recent"
@@ -139,9 +140,13 @@ final class SettingsModel: ObservableObject {
         customActions = loadCustomActions()
     }
 
-    func setBinding(action: String, keycode: UInt32, mods: UInt32) {
+    func setBinding(action: String, shortcutIndex: Int = 0, keycode: UInt32, mods: UInt32) {
         if let i = bindings.firstIndex(where: { $0.action == action }) {
-            bindings[i].keycode = keycode; bindings[i].mods = mods
+            var values = bindings[i].shortcuts
+            let shortcut = HotkeyShortcut(keycode: keycode, mods: mods)
+            if shortcutIndex < values.count { values[shortcutIndex] = shortcut }
+            else if shortcutIndex == values.count { values.append(shortcut) }
+            bindings[i].shortcuts = normalizedShortcuts(values)
         }
         saveBindings(bindings); refresh()
     }
@@ -151,17 +156,32 @@ final class SettingsModel: ObservableObject {
         }
         saveBindings(bindings); refresh()
     }
-    func clearBinding(_ action: String) {
+    func resetBindings(actions: Set<String>) {
+        let defaults = Dictionary(uniqueKeysWithValues: DEFAULT_BINDINGS.map { ($0.action, $0) })
+        for index in bindings.indices where actions.contains(bindings[index].action) {
+            guard let value = defaults[bindings[index].action] else { continue }
+            bindings[index].shortcuts = value.keycode == 0
+                ? []
+                : [HotkeyShortcut(keycode: value.keycode, mods: value.mods)]
+            bindings[index].enabled = value.keycode != 0
+        }
+        saveBindings(bindings); refresh()
+    }
+    func clearBinding(_ action: String, shortcutIndex: Int = 0) {
         if let i = bindings.firstIndex(where: { $0.action == action }) {
-            bindings[i].keycode = 0; bindings[i].mods = 0
+            if shortcutIndex < bindings[i].shortcuts.count {
+                bindings[i].shortcuts.remove(at: shortcutIndex)
+            }
         }
         saveBindings(bindings); refresh()
     }
 
     // Begin capturing the next combo for `action`. Hotkeys are paused so the
     // combo being pressed doesn't also fire whatever it's currently bound to.
-    func startRecording(_ action: String) {
+    func startRecording(_ action: String, shortcutIndex: Int = 0) {
         recordingAction = action
+        recordingShortcutIndex = shortcutIndex
+        bindingConflict = nil
         unregisterAllHotkeys()
     }
     func cancelRecording() {
@@ -171,15 +191,12 @@ final class SettingsModel: ObservableObject {
 
     func recordModifierOnlyHotkey(keycode: UInt32) {
         guard let action = recordingAction else { return }
+        let index = recordingShortcutIndex
         let isCustomTrigger = customActions.contains { $0.triggers.contains { $0.id == action } }
         guard canRecordModifierOnly(action: action, isCustomTrigger: isCustomTrigger) else { return }
         recordingAction = nil
-        if isCustomTrigger {
-            setTriggerBinding(triggerID: action, keycode: keycode, mods: 0)
-        } else {
-            setBinding(action: action, keycode: keycode, mods: 0)
-        }
-        checkConflict(forAction: action, keycode: keycode, mods: 0)
+        commitRecordedShortcut(action: action, shortcutIndex: index,
+                               isCustomTrigger: isCustomTrigger, keycode: keycode, mods: 0)
         reregisterHotkeys()
     }
 
@@ -189,35 +206,29 @@ final class SettingsModel: ObservableObject {
     // don't have one shared key to record against — each one does).
     func handleRecording(_ ev: NSEvent) -> Bool {
         guard let action = recordingAction else { return false }
+        let index = recordingShortcutIndex
         let isCustomTrigger = customActions.contains { $0.triggers.contains { $0.id == action } }
         if ev.type == .flagsChanged {
             guard canRecordModifierOnly(action: action, isCustomTrigger: isCustomTrigger),
                   let key = activeModifierOnlyKeycode(from: ev) else { return true }
             recordingAction = nil
-            if isCustomTrigger {
-                setTriggerBinding(triggerID: action, keycode: key, mods: 0)
-            } else {
-                setBinding(action: action, keycode: key, mods: 0)
-            }
-            checkConflict(forAction: action, keycode: key, mods: 0)
+            commitRecordedShortcut(action: action, shortcutIndex: index,
+                                   isCustomTrigger: isCustomTrigger, keycode: key, mods: 0)
             reregisterHotkeys()
             return true
         }
         if ev.keyCode == 53 { cancelRecording(); return true }              // esc cancels
         if ev.keyCode == 51 || ev.keyCode == 117 {                         // delete / fwd-delete = clear
             recordingAction = nil
-            if isCustomTrigger { clearTriggerBinding(triggerID: action) } else { clearBinding(action) }
+            if isCustomTrigger { clearTriggerBinding(triggerID: action, shortcutIndex: index) }
+            else { clearBinding(action, shortcutIndex: index) }
             reregisterHotkeys()
             return true
         }
         if let navKey = fnArrowNavigationKeycode(from: ev) {
             recordingAction = nil
-            if isCustomTrigger {
-                setTriggerBinding(triggerID: action, keycode: navKey, mods: 0)
-            } else {
-                setBinding(action: action, keycode: navKey, mods: 0)
-            }
-            checkConflict(forAction: action, keycode: navKey, mods: 0)
+            commitRecordedShortcut(action: action, shortcutIndex: index,
+                                   isCustomTrigger: isCustomTrigger, keycode: navKey, mods: 0)
             reregisterHotkeys()
             return true
         }
@@ -225,12 +236,8 @@ final class SettingsModel: ObservableObject {
         guard KEYCODE_NAMES[key] != nil else { return true }                // ignore keys we can't name
         let carbonM = carbonMods(from: ev.modifierFlags)
         recordingAction = nil
-        if isCustomTrigger {
-            setTriggerBinding(triggerID: action, keycode: key, mods: carbonM)
-        } else {
-            setBinding(action: action, keycode: key, mods: carbonM)
-        }
-        checkConflict(forAction: action, keycode: key, mods: carbonM)
+        commitRecordedShortcut(action: action, shortcutIndex: index,
+                               isCustomTrigger: isCustomTrigger, keycode: key, mods: carbonM)
         reregisterHotkeys()
         return true
     }
@@ -294,17 +301,29 @@ final class SettingsModel: ObservableObject {
         customActions[i].triggers.removeAll { $0.id == triggerID }
         saveCustomActions(customActions)
     }
-    func setTriggerBinding(triggerID: String, keycode: UInt32, mods: UInt32) {
+    func setTriggerBinding(triggerID: String, shortcutIndex: Int = 0, keycode: UInt32, mods: UInt32) {
         for i in customActions.indices {
             if let j = customActions[i].triggers.firstIndex(where: { $0.id == triggerID }) {
-                customActions[i].triggers[j].keycode = keycode
-                customActions[i].triggers[j].mods = mods
+                var values = customActions[i].triggers[j].shortcuts
+                let shortcut = HotkeyShortcut(keycode: keycode, mods: mods)
+                if shortcutIndex < values.count { values[shortcutIndex] = shortcut }
+                else if shortcutIndex == values.count { values.append(shortcut) }
+                customActions[i].triggers[j].shortcuts = normalizedShortcuts(values)
                 break
             }
         }
         saveCustomActions(customActions)
     }
-    func clearTriggerBinding(triggerID: String) { setTriggerBinding(triggerID: triggerID, keycode: 0, mods: 0) }
+    func clearTriggerBinding(triggerID: String, shortcutIndex: Int = 0) {
+        for i in customActions.indices {
+            if let j = customActions[i].triggers.firstIndex(where: { $0.id == triggerID }),
+               shortcutIndex < customActions[i].triggers[j].shortcuts.count {
+                customActions[i].triggers[j].shortcuts.remove(at: shortcutIndex)
+                break
+            }
+        }
+        saveCustomActions(customActions)
+    }
     func setTriggerKind(triggerID: String, kind: ActionKind) {
         for i in customActions.indices {
             if let j = customActions[i].triggers.firstIndex(where: { $0.id == triggerID }) {
@@ -355,21 +374,43 @@ final class SettingsModel: ObservableObject {
         saveCustomActions(customActions)
     }
 
-    // Check whether keycode+mods collides with any other binding (different action/id).
-    // Sets bindingConflict to a human-readable message, or nil if clear.
-    func checkConflict(forAction action: String, keycode: UInt32, mods: UInt32) {
-        guard keycode != 0 else { bindingConflict = nil; return }
-        if let other = bindings.first(where: { $0.keycode == keycode && $0.mods == mods && $0.action != action }) {
-            bindingConflict = "Conflicts with \"\(other.action)\" shortcut"
+    private func commitRecordedShortcut(action: String, shortcutIndex: Int,
+                                        isCustomTrigger: Bool, keycode: UInt32, mods: UInt32) {
+        if let conflict = shortcutConflict(forAction: action, shortcutIndex: shortcutIndex,
+                                           keycode: keycode, mods: mods) {
+            bindingConflict = conflict
             return
         }
-        for ca in customActions {
-            if let t = ca.triggers.first(where: { $0.keycode == keycode && $0.mods == mods && $0.id != action }) {
-                bindingConflict = "Conflicts with custom action \"\(ca.name)\" (\(t.kind.label))"
-                return
+        bindingConflict = nil
+        if isCustomTrigger {
+            setTriggerBinding(triggerID: action, shortcutIndex: shortcutIndex, keycode: keycode, mods: mods)
+        } else {
+            setBinding(action: action, shortcutIndex: shortcutIndex, keycode: keycode, mods: mods)
+        }
+    }
+
+    private func shortcutConflict(forAction action: String, shortcutIndex: Int,
+                                  keycode: UInt32, mods: UInt32) -> String? {
+        let candidate = HotkeyShortcut(keycode: keycode, mods: mods)
+        for binding in bindings {
+            for (index, shortcut) in binding.shortcuts.enumerated()
+            where shortcut == candidate && (binding.action != action || index != shortcutIndex) {
+                return binding.action == action
+                    ? "This shortcut is already assigned to this action"
+                    : "Conflicts with \"\(binding.name)\" shortcut"
             }
         }
-        bindingConflict = nil
+        for ca in customActions {
+            for trigger in ca.triggers {
+                for (index, shortcut) in trigger.shortcuts.enumerated()
+                where shortcut == candidate && (trigger.id != action || index != shortcutIndex) {
+                    return trigger.id == action
+                        ? "This shortcut is already assigned to this trigger"
+                        : "Conflicts with custom action \"\(ca.name)\" (\(trigger.kind.label))"
+                }
+            }
+        }
+        return nil
     }
 }
 
@@ -1217,6 +1258,7 @@ struct BuiltInComposeSheet: View {
                 templates.resetBuiltInComposeTemplates()
                 let defaults = DEFAULT_BUILTIN_COMPOSE_SETTINGS
                 saveBuiltInComposeSettings(defaults)
+                model.resetBindings(actions: Set(BUILTIN_COMPOSE_ROWS.map(\.action)))
                 templates.load()
                 model.refresh()
                 prompt = templates.builtInComposeTemplate
@@ -1224,7 +1266,7 @@ struct BuiltInComposeSheet: View {
                 overrides = defaults.autoSubmitOverrides
             }
         } message: {
-            Text("This restores original built-in prompt variants, auto-submit defaults, and row overrides.")
+            Text("This restores original prompt variants, shortcut bindings, auto-submit defaults, and row overrides.")
         }
         .onAppear {
             let settings = loadBuiltInComposeSettings()
@@ -1390,25 +1432,10 @@ struct TriggerSummaryRow: View {
 struct TriggerKeyBindingField: View {
     let trigger: ActionTrigger
     @ObservedObject var model: SettingsModel
-    private var isRecording: Bool { model.recordingAction == trigger.id }
 
     var body: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: 7)
-                .fill(isRecording ? appPurple.opacity(0.12) : Color(nsColor: .controlBackgroundColor))
-                .overlay(RoundedRectangle(cornerRadius: 7)
-                    .stroke(isRecording ? appPurple : Color.gray.opacity(0.35), lineWidth: 1))
-            Text(isRecording ? "Press keys…" : trigger.human)
-                .font(.system(.body, design: .rounded).bold())
-                .foregroundColor(isRecording ? appPurple : (trigger.keycode == 0 ? .secondary : .primary))
-                .lineLimit(1).padding(.horizontal, 10)
-        }
-        .frame(width: 120, height: 30)
-        .contentShape(Rectangle())
-        .onTapGesture {
-            if isRecording { model.cancelRecording() } else { model.startRecording(trigger.id) }
-        }
-        .help(isRecording ? "Press a key combo · Delete to clear · Esc to cancel" : "Click to set shortcut")
+        ShortcutAliasEditor(ownerID: trigger.id, shortcuts: trigger.shortcuts,
+                            isCustomTrigger: true, model: model)
     }
 }
 
@@ -2690,9 +2717,56 @@ struct KeyBindingField: View {
     let binding: HotkeyBinding
     @ObservedObject var model: SettingsModel
 
-    private var isRecording: Bool { model.recordingAction == action }
+    var body: some View {
+        ShortcutAliasEditor(ownerID: action, shortcuts: binding.shortcuts,
+                            isCustomTrigger: false, model: model)
+    }
+}
+
+struct ShortcutAliasEditor: View {
+    let ownerID: String
+    let shortcuts: [HotkeyShortcut]
+    let isCustomTrigger: Bool
+    @ObservedObject var model: SettingsModel
 
     var body: some View {
+        HStack(spacing: 6) {
+            if shortcuts.isEmpty {
+                ShortcutCaptureField(ownerID: ownerID, shortcutIndex: 0, shortcut: nil,
+                                     isCustomTrigger: isCustomTrigger, model: model)
+            } else {
+                ForEach(Array(shortcuts.enumerated()), id: \.offset) { index, shortcut in
+                    ShortcutCaptureField(ownerID: ownerID, shortcutIndex: index, shortcut: shortcut,
+                                         isCustomTrigger: isCustomTrigger, model: model)
+                }
+            }
+            if shortcuts.count < 2 {
+                Button {
+                    model.startRecording(ownerID, shortcutIndex: shortcuts.count)
+                } label: {
+                    Image(systemName: "plus.circle")
+                }
+                .buttonStyle(.plain)
+                .help("Add alternate shortcut")
+                .accessibilityLabel("Add alternate shortcut")
+            }
+        }
+    }
+}
+
+struct ShortcutCaptureField: View {
+    let ownerID: String
+    let shortcutIndex: Int
+    let shortcut: HotkeyShortcut?
+    let isCustomTrigger: Bool
+    @ObservedObject var model: SettingsModel
+
+    private var isRecording: Bool {
+        model.recordingAction == ownerID && model.recordingShortcutIndex == shortcutIndex
+    }
+
+    var body: some View {
+        HStack(spacing: 3) {
         ZStack {
             RoundedRectangle(cornerRadius: 7)
                 .fill(isRecording
@@ -2702,19 +2776,35 @@ struct KeyBindingField: View {
                     RoundedRectangle(cornerRadius: 7)
                         .stroke(isRecording ? appPurple : Color.gray.opacity(0.35), lineWidth: 1)
                 )
-            Text(isRecording ? "Press keys…" : (binding.keycode == 0 ? "—" : binding.human))
+            Text(isRecording ? "Press keys…" : (shortcut?.human ?? "—"))
                 .font(.system(.body, design: .rounded).bold())
-                .foregroundColor(isRecording ? appPurple : (binding.keycode == 0 ? .secondary : .primary))
+                .foregroundColor(isRecording ? appPurple : (shortcut == nil ? .secondary : .primary))
                 .lineLimit(1)
-                .padding(.horizontal, 10)
+                .padding(.horizontal, 7)
         }
-        .frame(width: 120, height: 30)
+        .frame(width: 92, height: 30)
         .contentShape(Rectangle())
         .onTapGesture {
             if isRecording { model.cancelRecording() }
-            else { model.startRecording(action) }
+            else { model.startRecording(ownerID, shortcutIndex: shortcutIndex) }
         }
         .help(isRecording ? "Press a key combo · Delete to clear · Esc to cancel" : "Click to set shortcut")
+            if shortcut != nil {
+                Button {
+                    if isCustomTrigger {
+                        model.clearTriggerBinding(triggerID: ownerID, shortcutIndex: shortcutIndex)
+                    } else {
+                        model.clearBinding(ownerID, shortcutIndex: shortcutIndex)
+                    }
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundColor(.secondary)
+                }
+                .buttonStyle(.plain)
+                .help("Remove shortcut")
+                .accessibilityLabel("Remove shortcut")
+            }
+        }
     }
 }
 
