@@ -53,6 +53,54 @@ public func normalizedShortcuts(_ values: [HotkeyShortcut]) -> [HotkeyShortcut] 
     return values.filter { $0.keycode != 0 && seen.insert($0).inserted }.prefix(2).map { $0 }
 }
 
+public func decodeShortcutFields(_ dictionary: [String: Any]) -> [HotkeyShortcut] {
+    if let rows = dictionary["shortcuts"] as? [[String: Any]] {
+        let aliases = normalizedShortcuts(rows.compactMap { row in
+            guard let keycode = row["keycode"] as? Int,
+                  let mods = row["mods"] as? Int,
+                  keycode > 0 else { return nil }
+            return HotkeyShortcut(keycode: UInt32(keycode), mods: UInt32(mods))
+        })
+        if !aliases.isEmpty { return aliases }
+    }
+    guard let keycode = dictionary["keycode"] as? Int,
+          let mods = dictionary["mods"] as? Int,
+          keycode > 0 else { return [] }
+    return [HotkeyShortcut(keycode: UInt32(keycode), mods: UInt32(mods))]
+}
+
+public func encodeShortcutFields(_ values: [HotkeyShortcut]) -> [String: Any] {
+    let aliases = normalizedShortcuts(values)
+    return [
+        "keycode": Int(aliases.first?.keycode ?? 0),
+        "mods": Int(aliases.first?.mods ?? 0),
+        "shortcuts": aliases.map { ["keycode": Int($0.keycode), "mods": Int($0.mods)] },
+    ]
+}
+
+public struct ShortcutAssignment: Equatable, Sendable {
+    public let ownerID: String
+    public let slot: Int
+    public let shortcut: HotkeyShortcut
+
+    public init(ownerID: String, slot: Int, shortcut: HotkeyShortcut) {
+        self.ownerID = ownerID
+        self.slot = slot
+        self.shortcut = shortcut
+    }
+}
+
+public func conflictingShortcutAssignment(
+    ownerID: String,
+    slot: Int,
+    candidate: HotkeyShortcut,
+    assignments: [ShortcutAssignment]
+) -> ShortcutAssignment? {
+    assignments.first {
+        $0.shortcut == candidate && ($0.ownerID != ownerID || $0.slot != slot)
+    }
+}
+
 public struct HotkeyBinding: Identifiable {
     public let action: String
     public var shortcuts: [HotkeyShortcut]
@@ -88,6 +136,20 @@ public struct HotkeyBinding: Identifiable {
         self.action = action
         self.shortcuts = normalizedShortcuts(shortcuts)
         self.enabled = enabled
+    }
+}
+
+public func resettingShortcutBindings(
+    _ bindings: [HotkeyBinding],
+    actions: Set<String>
+) -> [HotkeyBinding] {
+    let defaults = Dictionary(uniqueKeysWithValues: DEFAULT_BINDINGS.map { ($0.action, $0) })
+    return bindings.map { binding in
+        guard actions.contains(binding.action), let value = defaults[binding.action] else { return binding }
+        return HotkeyBinding(action: binding.action,
+                             keycode: value.keycode,
+                             mods: value.mods,
+                             enabled: value.keycode != 0)
     }
 }
 

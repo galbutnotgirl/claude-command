@@ -34,4 +34,39 @@ final class ClipboardURLTests: XCTestCase {
         XCTAssertEqual(detectClipboardURL("https://10.0.0.2/a")?.normalized,
                        "https://10.0.0.2/a")
     }
+
+    func testFilterNavigationIncludesURLsInStableOrder() {
+        XCTAssertEqual(ClipboardHistoryFilter.text.adjacent(step: 1), .urls)
+        XCTAssertEqual(ClipboardHistoryFilter.urls.adjacent(step: -1), .text)
+        XCTAssertEqual(ClipboardHistoryFilter.sent.adjacent(step: 1), .images)
+    }
+
+    func testPasteNormalizesOnlyWholeValueURLs() {
+        XCTAssertEqual(clipboardPasteText(" example.com/path. \n"), "https://example.com/path")
+        XCTAssertEqual(clipboardPasteText("See example.com for details"), "See example.com for details")
+    }
+
+    func testPickerRoutesConfiguredURLAndAssistantActions() {
+        let bindings = [
+            ClipboardPickerActionBinding(action: .openURL, modifier: .shift, enabled: true),
+            ClipboardPickerActionBinding(action: .newSession, modifier: .command, enabled: true),
+            ClipboardPickerActionBinding(action: .sendToAssistant, modifier: .option, enabled: true),
+        ]
+        XCTAssertEqual(clipboardPickerAction(isURL: true, pressedModifiers: [.shift], bindings: bindings),
+                       .openURL)
+        XCTAssertEqual(clipboardPickerAction(isURL: false, pressedModifiers: [.shift], bindings: bindings),
+                       .paste)
+        XCTAssertEqual(clipboardPickerAction(isURL: false, pressedModifiers: [.command], bindings: bindings),
+                       .newSession)
+        XCTAssertEqual(clipboardPickerAction(isURL: true, pressedModifiers: [.option], bindings: bindings),
+                       .sendToAssistant)
+    }
+
+    func testDisabledPickerBindingFallsBackToPaste() {
+        let bindings = [
+            ClipboardPickerActionBinding(action: .openURL, modifier: .shift, enabled: false),
+        ]
+        XCTAssertEqual(clipboardPickerAction(isURL: true, pressedModifiers: [.shift], bindings: bindings),
+                       .paste)
+    }
 }

@@ -157,14 +157,7 @@ final class SettingsModel: ObservableObject {
         saveBindings(bindings); refresh()
     }
     func resetBindings(actions: Set<String>) {
-        let defaults = Dictionary(uniqueKeysWithValues: DEFAULT_BINDINGS.map { ($0.action, $0) })
-        for index in bindings.indices where actions.contains(bindings[index].action) {
-            guard let value = defaults[bindings[index].action] else { continue }
-            bindings[index].shortcuts = value.keycode == 0
-                ? []
-                : [HotkeyShortcut(keycode: value.keycode, mods: value.mods)]
-            bindings[index].enabled = value.keycode != 0
-        }
+        bindings = resettingShortcutBindings(bindings, actions: actions)
         saveBindings(bindings); refresh()
     }
     func clearBinding(_ action: String, shortcutIndex: Int = 0) {
@@ -392,25 +385,36 @@ final class SettingsModel: ObservableObject {
     private func shortcutConflict(forAction action: String, shortcutIndex: Int,
                                   keycode: UInt32, mods: UInt32) -> String? {
         let candidate = HotkeyShortcut(keycode: keycode, mods: mods)
-        for binding in bindings {
-            for (index, shortcut) in binding.shortcuts.enumerated()
-            where shortcut == candidate && (binding.action != action || index != shortcutIndex) {
-                return binding.action == action
-                    ? "This shortcut is already assigned to this action"
-                    : "Conflicts with \"\(binding.name)\" shortcut"
+        let assignments = bindings.flatMap { binding in
+            binding.shortcuts.enumerated().map {
+                ShortcutAssignment(ownerID: binding.action, slot: $0.offset, shortcut: $0.element)
             }
-        }
-        for ca in customActions {
-            for trigger in ca.triggers {
-                for (index, shortcut) in trigger.shortcuts.enumerated()
-                where shortcut == candidate && (trigger.id != action || index != shortcutIndex) {
-                    return trigger.id == action
-                        ? "This shortcut is already assigned to this trigger"
-                        : "Conflicts with custom action \"\(ca.name)\" (\(trigger.kind.label))"
+        } + customActions.flatMap { action in
+            action.triggers.flatMap { trigger in
+                trigger.shortcuts.enumerated().map {
+                    ShortcutAssignment(ownerID: trigger.id, slot: $0.offset, shortcut: $0.element)
                 }
             }
         }
-        return nil
+        guard let conflict = conflictingShortcutAssignment(ownerID: action, slot: shortcutIndex,
+                                                            candidate: candidate, assignments: assignments) else {
+            return nil
+        }
+        if conflict.ownerID == action {
+            let isTrigger = customActions.contains { $0.triggers.contains { $0.id == action } }
+            return isTrigger
+                ? "This shortcut is already assigned to this trigger"
+                : "This shortcut is already assigned to this action"
+        }
+        if let binding = bindings.first(where: { $0.action == conflict.ownerID }) {
+            return "Conflicts with \"\(binding.name)\" shortcut"
+        }
+        if let custom = customActions.first(where: { action in
+            action.triggers.contains { $0.id == conflict.ownerID }
+        }), let trigger = custom.triggers.first(where: { $0.id == conflict.ownerID }) {
+            return "Conflicts with custom action \"\(custom.name)\" (\(trigger.kind.label))"
+        }
+        return "Conflicts with another shortcut"
     }
 }
 

@@ -32,6 +32,47 @@ public enum ClipboardPickerModifier: String, CaseIterable, Sendable {
     }
 }
 
+public enum ClipboardHistoryFilter: CaseIterable, Equatable, Sendable {
+    case images, all, text, urls, dictated, sent
+
+    public func adjacent(step: Int) -> ClipboardHistoryFilter {
+        let values = Self.allCases
+        let index = values.firstIndex(of: self) ?? 0
+        return values[(index + step % values.count + values.count) % values.count]
+    }
+}
+
+public enum ClipboardPickerAction: Equatable, Sendable {
+    case paste, newSession, sendToAssistant, openURL
+}
+
+public struct ClipboardPickerActionBinding: Equatable, Sendable {
+    public let action: ClipboardPickerAction
+    public let modifier: ClipboardPickerModifier
+    public let enabled: Bool
+
+    public init(action: ClipboardPickerAction, modifier: ClipboardPickerModifier, enabled: Bool) {
+        self.action = action
+        self.modifier = modifier
+        self.enabled = enabled
+    }
+}
+
+public func clipboardPickerAction(
+    isURL: Bool,
+    pressedModifiers: Set<ClipboardPickerModifier>,
+    bindings: [ClipboardPickerActionBinding]
+) -> ClipboardPickerAction {
+    for binding in bindings where binding.enabled && pressedModifiers.contains(binding.modifier) {
+        if binding.action != .openURL || isURL { return binding.action }
+    }
+    return .paste
+}
+
+public func clipboardPasteText(_ value: String) -> String {
+    detectClipboardURL(value)?.normalized ?? value
+}
+
 public enum ClipboardPickerSettingsKeys {
     public static let newSessionEnabled = "clipboardPickerNewSessionEnabled"
     public static let newSessionModifier = "clipboardPickerNewSessionModifier"

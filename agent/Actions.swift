@@ -9,22 +9,6 @@ import ClaudeCommandCore
 import AppKit
 #endif
 
-private func decodeShortcuts(_ value: Any?) -> [HotkeyShortcut] {
-    guard let rows = value as? [[String: Any]] else { return [] }
-    return normalizedShortcuts(rows.compactMap { row in
-        guard let keycode = row["keycode"] as? Int,
-              let mods = row["mods"] as? Int,
-              keycode > 0 else { return nil }
-        return HotkeyShortcut(keycode: UInt32(keycode), mods: UInt32(mods))
-    })
-}
-
-private func encodeShortcuts(_ values: [HotkeyShortcut]) -> [[String: Any]] {
-    normalizedShortcuts(values).map {
-        ["keycode": Int($0.keycode), "mods": Int($0.mods)]
-    }
-}
-
 // One binding per catalog action, in catalog order; unbound actions get keycode 0.
 func loadBindings() -> [HotkeyBinding] {
     var byAction: [String: HotkeyBinding] = [:]
@@ -35,12 +19,7 @@ func loadBindings() -> [HotkeyBinding] {
         for d in arr {
             if let a = d["action"] as? String {
                 let en = d["enabled"] as? Bool ?? true
-                let aliases = decodeShortcuts(d["shortcuts"])
-                if !aliases.isEmpty {
-                    byAction[a] = HotkeyBinding(action: a, shortcuts: aliases, enabled: en)
-                } else if let k = d["keycode"] as? Int, let m = d["mods"] as? Int {
-                    byAction[a] = HotkeyBinding(action: a, keycode: UInt32(k), mods: UInt32(m), enabled: en)
-                }
+                byAction[a] = HotkeyBinding(action: a, shortcuts: decodeShortcutFields(d), enabled: en)
             }
         }
         shouldPersistMigration = migrateExperimentalShortcutDefaultsIfNeeded(&byAction)
@@ -65,11 +44,10 @@ func saveBindings(_ bindings: [HotkeyBinding]) {
 private func writeBindings(_ bindings: [HotkeyBinding]) {
     let arr = bindings.filter { !$0.shortcuts.isEmpty }
         .map { binding -> [String: Any] in
-            ["action": binding.action,
-             "keycode": Int(binding.keycode),
-             "mods": Int(binding.mods),
-             "shortcuts": encodeShortcuts(binding.shortcuts),
-             "enabled": binding.enabled]
+            var row = encodeShortcutFields(binding.shortcuts)
+            row["action"] = binding.action
+            row["enabled"] = binding.enabled
+            return row
         }
     if let data = try? JSONSerialization.data(withJSONObject: arr, options: [.prettyPrinted]) {
         try? FileManager.default.createDirectory(
@@ -98,7 +76,7 @@ private func decodeTrigger(_ d: [String: Any]) -> ActionTrigger? {
     let delivery = (d["deliveryOverride"] as? String).flatMap(ActionDelivery.init(rawValue:))
     let destination = (d["destinationOverride"] as? String).flatMap(ClaudeDestination.init(rawValue:))
     let provider = (d["providerOverride"] as? String).flatMap(AIProviderChoice.init(rawValue:))
-    let aliases = decodeShortcuts(d["shortcuts"])
+    let aliases = decodeShortcutFields(d)
     return ActionTrigger(
         id: id, kind: kind,
         shortcuts: aliases.isEmpty
@@ -162,9 +140,10 @@ func loadCustomActions() -> [CustomAction] {
 }
 
 private func encodeTrigger(_ t: ActionTrigger) -> [String: Any] {
-    var d: [String: Any] = ["id": t.id, "kind": t.kind.rawValue,
-                             "keycode": Int(t.keycode), "mods": Int(t.mods),
-                             "shortcuts": encodeShortcuts(t.shortcuts), "enabled": t.enabled]
+    var d = encodeShortcutFields(t.shortcuts)
+    d["id"] = t.id
+    d["kind"] = t.kind.rawValue
+    d["enabled"] = t.enabled
     if let v = t.isAutoSubmitOverride { d["isAutoSubmitOverride"] = v }
     if let v = t.sessionModeOverride { d["sessionModeOverride"] = v }
     if let v = t.includeSourceOverride { d["includeSourceOverride"] = v }

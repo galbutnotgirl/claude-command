@@ -223,6 +223,67 @@ final class ActionModelsTests: XCTestCase {
         ])
     }
 
+    func testLegacyShortcutDecodeAndDualWriteEncoding() {
+        XCTAssertEqual(decodeShortcutFields(["keycode": 115, "mods": 0]), [
+            HotkeyShortcut(keycode: 115, mods: 0),
+        ])
+        let encoded = encodeShortcutFields([
+            HotkeyShortcut(keycode: 100, mods: 0),
+            HotkeyShortcut(keycode: 115, mods: 256),
+        ])
+        XCTAssertEqual(encoded["keycode"] as? Int, 100)
+        XCTAssertEqual(encoded["mods"] as? Int, 0)
+        let aliases = encoded["shortcuts"] as? [[String: Int]]
+        XCTAssertEqual(aliases?[1]["keycode"], 115)
+        XCTAssertEqual(aliases?[1]["mods"], 256)
+    }
+
+    func testShortcutArrayDecodeTakesPriorityOverLegacyFields() {
+        let decoded = decodeShortcutFields([
+            "keycode": 100,
+            "mods": 0,
+            "shortcuts": [
+                ["keycode": 115, "mods": 0],
+                ["keycode": 119, "mods": 2048],
+                ["keycode": 98, "mods": 0],
+            ],
+        ])
+        XCTAssertEqual(decoded, [
+            HotkeyShortcut(keycode: 115, mods: 0),
+            HotkeyShortcut(keycode: 119, mods: 2048),
+        ])
+    }
+
+    func testConflictDetectionRejectsOtherOwnerAndDuplicateAlias() {
+        let home = HotkeyShortcut(keycode: 115, mods: 0)
+        let assignments = [
+            ShortcutAssignment(ownerID: "add", slot: 0, shortcut: HotkeyShortcut(keycode: 100, mods: 0)),
+            ShortcutAssignment(ownerID: "add", slot: 1, shortcut: home),
+        ]
+        XCTAssertEqual(
+            conflictingShortcutAssignment(ownerID: "comment", slot: 0, candidate: home,
+                                          assignments: assignments)?.ownerID,
+            "add"
+        )
+        XCTAssertEqual(
+            conflictingShortcutAssignment(ownerID: "add", slot: 0, candidate: home,
+                                          assignments: assignments)?.slot,
+            1
+        )
+        XCTAssertNil(conflictingShortcutAssignment(ownerID: "add", slot: 1, candidate: home,
+                                                    assignments: assignments))
+    }
+
+    func testResetRestoresPrimaryDefaultAndRemovesAlternate() {
+        let changed = HotkeyBinding(action: "add", shortcuts: [
+            HotkeyShortcut(keycode: 115, mods: 0),
+            HotkeyShortcut(keycode: 119, mods: 0),
+        ], enabled: true)
+        let reset = resettingShortcutBindings([changed], actions: ["add"])
+        XCTAssertEqual(reset[0].shortcuts, [HotkeyShortcut(keycode: 100, mods: 0)])
+        XCTAssertTrue(reset[0].enabled)
+    }
+
     func testOnlyEnabledBoundHotkeysAreVisibleInMenu() {
         XCTAssertTrue(HotkeyBinding(action: "add", keycode: 100, mods: 0, enabled: true).isVisibleInMenu)
         XCTAssertFalse(HotkeyBinding(action: "go", keycode: 0, mods: 0, enabled: true).isVisibleInMenu)

@@ -278,7 +278,7 @@ func appendLog(_ msg: String) {
 
 // ---- clipboard history picker (built in) -----------------------------------
 
-enum FilterMode { case all, images, text, urls, dictated, sent }
+typealias FilterMode = ClipboardHistoryFilter
 enum PickerTheme: String { case auto, light, dark }
 enum PasteTarget { case prev, claude, claudeNew, openURL }
 
@@ -291,30 +291,32 @@ func clipboardPickerModifier(_ key: String, default fallback: ClipboardPickerMod
     return ClipboardPickerModifier(rawValue: raw) ?? fallback
 }
 
-private func pickerFlagsContain(_ modifier: ClipboardPickerModifier, flags: NSEvent.ModifierFlags) -> Bool {
-    switch modifier {
-    case .command: return flags.contains(.command)
-    case .option: return flags.contains(.option)
-    case .shift: return flags.contains(.shift)
-    case .control: return flags.contains(.control)
-    }
-}
-
 func clipboardPickerTarget(for clip: Clip, flags: NSEvent.ModifierFlags) -> PasteTarget {
-    if clip.detectedURL != nil,
-       clipboardPickerSetting(ClipboardPickerSettingsKeys.openURLEnabled, default: true),
-       pickerFlagsContain(clipboardPickerModifier(ClipboardPickerSettingsKeys.openURLModifier, default: .shift), flags: flags) {
-        return .openURL
+    var pressed = Set<ClipboardPickerModifier>()
+    if flags.contains(.command) { pressed.insert(.command) }
+    if flags.contains(.option) { pressed.insert(.option) }
+    if flags.contains(.shift) { pressed.insert(.shift) }
+    if flags.contains(.control) { pressed.insert(.control) }
+    let bindings = [
+        ClipboardPickerActionBinding(
+            action: .openURL,
+            modifier: clipboardPickerModifier(ClipboardPickerSettingsKeys.openURLModifier, default: .shift),
+            enabled: clipboardPickerSetting(ClipboardPickerSettingsKeys.openURLEnabled, default: true)),
+        ClipboardPickerActionBinding(
+            action: .newSession,
+            modifier: clipboardPickerModifier(ClipboardPickerSettingsKeys.newSessionModifier, default: .command),
+            enabled: clipboardPickerSetting(ClipboardPickerSettingsKeys.newSessionEnabled, default: true)),
+        ClipboardPickerActionBinding(
+            action: .sendToAssistant,
+            modifier: clipboardPickerModifier(ClipboardPickerSettingsKeys.sendAssistantModifier, default: .option),
+            enabled: clipboardPickerSetting(ClipboardPickerSettingsKeys.sendAssistantEnabled, default: true)),
+    ]
+    switch clipboardPickerAction(isURL: clip.detectedURL != nil, pressedModifiers: pressed, bindings: bindings) {
+    case .paste: return .prev
+    case .newSession: return .claudeNew
+    case .sendToAssistant: return .claude
+    case .openURL: return .openURL
     }
-    if clipboardPickerSetting(ClipboardPickerSettingsKeys.newSessionEnabled, default: true),
-       pickerFlagsContain(clipboardPickerModifier(ClipboardPickerSettingsKeys.newSessionModifier, default: .command), flags: flags) {
-        return .claudeNew
-    }
-    if clipboardPickerSetting(ClipboardPickerSettingsKeys.sendAssistantEnabled, default: true),
-       pickerFlagsContain(clipboardPickerModifier(ClipboardPickerSettingsKeys.sendAssistantModifier, default: .option), flags: flags) {
-        return .claude
-    }
-    return .prev
 }
 
 var iconCache: [String: NSImage] = [:]
@@ -1064,15 +1066,11 @@ final class ClipPicker: NSObject, NSWindowDelegate {
             if !shown.isEmpty { selected = max(selected - 1, 0); highlight() }
             return true
         case 123:  // ← rotate filter carousel
-            let cycle: [FilterMode] = [.images, .all, .text, .urls, .dictated, .sent]
-            let li = cycle.firstIndex(of: filterMode) ?? 1
-            filterMode = cycle[(li + cycle.count - 1) % cycle.count]
+            filterMode = filterMode.adjacent(step: -1)
             query = ""; selected = 0; refresh()
             return true
         case 124:  // → rotate filter carousel
-            let cycle: [FilterMode] = [.images, .all, .text, .urls, .dictated, .sent]
-            let ri = cycle.firstIndex(of: filterMode) ?? 1
-            filterMode = cycle[(ri + 1) % cycle.count]
+            filterMode = filterMode.adjacent(step: 1)
             query = ""; selected = 0; refresh()
             return true
         case 36, 76:   // ↩ / numpad ↩
@@ -1113,7 +1111,7 @@ final class ClipPicker: NSObject, NSWindowDelegate {
         if c.type == "image", let data = FileManager.default.contents(atPath: path) {
             if let img = NSImage(data: data) { pb.writeObjects([img]) } else { pb.setData(data, forType: .png) }
         } else if let text = try? String(contentsOfFile: path, encoding: .utf8) {
-            pb.setString(c.detectedURL?.normalized ?? text, forType: .string)
+            pb.setString(clipboardPasteText(text), forType: .string)
         }
         // Stamp AFTER writing, with the exact resulting changeCount — an exact match,
         // not a timing guess, so clipwatch (25ms poll) reliably attributes this re-paste
