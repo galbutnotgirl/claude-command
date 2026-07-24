@@ -2347,6 +2347,12 @@ private func currentAppPreferencesPreview() -> [String: Any] {
         "clipRetentionDays": readRetentionDays(),
         "commandRetentionDays": readCommandRetentionDays(),
         "handoffRetentionDays": readHandoffRetentionDays(),
+        ClipboardPickerSettingsKeys.newSessionEnabled: clipboardPickerSetting(ClipboardPickerSettingsKeys.newSessionEnabled, default: true),
+        ClipboardPickerSettingsKeys.newSessionModifier: clipboardPickerModifier(ClipboardPickerSettingsKeys.newSessionModifier, default: .command).rawValue,
+        ClipboardPickerSettingsKeys.sendAssistantEnabled: clipboardPickerSetting(ClipboardPickerSettingsKeys.sendAssistantEnabled, default: true),
+        ClipboardPickerSettingsKeys.sendAssistantModifier: clipboardPickerModifier(ClipboardPickerSettingsKeys.sendAssistantModifier, default: .option).rawValue,
+        ClipboardPickerSettingsKeys.openURLEnabled: clipboardPickerSetting(ClipboardPickerSettingsKeys.openURLEnabled, default: true),
+        ClipboardPickerSettingsKeys.openURLModifier: clipboardPickerModifier(ClipboardPickerSettingsKeys.openURLModifier, default: .shift).rawValue,
         VoiceSettingsKeys.soundsEnabled: settingsModel.soundsEnabled,
         VoiceSettingsKeys.soundVolume: settingsModel.soundVolume,
         VoiceSettingsKeys.startSound: settingsModel.startSound,
@@ -2370,6 +2376,12 @@ private func defaultAppPreferences() -> [String: Any] {
         "clipRetentionDays": 7,
         "commandRetentionDays": 7,
         "handoffRetentionDays": 7,
+        ClipboardPickerSettingsKeys.newSessionEnabled: true,
+        ClipboardPickerSettingsKeys.newSessionModifier: ClipboardPickerModifier.command.rawValue,
+        ClipboardPickerSettingsKeys.sendAssistantEnabled: true,
+        ClipboardPickerSettingsKeys.sendAssistantModifier: ClipboardPickerModifier.option.rawValue,
+        ClipboardPickerSettingsKeys.openURLEnabled: true,
+        ClipboardPickerSettingsKeys.openURLModifier: ClipboardPickerModifier.shift.rawValue,
         VoiceSettingsKeys.soundsEnabled: VoiceSettingsDefaults.soundsEnabled,
         VoiceSettingsKeys.soundVolume: VoiceSettingsDefaults.soundVolume,
         VoiceSettingsKeys.startSound: VoiceSettingsDefaults.startSound,
@@ -2392,7 +2404,7 @@ private func jsonObject(at path: String, fallback: Any) -> Any {
 
 @MainActor
 private func globalBundle() -> [String: Any] {
-    var bundle: [String: Any] = ["version": 4, "exportedAt": ISO8601DateFormatter().string(from: Date())]
+    var bundle: [String: Any] = ["version": 5, "exportedAt": ISO8601DateFormatter().string(from: Date())]
     bundle["shortcuts"] = [
         "hotkeys": hotkeyJSON(loadBindings()),
         "customActions": jsonObject(at: CUSTOM_ACTIONS_PATH, fallback: []),
@@ -2412,6 +2424,12 @@ private func globalBundle() -> [String: Any] {
             "clipRetentionDays": readRetentionDays(),
             "commandRetentionDays": readCommandRetentionDays(),
             "handoffRetentionDays": readHandoffRetentionDays(),
+            ClipboardPickerSettingsKeys.newSessionEnabled: clipboardPickerSetting(ClipboardPickerSettingsKeys.newSessionEnabled, default: true),
+            ClipboardPickerSettingsKeys.newSessionModifier: clipboardPickerModifier(ClipboardPickerSettingsKeys.newSessionModifier, default: .command).rawValue,
+            ClipboardPickerSettingsKeys.sendAssistantEnabled: clipboardPickerSetting(ClipboardPickerSettingsKeys.sendAssistantEnabled, default: true),
+            ClipboardPickerSettingsKeys.sendAssistantModifier: clipboardPickerModifier(ClipboardPickerSettingsKeys.sendAssistantModifier, default: .option).rawValue,
+            ClipboardPickerSettingsKeys.openURLEnabled: clipboardPickerSetting(ClipboardPickerSettingsKeys.openURLEnabled, default: true),
+            ClipboardPickerSettingsKeys.openURLModifier: clipboardPickerModifier(ClipboardPickerSettingsKeys.openURLModifier, default: .shift).rawValue,
             VoiceSettingsKeys.soundsEnabled: settingsModel.soundsEnabled,
             VoiceSettingsKeys.soundVolume: settingsModel.soundVolume,
             VoiceSettingsKeys.startSound: settingsModel.startSound,
@@ -2600,6 +2618,18 @@ private func applyGlobalImport(_ bundle: GlobalImportBundle, modes: [GlobalBundl
         if let v = prefs[VoiceSettingsKeys.fillerRemoval] as? Bool { UserDefaults.standard.set(v, forKey: VoiceSettingsKeys.fillerRemoval) }
         if let v = prefs[VoiceSettingsKeys.smartFormatting] as? Bool { UserDefaults.standard.set(v, forKey: VoiceSettingsKeys.smartFormatting) }
         if let v = prefs[VoiceSettingsKeys.aiCleanup] as? Bool { UserDefaults.standard.set(v, forKey: VoiceSettingsKeys.aiCleanup) }
+        for key in [ClipboardPickerSettingsKeys.newSessionEnabled,
+                    ClipboardPickerSettingsKeys.sendAssistantEnabled,
+                    ClipboardPickerSettingsKeys.openURLEnabled] {
+            if let value = prefs[key] as? Bool { UserDefaults.standard.set(value, forKey: key) }
+        }
+        for key in [ClipboardPickerSettingsKeys.newSessionModifier,
+                    ClipboardPickerSettingsKeys.sendAssistantModifier,
+                    ClipboardPickerSettingsKeys.openURLModifier] {
+            if let value = prefs[key] as? String, ClipboardPickerModifier(rawValue: value) != nil {
+                UserDefaults.standard.set(value, forKey: key)
+            }
+        }
     }
     reregisterHotkeys()
     model.refresh()
@@ -2972,6 +3002,18 @@ struct ClearOption: Identifiable {
     let seconds: Int    // <= 0 means "everything"
 }
 
+private enum ClipboardPickerActionRole: CaseIterable {
+    case newSession, sendAssistant, openURL
+
+    var title: String {
+        switch self {
+        case .newSession: return "New session"
+        case .sendAssistant: return "Send to assistant"
+        case .openURL: return "Open URL"
+        }
+    }
+}
+
 struct HistoryView: View {
     @ObservedObject private var model: SettingsModel = settingsModel
     @State private var enabled = UserDefaults.standard.bool(forKey: "cliphistoryEnabled")
@@ -2979,6 +3021,12 @@ struct HistoryView: View {
     @State private var pendingClear: ClearOption? = nil
     @State private var status = ""
     @State private var theme = pickerTheme()
+    @State private var newSessionEnabled = clipboardPickerSetting(ClipboardPickerSettingsKeys.newSessionEnabled, default: true)
+    @State private var newSessionModifier = clipboardPickerModifier(ClipboardPickerSettingsKeys.newSessionModifier, default: .command)
+    @State private var sendAssistantEnabled = clipboardPickerSetting(ClipboardPickerSettingsKeys.sendAssistantEnabled, default: true)
+    @State private var sendAssistantModifier = clipboardPickerModifier(ClipboardPickerSettingsKeys.sendAssistantModifier, default: .option)
+    @State private var openURLEnabled = clipboardPickerSetting(ClipboardPickerSettingsKeys.openURLEnabled, default: true)
+    @State private var openURLModifier = clipboardPickerModifier(ClipboardPickerSettingsKeys.openURLModifier, default: .shift)
 
     private let clears: [ClearOption] = [
         ClearOption(label: "Last 15 minutes", seconds: 15 * 60),
@@ -3026,6 +3074,17 @@ struct HistoryView: View {
                             }
                             .padding(8)
                         }
+                    }
+
+                    GroupBox(label: Text("Picker actions").bold()) {
+                        VStack(spacing: 8) {
+                            pickerActionRow(.newSession)
+                            Divider()
+                            pickerActionRow(.sendAssistant)
+                            Divider()
+                            pickerActionRow(.openURL)
+                        }
+                        .padding(8)
                     }
 
                     GroupBox {
@@ -3099,6 +3158,89 @@ struct HistoryView: View {
                  ? "Removes every saved clip. This can't be undone."
                  : "Removes clips copied in the \(opt.label.lowercased()). This can't be undone.")
         }
+    }
+
+    @ViewBuilder
+    private func pickerActionRow(_ role: ClipboardPickerActionRole) -> some View {
+        HStack(spacing: 10) {
+            Toggle(role.title, isOn: Binding(
+                get: { actionEnabled(role) },
+                set: { setActionEnabled(role, enabled: $0) }
+            ))
+            .toggleStyle(.checkbox)
+            Spacer()
+            Picker("Modifier", selection: Binding(
+                get: { actionModifier(role) },
+                set: { setActionModifier(role, modifier: $0) }
+            )) {
+                ForEach(ClipboardPickerModifier.allCases, id: \.self) { modifier in
+                    Text("\(modifier.symbol)  \(modifier.label)").tag(modifier)
+                }
+            }
+            .labelsHidden()
+            .frame(width: 130)
+            .disabled(!actionEnabled(role))
+        }
+    }
+
+    private func actionEnabled(_ role: ClipboardPickerActionRole) -> Bool {
+        switch role {
+        case .newSession: return newSessionEnabled
+        case .sendAssistant: return sendAssistantEnabled
+        case .openURL: return openURLEnabled
+        }
+    }
+
+    private func actionModifier(_ role: ClipboardPickerActionRole) -> ClipboardPickerModifier {
+        switch role {
+        case .newSession: return newSessionModifier
+        case .sendAssistant: return sendAssistantModifier
+        case .openURL: return openURLModifier
+        }
+    }
+
+    private func modifierInUse(_ modifier: ClipboardPickerModifier, excluding role: ClipboardPickerActionRole) -> Bool {
+        ClipboardPickerActionRole.allCases.contains {
+            $0 != role && actionEnabled($0) && actionModifier($0) == modifier
+        }
+    }
+
+    private func setActionEnabled(_ role: ClipboardPickerActionRole, enabled: Bool) {
+        if enabled && modifierInUse(actionModifier(role), excluding: role) {
+            status = "Choose a different modifier before enabling \(role.title)."
+            return
+        }
+        switch role {
+        case .newSession:
+            newSessionEnabled = enabled
+            UserDefaults.standard.set(enabled, forKey: ClipboardPickerSettingsKeys.newSessionEnabled)
+        case .sendAssistant:
+            sendAssistantEnabled = enabled
+            UserDefaults.standard.set(enabled, forKey: ClipboardPickerSettingsKeys.sendAssistantEnabled)
+        case .openURL:
+            openURLEnabled = enabled
+            UserDefaults.standard.set(enabled, forKey: ClipboardPickerSettingsKeys.openURLEnabled)
+        }
+        status = ""
+    }
+
+    private func setActionModifier(_ role: ClipboardPickerActionRole, modifier: ClipboardPickerModifier) {
+        if actionEnabled(role) && modifierInUse(modifier, excluding: role) {
+            status = "\(modifier.label) is already used by another picker action."
+            return
+        }
+        switch role {
+        case .newSession:
+            newSessionModifier = modifier
+            UserDefaults.standard.set(modifier.rawValue, forKey: ClipboardPickerSettingsKeys.newSessionModifier)
+        case .sendAssistant:
+            sendAssistantModifier = modifier
+            UserDefaults.standard.set(modifier.rawValue, forKey: ClipboardPickerSettingsKeys.sendAssistantModifier)
+        case .openURL:
+            openURLModifier = modifier
+            UserDefaults.standard.set(modifier.rawValue, forKey: ClipboardPickerSettingsKeys.openURLModifier)
+        }
+        status = ""
     }
 
     private func commitRetention() {

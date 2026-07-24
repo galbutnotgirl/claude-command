@@ -111,6 +111,28 @@ public func isValidImportPayload(_ payload: Any, for section: ImportPayloadSecti
             VoiceSettingsKeys.aiCleanup
         ]
         let booleansValid = boolKeys.allSatisfy { value[$0] == nil || value[$0] is Bool }
+        let pickerBooleansValid = [
+            ClipboardPickerSettingsKeys.newSessionEnabled,
+            ClipboardPickerSettingsKeys.sendAssistantEnabled,
+            ClipboardPickerSettingsKeys.openURLEnabled,
+        ].allSatisfy { value[$0] == nil || value[$0] is Bool }
+        let pickerModifiersValid = [
+            ClipboardPickerSettingsKeys.newSessionModifier,
+            ClipboardPickerSettingsKeys.sendAssistantModifier,
+            ClipboardPickerSettingsKeys.openURLModifier,
+        ].allSatisfy {
+            value[$0] == nil || (value[$0] as? String).flatMap(ClipboardPickerModifier.init(rawValue:)) != nil
+        }
+        let pickerActions: [(enabled: String, modifier: String, fallback: ClipboardPickerModifier)] = [
+            (ClipboardPickerSettingsKeys.newSessionEnabled, ClipboardPickerSettingsKeys.newSessionModifier, .command),
+            (ClipboardPickerSettingsKeys.sendAssistantEnabled, ClipboardPickerSettingsKeys.sendAssistantModifier, .option),
+            (ClipboardPickerSettingsKeys.openURLEnabled, ClipboardPickerSettingsKeys.openURLModifier, .shift),
+        ]
+        let enabledPickerModifiers = pickerActions.compactMap { action -> ClipboardPickerModifier? in
+            guard value[action.enabled] as? Bool ?? true else { return nil }
+            return (value[action.modifier] as? String).flatMap(ClipboardPickerModifier.init(rawValue:)) ?? action.fallback
+        }
+        let pickerAssignmentsUnique = Set(enabledPickerModifiers).count == enabledPickerModifiers.count
         let soundNamesValid = [VoiceSettingsKeys.startSound, VoiceSettingsKeys.stopSound].allSatisfy {
             value[$0] == nil || value[$0] is String
         }
@@ -128,5 +150,6 @@ public func isValidImportPayload(_ payload: Any, for section: ImportPayloadSecti
         return providerValid && claudeDestinationValid && codexDestinationValid
             && workspaceValid && retentionValid && booleansValid && soundNamesValid
             && volumeValid && durationValid && assistantsValid
+            && pickerBooleansValid && pickerModifiersValid && pickerAssignmentsUnique
     }
 }

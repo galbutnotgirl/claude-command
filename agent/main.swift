@@ -278,9 +278,44 @@ func appendLog(_ msg: String) {
 
 // ---- clipboard history picker (built in) -----------------------------------
 
-enum FilterMode { case all, images, text, dictated, sent }
+enum FilterMode { case all, images, text, urls, dictated, sent }
 enum PickerTheme: String { case auto, light, dark }
-enum PasteTarget { case prev, claude, claudeNew }
+enum PasteTarget { case prev, claude, claudeNew, openURL }
+
+func clipboardPickerSetting(_ key: String, default fallback: Bool) -> Bool {
+    UserDefaults.standard.object(forKey: key) as? Bool ?? fallback
+}
+
+func clipboardPickerModifier(_ key: String, default fallback: ClipboardPickerModifier) -> ClipboardPickerModifier {
+    guard let raw = UserDefaults.standard.string(forKey: key) else { return fallback }
+    return ClipboardPickerModifier(rawValue: raw) ?? fallback
+}
+
+private func pickerFlagsContain(_ modifier: ClipboardPickerModifier, flags: NSEvent.ModifierFlags) -> Bool {
+    switch modifier {
+    case .command: return flags.contains(.command)
+    case .option: return flags.contains(.option)
+    case .shift: return flags.contains(.shift)
+    case .control: return flags.contains(.control)
+    }
+}
+
+func clipboardPickerTarget(for clip: Clip, flags: NSEvent.ModifierFlags) -> PasteTarget {
+    if clip.detectedURL != nil,
+       clipboardPickerSetting(ClipboardPickerSettingsKeys.openURLEnabled, default: true),
+       pickerFlagsContain(clipboardPickerModifier(ClipboardPickerSettingsKeys.openURLModifier, default: .shift), flags: flags) {
+        return .openURL
+    }
+    if clipboardPickerSetting(ClipboardPickerSettingsKeys.newSessionEnabled, default: true),
+       pickerFlagsContain(clipboardPickerModifier(ClipboardPickerSettingsKeys.newSessionModifier, default: .command), flags: flags) {
+        return .claudeNew
+    }
+    if clipboardPickerSetting(ClipboardPickerSettingsKeys.sendAssistantEnabled, default: true),
+       pickerFlagsContain(clipboardPickerModifier(ClipboardPickerSettingsKeys.sendAssistantModifier, default: .option), flags: flags) {
+        return .claude
+    }
+    return .prev
+}
 
 var iconCache: [String: NSImage] = [:]
 
@@ -374,6 +409,10 @@ func ageString(_ ts: Double) -> String {
 struct Clip {
     let type: String; let file: String; let preview: String
     let full: String; let ts: Double; let bundle: String; let origin: String
+    var detectedURL: DetectedClipboardURL? {
+        guard type != "image" else { return nil }
+        return detectClipboardURL(full.isEmpty ? preview : full)
+    }
 }
 
 func loadClips() -> [Clip] {
@@ -457,13 +496,10 @@ final class ActionBlock: NSObject {
     @objc func run() { block() }
 }
 final class PickRow: NSView {
-    var onPick: ((PasteTarget) -> Void)?
+    var onPick: ((NSEvent.ModifierFlags) -> Void)?
     override func layout() { super.layout(); layer?.cornerRadius = 6; layer?.cornerCurve = .continuous }
     @objc func clicked() {
-        let mods = NSEvent.modifierFlags
-        let target: PasteTarget = mods.contains(.command) ? .claudeNew
-                                 : mods.contains(.option) ? .claude : .prev
-        onPick?(target)
+        onPick?(NSEvent.modifierFlags)
     }
 }
 
@@ -547,6 +583,7 @@ final class ClipPicker: NSObject, NSWindowDelegate {
             switch filterMode {
             case .images:   msg = "No images in history."
             case .text:     msg = query.isEmpty ? "No text clips." : "No matches."
+            case .urls:     msg = query.isEmpty ? "No URLs in history." : "No matches."
             case .dictated: msg = query.isEmpty ? "Nothing dictated yet." : "No matches."
             case .sent:     msg = query.isEmpty ? "Nothing sent via Command yet." : "No matches."
             case .all:      msg = query.isEmpty ? "History empty." : "No matches."
@@ -691,7 +728,7 @@ final class ClipPicker: NSObject, NSWindowDelegate {
         let badge = makeFilterBadge()
         badge.translatesAutoresizingMaskIntoConstraints = false
         badge.setContentHuggingPriority(.required, for: .horizontal)
-        badge.widthAnchor.constraint(equalToConstant: 182).isActive = true
+        badge.widthAnchor.constraint(equalToConstant: 220).isActive = true
 
         let row = NSStackView(views: [badge, searchIcon, lbl])
         row.orientation = .horizontal; row.alignment = .centerY; row.spacing = 8
@@ -707,15 +744,15 @@ final class ClipPicker: NSObject, NSWindowDelegate {
 
     func makeFilterBadge() -> NSView {
         filterActionBlocks.removeAll()
-        // Order: [🖼 Images] [● All] [Aa Text] [〜 Dictated] [⚛ Sent] — All in center
-        // per user request; Dictated/Sent trail Text since they're the newer, narrower
-        // filters (things ClaudeCommand itself produced, rather than what's on the OS clipboard).
+        // URL detection is derived from full clip text, so retained history
+        // appears here without rewriting its on-disk index.
         // Sent's sym is nil — makeFilterPill draws the brand glyph for it instead (the
         // same mark as the menu bar), so it stays pixel-consistent instead of a lookalike.
         let specs: [(sym: String?, label: String, mode: FilterMode)] = [
             ("photo",       "Images",   .images),
             (nil,           "All",      .all),
             ("doc.text",    "Text",     .text),
+            ("link",        "URLs",     .urls),
             ("waveform",    "Dictated", .dictated),
             (nil,           "Sent",     .sent),
         ]
@@ -789,7 +826,21 @@ final class ClipPicker: NSObject, NSWindowDelegate {
 
     func makeHint() -> NSView {
         let v = NSView()
-        let t = NSTextField(labelWithString: "↑↓ · 1-9 pick · ↩ previous · ⌘↩ new session · ⌥↩ assistant · esc")
+        var hints = ["↑↓", "1-9 pick", "↩ previous"]
+        if clipboardPickerSetting(ClipboardPickerSettingsKeys.newSessionEnabled, default: true) {
+            let mod = clipboardPickerModifier(ClipboardPickerSettingsKeys.newSessionModifier, default: .command)
+            hints.append("\(mod.symbol)↩ new session")
+        }
+        if clipboardPickerSetting(ClipboardPickerSettingsKeys.sendAssistantEnabled, default: true) {
+            let mod = clipboardPickerModifier(ClipboardPickerSettingsKeys.sendAssistantModifier, default: .option)
+            hints.append("\(mod.symbol)↩ assistant")
+        }
+        if clipboardPickerSetting(ClipboardPickerSettingsKeys.openURLEnabled, default: true) {
+            let mod = clipboardPickerModifier(ClipboardPickerSettingsKeys.openURLModifier, default: .shift)
+            hints.append("\(mod.symbol)↩ open URL")
+        }
+        hints.append("esc")
+        let t = NSTextField(labelWithString: hints.joined(separator: " · "))
         t.font = .systemFont(ofSize: 10); t.textColor = .quaternaryLabelColor
         t.translatesAutoresizingMaskIntoConstraints = false
         v.addSubview(t)
@@ -918,9 +969,10 @@ final class ClipPicker: NSObject, NSWindowDelegate {
             h.bottomAnchor.constraint(equalTo: row.bottomAnchor),
         ])
         row.addGestureRecognizer(NSClickGestureRecognizer(target: row, action: #selector(PickRow.clicked)))
-        row.onPick = { [weak self] target in
+        row.onPick = { [weak self] flags in
             guard let s = self, i < s.shown.count else { return }
-            s.choose(s.shown[i], target: target)
+            let clip = s.shown[i]
+            s.choose(clip, target: clipboardPickerTarget(for: clip, flags: flags))
         }
         return row
     }
@@ -934,6 +986,7 @@ final class ClipPicker: NSObject, NSWindowDelegate {
         switch filterMode {
         case .images: return all.filter { $0.type == "image" }
         case .text:   return searched(all.filter { $0.type != "image" && $0.origin != "dictation" && $0.origin != "sent" })
+        case .urls:   return searched(all.filter { $0.detectedURL != nil })
         case .dictated: return searched(all.filter { $0.origin == "dictation" })
         case .sent:     return searched(all.filter { $0.origin == "sent" })
         case .all:
@@ -1010,23 +1063,22 @@ final class ClipPicker: NSObject, NSWindowDelegate {
         case 126:  // ↑
             if !shown.isEmpty { selected = max(selected - 1, 0); highlight() }
             return true
-        case 123:  // ← rotate carousel left: Images←All←Text←Dictated←Sent←Images
-            let cycle: [FilterMode] = [.images, .all, .text, .dictated, .sent]
+        case 123:  // ← rotate filter carousel
+            let cycle: [FilterMode] = [.images, .all, .text, .urls, .dictated, .sent]
             let li = cycle.firstIndex(of: filterMode) ?? 1
             filterMode = cycle[(li + cycle.count - 1) % cycle.count]
             query = ""; selected = 0; refresh()
             return true
-        case 124:  // → rotate carousel right: Images→All→Text→Dictated→Sent→Images
-            let cycle: [FilterMode] = [.images, .all, .text, .dictated, .sent]
+        case 124:  // → rotate filter carousel
+            let cycle: [FilterMode] = [.images, .all, .text, .urls, .dictated, .sent]
             let ri = cycle.firstIndex(of: filterMode) ?? 1
             filterMode = cycle[(ri + 1) % cycle.count]
             query = ""; selected = 0; refresh()
             return true
         case 36, 76:   // ↩ / numpad ↩
             if selected < shown.count {
-                let opt = ev.modifierFlags.contains(.option)
-                let target: PasteTarget = cmd ? .claudeNew : opt ? .claude : .prev
-                choose(shown[selected], target: target)
+                let clip = shown[selected]
+                choose(clip, target: clipboardPickerTarget(for: clip, flags: ev.modifierFlags))
             }
             return true
         case 51:   // delete
@@ -1046,6 +1098,14 @@ final class ClipPicker: NSObject, NSWindowDelegate {
     func hide() { win?.orderOut(nil); NSApp.hide(nil) }
 
     func choose(_ c: Clip, target: PasteTarget) {
+        if target == .openURL,
+           let normalized = c.detectedURL?.normalized,
+           let url = URL(string: normalized) {
+            win.orderOut(nil)
+            NSWorkspace.shared.open(url)
+            NSApp.hide(nil)
+            return
+        }
         let savedBundle = prevBundle
         let path = (CLIPS as NSString).appendingPathComponent(c.file)
         let pb = NSPasteboard.general
@@ -1053,7 +1113,7 @@ final class ClipPicker: NSObject, NSWindowDelegate {
         if c.type == "image", let data = FileManager.default.contents(atPath: path) {
             if let img = NSImage(data: data) { pb.writeObjects([img]) } else { pb.setData(data, forType: .png) }
         } else if let text = try? String(contentsOfFile: path, encoding: .utf8) {
-            pb.setString(text, forType: .string)
+            pb.setString(c.detectedURL?.normalized ?? text, forType: .string)
         }
         // Stamp AFTER writing, with the exact resulting changeCount — an exact match,
         // not a timing guess, so clipwatch (25ms poll) reliably attributes this re-paste
@@ -1125,6 +1185,8 @@ final class ClipPicker: NSObject, NSWindowDelegate {
                     NSApp.hide(nil)
                 }
             }
+        case .openURL:
+            break
         }
     }
 }
