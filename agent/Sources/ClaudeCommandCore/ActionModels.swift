@@ -126,7 +126,8 @@ public func bindingsMatchExperimentalDefaults(_ byAction: [String: HotkeyBinding
     return knownActions.allSatisfy { action in
         let expected = EXPERIMENTAL_DEFAULT_BINDINGS[action] ?? (0, 0)
         let actual = byAction[action] ?? HotkeyBinding(action: action, keycode: 0, mods: 0, enabled: true)
-        return actual.keycode == expected.keycode && actual.mods == expected.mods && actual.enabled
+        return actual.keycode == expected.keycode && actual.mods == expected.mods
+            && actual.enabled && actual.shortcuts.count <= (expected.keycode == 0 ? 0 : 1)
     }
 }
 

@@ -35,7 +35,7 @@ Default built-in shortcuts:
 | Dictate -> Assistant | Unbound | Speak and send transcript to selected assistant. |
 | Dictate -> Assistant 2 | Unbound | Optional second assistant dictation target. |
 
-You can change prompt and trigger shortcuts from **Settings -> Shortcuts**. Open the prompt/action editor or trigger row, click a key field, press a combo, press Delete to clear, or Esc to cancel. Dictation shortcuts live in **Settings -> Dictation Settings**.
+You can assign up to two key commands to every prompt, custom trigger, Clipboard History action, or dictation action. Use the second slot for an external-keyboard key such as Home and a laptop-friendly alternative. Open the relevant editor, click a key field, press a combo, press Delete to clear, or Esc to cancel. Dictation shortcuts live in **Settings -> Dictation Settings**.
 
 Shortcut capture notes:
 
@@ -245,11 +245,14 @@ Open **Settings -> Clipboard History** to configure:
 
 - Enable or disable clipboard history.
 - Open Clipboard History shortcut.
+- New session, send-to-assistant, and open-URL modifier actions.
 - Retention days.
 - Picker theme.
 - Clear recent clips.
 
 Clipboard history is local. Secret-looking copies and copies from known password apps are skipped.
+
+The URLs filter includes only clips whose entire trimmed value is a URL. It accepts HTTP/HTTPS links, domains without a scheme, localhost, and IP addresses. Command trims surrounding whitespace and a final sentence period, then adds `https://` when needed. Links embedded inside paragraphs stay under normal text history and are not classified as URL clips.
 
 Picker controls:
 
@@ -258,7 +261,9 @@ Picker controls:
 | Type | Search clips. |
 | Up/Down | Move selection. |
 | Return | Paste selected clip. |
-| Command-Return | Paste and keep picker open. |
+| Command-Return | Start a new assistant session with the clip. Configurable. |
+| Option-Return | Send clip to current assistant session. Configurable. |
+| Shift-Return | Open recognized URL in default browser. Configurable. |
 | Esc | Close picker. |
 
 ## Dictation

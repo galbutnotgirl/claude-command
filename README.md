@@ -62,7 +62,7 @@ Command is organized around prompts:
 | Dictate -> Assistant | Unbound | Speak and send transcript to selected assistant. |
 | Dictate -> Assistant 2 | Unbound | Optional second assistant dictation target. |
 
-Change prompt/action shortcuts in **Settings -> Shortcuts**. Dictation shortcuts live in **Settings -> Dictation Settings**.
+Every action supports up to two key commands, useful for pairing external-keyboard Home/End keys with laptop alternatives. Change prompt/action shortcuts in **Settings -> Shortcuts**. Clipboard History and dictation bindings live in their own settings sections.
 
 ## Install
 
@@ -124,7 +124,7 @@ Full tab-by-tab details: [docs/SETTINGS_REFERENCE.md](docs/SETTINGS_REFERENCE.md
 | Shortcuts | Default assistant, Claude destination or ChatGPT destination, Codex workspace, built-in prompts, custom actions, trigger overrides. |
 | Context | App/site context rules and prompt preview. |
 | Command History | Foreground sends, background runs, retries, retention. |
-| Clipboard History | Picker shortcut, retention, theme, clear controls. |
+| Clipboard History | Two picker shortcuts, URL filter, configurable picker actions, retention, theme, clear controls. |
 | Dictation History | Raw/processed dictation records and correction suggestions. |
 | Corrections | Misheard -> correct rules. |
 | Vocabulary | Proper nouns, product terms, filler words. |

@@ -15,7 +15,7 @@
 | Dictate -> Assistant | Unbound | Speak and send transcript to selected assistant. |
 | Dictate -> Assistant 2 | Unbound | Optional second assistant dictation target. |
 
-Change prompt/action shortcuts in **Settings -> Shortcuts**. Dictation shortcuts live in **Settings -> Dictation Settings**. Open the relevant editor or trigger row, click a key field, press a combo. Delete clears. Esc cancels.
+Every built-in action and custom trigger supports up to two shortcuts. Change prompt/action shortcuts in **Settings -> Shortcuts**, Clipboard History shortcut in **Clipboard History**, and dictation shortcuts in **Dictation Settings**. Click a key field and press a combo. Delete clears. Esc cancels.
 
 The menu-bar menu only shows prompt/action shortcuts that are enabled and bound to a key. Unbound combinations such as Go stay editable in Settings but do not appear in the menu.
 
@@ -103,7 +103,9 @@ If `{selection}` is missing, captured content is appended below prompt.
 | Type | Search. |
 | Up/Down | Select. |
 | Return | Paste. |
-| Command-Return | Paste and keep open. |
+| Command-Return | New assistant session with clip; configurable. |
+| Option-Return | Send clip to current assistant; configurable. |
+| Shift-Return | Open recognized URL; configurable. |
 | Esc | Close. |
 
 ## Background Result Contract

@@ -164,6 +164,18 @@ final class ActionModelsTests: XCTestCase {
         XCTAssertFalse(bindingsMatchExperimentalDefaults(bindings))
     }
 
+    func testExperimentalPrimaryWithAlternateBindingIsNeverMigrated() {
+        var bindings = Dictionary(uniqueKeysWithValues: COMMAND_ACTIONS.map { action in
+            let value = EXPERIMENTAL_DEFAULT_BINDINGS[action.id] ?? (0, 0)
+            return (action.id, HotkeyBinding(action: action.id, keycode: value.keycode, mods: value.mods, enabled: true))
+        })
+        bindings["add"] = HotkeyBinding(action: "add", shortcuts: [
+            HotkeyShortcut(keycode: 109, mods: 0),
+            HotkeyShortcut(keycode: 115, mods: 0),
+        ], enabled: true)
+        XCTAssertFalse(bindingsMatchExperimentalDefaults(bindings))
+    }
+
     func testUnknownActionPreventsExperimentalMigration() {
         let unknown = HotkeyBinding(action: "future-action", keycode: 1, mods: 0, enabled: true)
         XCTAssertFalse(bindingsMatchExperimentalDefaults([unknown.action: unknown]))

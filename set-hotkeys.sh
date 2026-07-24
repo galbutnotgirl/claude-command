@@ -6,7 +6,7 @@
 # clipboard history). This writes Command hotkey config and restarts it. It also
 # CLEARS any leftover pbs Service shortcuts so nothing double-binds.
 #
-# HOTKEYS table format:  "action | <tokens>"
+# HOTKEYS table format:  "action | <tokens>[; <alternate tokens>]"
 #   modifiers: cmd|command  opt|option|alt  ctrl|control  shift   (any order)
 #   key:       a letter (a), digit (4), function key (F1..F12), or navigation key (home)
 emulate -L zsh
@@ -59,9 +59,15 @@ def parse(tokens):
 out = []
 for r in rows:
     action, _name, spec = r.split('|', 2)
-    kc, m = parse(spec.strip())
-    out.append({"action": action, "keycode": kc, "mods": m})
-    print(f"  {action:<12} {spec.strip():<10} keycode={kc} mods={m}")
+    aliases = [parse(value.strip()) for value in spec.split(';') if value.strip()][:2]
+    if not aliases: raise SystemExit(f"no shortcut for {action!r}")
+    kc, m = aliases[0]
+    out.append({"action": action, "keycode": kc, "mods": m,
+                "shortcuts": [{"keycode": keycode, "mods": mods}
+                              for keycode, mods in aliases],
+                "enabled": True})
+    shown = " / ".join(value.strip() for value in spec.split(';') if value.strip())
+    print(f"  {action:<12} {shown:<18} keycode={kc} mods={m}")
 with open(cfg, 'w') as f:
     json.dump(out, f, indent=2)
 PY

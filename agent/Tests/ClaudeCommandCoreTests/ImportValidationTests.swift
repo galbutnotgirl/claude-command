@@ -106,6 +106,15 @@ final class ImportValidationTests: XCTestCase {
         XCTAssertFalse(isValidImportPayload([
             "clipRetentionDays": 0
         ], for: .appPreferences))
+        XCTAssertTrue(isValidImportPayload([
+            ClipboardPickerSettingsKeys.newSessionModifier: "command",
+            ClipboardPickerSettingsKeys.sendAssistantModifier: "option",
+            ClipboardPickerSettingsKeys.openURLModifier: "shift",
+        ], for: .appPreferences))
+        XCTAssertFalse(isValidImportPayload([
+            ClipboardPickerSettingsKeys.newSessionModifier: "command",
+            ClipboardPickerSettingsKeys.openURLModifier: "command",
+        ], for: .appPreferences))
     }
 
     func testJSONSerializationBridgedNumbersPassExpectedSchemas() throws {
